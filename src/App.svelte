@@ -5,6 +5,7 @@
   import { open } from '@tauri-apps/plugin-dialog'
   import * as api from './lib/api'
   import Icon from './lib/Icon.svelte'
+  import Label from './lib/Label.svelte'
   import RepoView from './lib/RepoView.svelte'
   import Dialog from './lib/Dialog.svelte'
   import DiffColorSettings from './lib/DiffColorSettings.svelte'
@@ -151,7 +152,7 @@
       if (!desktop) await api.saveDiffColors(colors)
       setDiffColors(colors)
     }} />
-    {#if desktop}<button class="btn quiet icon" title={t.autoSyncSettings} onclick={autoSyncSettings}><Icon name="settings" /></button>{/if}
+    {#if desktop}<button class="btn quiet icon" title={t.autoSyncSettings} onclick={autoSyncSettings}><Icon name="sync" /></button>{/if}
     <select class="field language" aria-label={t.language} title={t.language} value={locale.current} onchange={(e) => setLocale(e.currentTarget.value as Locale)}>
       <option value="en">English</option>
       <option value="zh-CN">简体中文</option>
@@ -171,9 +172,11 @@
       <h1>{t.appName}</h1>
       <p class="lead">{t.welcomeLead}</p>
       <p class="muted">{t.openRepoHint}</p>
-      <button class="btn primary" disabled={creating} onclick={pick}>{t.openRepo}</button>
-      <button class="btn" disabled={creating} onclick={() => create(true)}>{t.tools.cloneRepo}</button>
-      <button class="btn" disabled={creating} onclick={() => create(false)}>{t.tools.initRepo}</button>
+      <div class="start">
+        <button class="btn primary" disabled={creating} onclick={pick}>{t.openRepo}</button>
+        <button class="btn" disabled={creating} onclick={() => create(true)}><Label text={t.tools.cloneRepo} /></button>
+        <button class="btn" disabled={creating} onclick={() => create(false)}><Label text={t.tools.initRepo} /></button>
+      </div>
       {#if creating}<p>{t.working}</p>{/if}
       {#if error}<p class="error">{errorText(error)}</p>{/if}
       {#if recent.length}
@@ -203,7 +206,8 @@
     background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
-  nav > .btn {
+  /* :global：差异配色的按钮在子组件里 */
+  nav > :global(.btn) {
     margin-bottom: 4px;
   }
   .language {
@@ -295,10 +299,17 @@
     font-family: var(--prose);
     font-size: var(--fs-xl);
   }
-  .welcome .btn.primary {
+  .start {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .start .btn {
     height: 40px;
+    padding: 0 16px;
+  }
+  .start .btn.primary {
     padding: 0 24px;
-    font-size: var(--fs-md);
   }
   h2 {
     margin: 32px 0 4px;

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import type { Detail, FileChange, Ref, Refs, Row } from '../../src/lib/api'
   import Graph from '../../src/lib/Graph.svelte'
+  import Icon from '../../src/lib/Icon.svelte'
   import { graphKey } from '../../src/lib/graph-key'
   import { errorText, t } from '../../src/lib/i18n.svelte'
   import { invoke } from './tauri'
@@ -111,10 +112,10 @@
     <span title={t.vscode.graphCurrentBranch(head)}>{head}</span>
   </div>
   <div class="toolbar">
-    <button class="scope" aria-label={t.vscode.graphScope} onclick={changeScope} disabled={!repo || busy || loading} title={scope === 'auto' ? t.vscode.graphAutoHint : scope}>{scopeLabel}</button>
-    <button class="action" disabled={!repo || busy} title={`${t.fetch} · ${repo?.name ?? ''}`} aria-label={t.fetch} onclick={() => sync('fetch')}>⟳</button>
-    <button class="action" disabled={!repo || busy || !repo.refs.head} title={`${t.pull} · ${head}`} aria-label={t.pull} onclick={() => sync('pull')}>↓<small>{repo?.refs.ahead_behind?.[1] || ''}</small></button>
-    <button class="action" disabled={!repo || busy || !repo.refs.head} title={t.vscode.graphPushSame(head)} aria-label={t.vscode.graphPushSame(head)} onclick={() => sync('push')}>↑<small>{repo?.refs.ahead_behind?.[0] || ''}</small></button>
+    <button class="scope" aria-label={t.vscode.graphScope} onclick={changeScope} disabled={!repo || busy || loading} title={scope === 'auto' ? t.vscode.graphAutoHint : scope}><span>{scopeLabel}</span><Icon name="down" size={12} /></button>
+    <button class="action" disabled={!repo || busy} title={`${t.fetch} · ${repo?.name ?? ''}`} aria-label={t.fetch} onclick={() => sync('fetch')}><Icon name="fetch" size={14} /></button>
+    <button class="action" disabled={!repo || busy || !repo.refs.head} title={`${t.pull} · ${head}`} aria-label={t.pull} onclick={() => sync('pull')}><Icon name="pull" size={14} /><small>{repo?.refs.ahead_behind?.[1] || ''}</small></button>
+    <button class="action" disabled={!repo || busy || !repo.refs.head} title={t.vscode.graphPushSame(head)} aria-label={t.vscode.graphPushSame(head)} onclick={() => sync('push')}><Icon name="push" size={14} /><small>{repo?.refs.ahead_behind?.[0] || ''}</small></button>
   </div>
   {#if error}<p role="alert">{error} <button onclick={refresh}>{t.vscode.graphRetry}</button></p>{/if}
   {#if loading && !count}<p role="status">{t.loadingHistory}</p>{/if}
@@ -150,10 +151,11 @@
   }
   .toolbar { display: flex; gap: 4px; align-items: center; padding: 2px 4px; }
   select, .scope { min-width: 0; flex: 1; height: 22px; padding: 0 2px; font: inherit; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); }
-  .scope { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; }
+  .scope { display: flex; align-items: center; gap: 4px; padding: 0 6px; text-align: left; cursor: pointer; }
+  .toolbar .scope span { flex: 1; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; color: inherit; }
   .scope:disabled { opacity: .45; cursor: default; }
   .toolbar span { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--muted); }
-  .action { height: 22px; min-width: 24px; padding: 0 4px; border: 0; border-radius: 3px; font-size: 16px; color: var(--text); background: transparent; cursor: pointer; }
+  .action { display: inline-flex; align-items: center; justify-content: center; height: 22px; min-width: 24px; padding: 0 4px; border: 0; border-radius: 3px; color: var(--text); background: transparent; cursor: pointer; }
   .action:hover { background: var(--hover); }
   .action:disabled { opacity: .45; cursor: default; }
   .action small { font-size: 10px; margin-left: 2px; }

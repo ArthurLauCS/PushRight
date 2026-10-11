@@ -2,6 +2,7 @@
   import type { Worktree } from './api'
   import { explain } from './i18n.svelte'
   import { fmtTime, t } from './i18n.svelte'
+  import Label from './Label.svelte'
 
   let {
     worktrees,
@@ -19,7 +20,7 @@
       <h2>{t.worktrees}</h2>
       <p>{explain.worktree.what}</p>
     </div>
-    <button class="btn primary" onclick={onnew}>{t.newWorktree}</button>
+    <button class="btn primary" onclick={onnew}><Label text={t.newWorktree} /></button>
   </header>
   <div class="table">
     <div class="row head">
@@ -44,7 +45,7 @@
           {#if !w.current}
             <button class="btn small" onclick={() => onopen(w.path)}>{t.openInTab}</button>
             <!-- 第一个是主工作树，git 不允许删除 -->
-            {#if i > 0}<button class="btn small danger" onclick={() => onremove(w)}>{t.wtRemove}</button>{/if}
+            {#if i > 0}<button class="btn small danger" title={t.wtRemove} onclick={() => onremove(w)}><Label text={t.wtRemove} /></button>{/if}
           {/if}
         </span>
       </div>
@@ -147,5 +148,8 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .actions :global(.cmd) {
+    display: none;
   }
 </style>

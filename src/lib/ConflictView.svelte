@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Conflict, Side } from './api'
+  import Label from './Label.svelte'
   import { t } from './i18n.svelte'
 
   let {
@@ -35,10 +36,10 @@
   {:else}
     <header>
       <span>{conflict.binary ? t.conflictBinary : t.conflictHint(choices.length)}{rebasing ? ' ' + t.rebaseConflictHint : ''}</span>
-      <button class="btn small" onclick={() => ontake(false)}>{t.takeOurs}</button>
-      <button class="btn small" onclick={() => ontake(true)}>{t.takeTheirs}</button>
+      <button class="btn small" onclick={() => ontake(false)}><Label text={t.takeOurs} /></button>
+      <button class="btn small" onclick={() => ontake(true)}><Label text={t.takeTheirs} /></button>
       {#if !conflict.binary}
-        <button class="btn small primary" disabled={!done} onclick={() => onresolve(choices as Side[])}>{t.resolve}</button>
+        <button class="btn small primary" disabled={!done} onclick={() => onresolve(choices as Side[])}><Label text={t.resolve} /></button>
       {/if}
     </header>
     <div class="body">
@@ -50,14 +51,14 @@
           <section>
             <div class="side" class:picked={choice === 'ours' || choice === 'both'} class:dropped={choice === 'theirs'}>
               <div class="bar">
-                <span>{t.ours}<small>{block.ours_label}</small></span>
+                <span><Label text={t.ours} /><small>{block.ours_label}</small></span>
                 <button class="btn small" class:on={choice === 'ours'} onclick={() => (choices[index] = 'ours')}>{t.useThis}</button>
               </div>
               <pre>{block.ours || t.emptySide}</pre>
             </div>
             <div class="side theirs" class:picked={choice === 'theirs' || choice === 'both'} class:dropped={choice === 'ours'}>
               <div class="bar">
-                <span>{t.theirs}<small>{block.theirs_label}</small></span>
+                <span><Label text={t.theirs} /><small>{block.theirs_label}</small></span>
                 <button class="btn small" class:on={choice === 'theirs'} onclick={() => (choices[index] = 'theirs')}>{t.useThis}</button>
                 <button class="btn small" class:on={choice === 'both'} onclick={() => (choices[index] = 'both')}>{t.useBoth}</button>
               </div>
@@ -85,10 +86,13 @@
     text-align: center;
     color: var(--muted);
   }
+  /* 说明独占一行，按钮在下面一行并可换行：按钮再长也不会把说明挤成一列 */
   header {
     flex: none;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
     min-height: 44px;
     padding: 8px 12px;
@@ -96,7 +100,7 @@
     background: var(--panel);
   }
   header span {
-    flex: 1;
+    flex: 1 1 100%;
     color: var(--yellow);
     font-family: var(--prose);
     font-size: var(--fs-md);

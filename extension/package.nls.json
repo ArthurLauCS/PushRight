@@ -61,5 +61,5 @@
   "config.statusBar": "Show the current line’s author in the status bar.",
   "config.colors": "Color whole-file blame by author, or by how recent each change is.",
   "config.codeLens": "Show the most recent author and the number of authors above files, classes and functions.",
-  "command.repositorySettings": "Repository settings…"
+  "command.repositorySettings": "Repository Settings…"
 }

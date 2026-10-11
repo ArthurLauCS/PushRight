@@ -35,6 +35,8 @@ export const messages = {
     remotes: '管理远程（git remote -v）',
     url: '仓库 URL / 本地路径',
     addRemote: '添加远程（git remote add）',
+    fetchUrl: '获取地址',
+    pushUrl: '推送地址',
     editFetch: '修改获取地址（git remote set-url）',
     editPush: '修改推送地址（git remote set-url --push）',
     removeRemote: '移除此远程配置及其跟踪引用？不会删除服务器仓库。',

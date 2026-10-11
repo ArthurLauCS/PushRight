@@ -145,6 +145,18 @@ body {
   /* 中英文、中文与数字之间自动留出间隙 */
   text-autospace: normal;
   font-variant-numeric: tabular-nums;
+  /* 等宽字体的连字会把 --prune 画成 —prune，命令必须原样显示 */
+  font-variant-ligatures: no-contextual;
+}
+code,
+pre {
+  font-family: var(--mono);
+}
+/* 按钮、菜单、标题里跟在名字后面的 git 命令，见 Label.svelte */
+.cmd {
+  margin-left: 8px;
+  font: 400 var(--fs-sm) var(--mono);
+  opacity: 0.7;
 }
 h1,
 h2,
@@ -242,6 +254,7 @@ button:disabled {
 }
 .btn.on {
   border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 

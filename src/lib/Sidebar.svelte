@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Refs, Stash, Track, Worktree } from './api'
   import Icon from './Icon.svelte'
+  import Label from './Label.svelte'
   import { layout } from './layout.svelte'
   import { t } from './i18n.svelte'
 
@@ -59,14 +60,14 @@
 
 <aside style:width="min({layout.sidebar}px, 36vw)">
   <nav>
-    <button class:on={view === 'tools'} onclick={() => onview('tools')}><Icon name="log" /><span>{t.tools.nav}</span></button>
-    <button class:on={view === 'changes'} onclick={() => onview('changes')}>
-      <Icon name="changes" /><span>{t.changes}</span>{#if changes}<span class="pill">{changes}</span>{/if}
+    <button class:on={view === 'changes'} title={t.changes} onclick={() => onview('changes')}>
+      <Icon name="changes" /><span><Label text={t.changes} /></span>{#if changes}<span class="pill">{changes}</span>{/if}
     </button>
-    <button class:on={view === 'history'} onclick={() => onview('history')}><Icon name="history" /><span>{t.history}</span></button>
-    <button class:on={view === 'worktrees'} onclick={() => onview('worktrees')}>
-      <Icon name="folders" /><span>{t.worktreesNav}</span>{#if worktrees.length > 1}<span class="pill quiet">{worktrees.length}</span>{/if}
+    <button class:on={view === 'history'} title={t.history} onclick={() => onview('history')}><Icon name="history" /><span><Label text={t.history} /></span></button>
+    <button class:on={view === 'worktrees'} title={t.worktreesNav} onclick={() => onview('worktrees')}>
+      <Icon name="folders" /><span><Label text={t.worktreesNav} /></span>{#if worktrees.length > 1}<span class="pill quiet">{worktrees.length}</span>{/if}
     </button>
+    <button class:on={view === 'tools'} onclick={() => onview('tools')}><Icon name="tools" /><span>{t.tools.nav}</span></button>
   </nav>
   <label class="search"><Icon name="search" size={14} /><input type="search" placeholder={t.filter} bind:value={filter} /></label>
   <div class="scroll">
@@ -87,7 +88,7 @@
             {#if elsewhere.has(r.name)}<span class="sub" title={t.inOtherWorktreeMark}><Icon name="windows" size={12} /></span>{/if}
             {#if tracks.get(r.name)}
               {@const tr = tracks.get(r.name)!}
-              <span class="sub" title={tr.gone ? t.gone : `${t.toPush(tr.ahead)} · ${t.toPull(tr.behind)}`}>
+              <span class="sub track" title={tr.gone ? t.gone : `${t.toPush(tr.ahead)} · ${t.toPull(tr.behind)}`}>
                 {tr.gone ? t.gone : `${tr.ahead ? '↑' + tr.ahead : ''} ${tr.behind ? '↓' + tr.behind : ''}`}
               </span>
             {/if}
@@ -144,6 +145,10 @@
   }
   nav button span:first-of-type {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     text-align: left;
   }
   nav button:hover {
@@ -254,5 +259,9 @@
     color: var(--muted);
     font-size: var(--fs-sm);
     white-space: nowrap;
+  }
+  /* 界面字体里 ↑ 和数字 1 太像，「↑2」会被读成「12」 */
+  .track {
+    font-family: var(--mono);
   }
 </style>

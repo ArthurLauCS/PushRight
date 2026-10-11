@@ -12,6 +12,7 @@
   import { graphKey } from './graph-key'
   import Help from './Help.svelte'
   import Icon from './Icon.svelte'
+  import Label from './Label.svelte'
   import { splitUpstream } from './push-target'
   import Splitter from './Splitter.svelte'
   import Sidebar from './Sidebar.svelte'
@@ -698,13 +699,13 @@
       </button>
       <span class="sep"></span>
       <button class="btn quiet" disabled={busy} title={`${t.fetch} · ${explain.fetch.short}`} onclick={() => exec({ op: 'fetch' })}>
-        <Icon name="fetch" /><span>{t.fetch}</span>
+        <Icon name="fetch" /><span><Label text={t.fetch} /></span>
       </button>
       <button class="btn quiet" disabled={busy || !!refs.in_progress} title={`${t.pull} · ${explain.pull.short}`} onclick={pull}>
-        <Icon name="pull" /><span>{t.pull}</span>
+        <Icon name="pull" /><span><Label text={t.pull} /></span>
       </button>
       <button class="btn quiet" disabled={busy} title={`${t.push} · ${explain.push.short}`} onclick={() => push(head)}>
-        <Icon name="push" /><span>{t.push}</span>
+        <Icon name="push" /><span><Label text={t.push} /></span>
       </button>
     </div>
     <!-- 当前分支放在正中：这是整个界面里最需要随时确认的一件事 -->
@@ -720,13 +721,13 @@
       </span>
     </div>
     <div class="tools end">
-      <button class="btn quiet" disabled={busy} title={`${t.stash} · ${explain.stash.short}`} onclick={stash}><Icon name="stash" /><span>{t.stash}</span></button>
+      <button class="btn quiet" disabled={busy} title={`${t.stash} · ${explain.stash.short}`} onclick={stash}><Icon name="stash" /><span><Label text={t.stash} /></span></button>
       <button class="btn quiet" disabled={busy} title={`${t.newBranch} · ${explain.create_branch.short}`} onclick={() => newBranch('HEAD')}>
-        <Icon name="branch" /><span>{t.newBranch}</span>
+        <Icon name="branch" /><span><Label text={t.newBranch} /></span>
       </button>
       <span class="sep"></span>
-      <button class="btn quiet" class:on={showLog} title={t.logHint} onclick={() => (showLog = !showLog)}><Icon name="log" /><span>{t.log}</span></button>
-      <button class="btn quiet" disabled={busy} title={t.repositorySettings} onclick={repositorySettings}><Icon name="settings" /><span>{t.repositorySettings}</span></button>
+      <button class="btn quiet" class:on={showLog} title={`${t.log} · ${t.logHint}`} onclick={() => (showLog = !showLog)}><Icon name="log" /><span>{t.log}</span></button>
+      <button class="btn quiet" disabled={busy} title={t.repositorySettings} onclick={repositorySettings}><Icon name="settings" /><span><Label text={t.repositorySettings} /></span></button>
       <button class="btn quiet" title={t.help} onclick={() => help!.open()}><Icon name="help" /><span>{t.help}</span></button>
     </div>
   </header>
@@ -737,8 +738,8 @@
     <p class="progress">
       <strong>{t.inProgress[what]}</strong>
       <span>{t.inProgressHint}</span>
-      <button class="btn small primary" disabled={busy || (what === 'revert' && refs.revert_disabled)} onclick={() => exec({ op: 'continue', what })}>{t.continueOperation(what)}</button>
-      <button class="btn small" disabled={busy} onclick={() => exec({ op: 'abort', what })}>{t.abortOperation(what)}</button>
+      <button class="btn small primary" disabled={busy || (what === 'revert' && refs.revert_disabled)} onclick={() => exec({ op: 'continue', what })}><Label text={t.continueOperation(what)} /></button>
+      <button class="btn small" disabled={busy} onclick={() => exec({ op: 'abort', what })}><Label text={t.abortOperation(what)} /></button>
     </p>
   {/if}
   <main>
@@ -794,6 +795,7 @@
   </main>
   {#if showLog}
     <div class="log">
+      <button class="btn small quiet icon" title={t.close} onclick={() => (showLog = false)}><Icon name="close" size={14} /></button>
       {#each logs as log, i (i)}
         <div class:failed={!log.ok}>
           <code>$ {log.command}</code>
@@ -838,7 +840,6 @@
   }
   .tools {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
     min-width: 0;
@@ -846,7 +847,19 @@
   .tools.end {
     justify-content: flex-end;
   }
-  /* 窗口窄时工具栏只留图标 */
+  .tools .btn {
+    padding: 0 8px;
+  }
+  /* 工具栏只放名字，git 命令在悬停提示和确认框里 */
+  .tools :global(.cmd) {
+    display: none;
+  }
+  /* 窗口变窄时先收起右侧三个辅助按钮的文字，再窄就全部只留图标 */
+  @container (max-width: 1360px) {
+    .tools.end .sep ~ .btn span {
+      display: none;
+    }
+  }
   @container (max-width: 1100px) {
     .tools .btn span {
       display: none;
@@ -948,6 +961,7 @@
   }
   .log {
     flex: none;
+    position: relative;
     height: 180px;
     overflow: auto;
     padding: 8px 16px;
@@ -956,11 +970,19 @@
     font: var(--fs-sm) / 1.6 var(--mono);
     user-select: text;
   }
+  .log .btn {
+    position: sticky;
+    top: 0;
+    float: right;
+  }
   .log div {
     margin-bottom: 8px;
+    padding-left: 8px;
+    border-left: 2px solid transparent;
   }
-  .log code {
-    color: var(--accent);
+  /* 失败的命令除了变红还多一条竖线，不只靠颜色区分 */
+  .log .failed {
+    border-left-color: var(--red);
   }
   .log pre {
     margin: 0;
