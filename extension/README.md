@@ -12,6 +12,14 @@ PushRight adds native Git commands to Chinese action labels across menus, dialog
 
 **[Download VSIX · Windows x64 · 1.1.10](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10)
 
+## Preview
+
+![PushRight 1.1.10: shared commit graph and file differences](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/desktop-1.1.10.png)
+
+The full graph interface is shared with the desktop app, shown here in 1.1.10 with a local demo repository and fictional identities.
+
+![PushRight 1.1.10: Pull defaults to Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
+
 ## Diff colors
 
 Run **PushRight: Diff Colors…** from the command palette or Source Control menu, or open **Diff Colors** in the full graph toolbar. Choose Blue / Orange, Purple / Gold, Cyan / Rose, or custom added/deleted HEX colors; the full graph dialog also provides color pickers and a live preview. Applies to PushRight and native VS Code / Cursor diff editors, including Review Branch. This updates user-level `workbench.colorCustomizations`; workspace overrides may take precedence. **Restore original colors** restores the previous values while preserving unrelated settings and later manual edits.

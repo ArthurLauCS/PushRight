@@ -21,11 +21,13 @@ Chinese action labels now render the name first and the Git command in smaller m
 
 - `PushRight_1.1.10_x64-setup.exe` — Windows x64 desktop installer.
 - `pushright-win32-x64-1.1.10.vsix` — VS Code / Cursor extension.
-- `SHA256SUMS.txt` — SHA-256 checksums for both artifacts.
+- `PushRight-1.1.10-source.zip` — Source code from the release tag.
+- `SHA256SUMS.txt` — SHA-256 checksums for all three artifacts.
 
 ## Validation and scope
 
-- Node tests, Svelte/TypeScript checks, the desktop build, VSIX packaging and the extension smoke run in VS Code pass. Rust sources are unchanged; the Rust test suite was not rerun.
+- All 42 Node tests, Svelte/TypeScript checks, the desktop build, VSIX packaging and packaged extension smoke runs in VS Code and Cursor pass. The smoke test waits for the coalesced repository refresh before checking the revert setting. Rust sources are unchanged; the Rust test suite was not rerun.
+- README previews were captured from the 1.1.10 desktop build with a local demo repository and fictional identities; the extension guides use the same shared-interface previews.
 - The desktop app and the extension were driven with real mouse and keyboard input against a temporary repository: stage, commit, push, merge into a conflict, resolve block by block and continue; context menus, dialogs, repository tools, worktrees and the extension Source Control view.
 - A scripted sweep over English and Chinese at 1024, 1280, 1440 and 1920 px across the four main views found no wrapped toolbars, page overflow or clipped buttons.
 - Not verified: the extension in a Chinese VS Code display language (the language pack could not be installed in the isolated profile), the native folder picker, and full native installer acceptance. Light theme was spot-checked only.
