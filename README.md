@@ -6,13 +6,32 @@
 
 A Git desktop client built with Svelte, Tauri and Rust. PushRight makes push destinations explicit, recommends a remote branch with the same name, and defaults Pull to **Rebase instead of merge**.
 
-Version **1.1.9** adds contrasting diff color presets and custom added/deleted colors across the desktop app and extension, and fixes missing Windows blame caused by stale file-name casing. See the [release notes](docs/RELEASE_1.1.9.md).
+## Why PushRight
 
-This version adds native Git commands to Chinese action labels across toolbars, menus, dialogs and extension commands. **Repository settings**, available in the desktop toolbar and extension Source Control menu, can disable revert for the local repository. Both apps and linked worktrees share `pushright.disableRevert` in the local Git config; other repositories are unaffected. Revert remains allowed by default. When disabled, PushRight blocks starting or continuing revert while allowing abort. Terminal Git and other tools are outside this setting's scope.
+1. **Pushes go to the right place.** Every push states its remote and branch. When the local branch and its upstream have different names, PushRight asks you to choose and recommends the same-name remote branch. Force push uses `--force-with-lease --force-if-includes`.
+2. **The Git command sits next to the action.** In the Chinese interface, menus, dialogs and buttons append the command they run; toolbar buttons show it in the tooltip. The command log lists every command executed and its output, so you learn what to type in a terminal.
+3. **Consequences are explained before you confirm.** Merge, rebase, reset, discard and similar operations describe the outcome in plain language, with before/after diagrams and recovery advice. Some operations offer one-click undo.
+4. **Color-vision-friendly diffs.** Blue / Orange, Purple / Gold and Cyan / Rose presets, or independent custom added/deleted colors. Diff lines keep + / − signs and borders, so color is never the only cue. The extension applies the same palette to native VS Code / Cursor diffs.
+5. **One extension instead of several.** The VS Code / Cursor extension combines source control, end-of-line authorship, whole-file blame, CodeLens, file history, line history, previous / next revision, comparison with any revision, commit search and the commit graph.
+6. **Automatic refresh and fetch.** The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. It updates remote refs only: no automatic pull, merge or working-file changes. Each can be turned off.
+7. **Pull rebases by default.** Every Pull asks, with **Rebase instead of merge** checked.
+8. **Conflicts are resolved block by block.** Ours and theirs appear side by side for each conflict; in-progress operations can be continued or aborted at any time.
+9. **Worktrees and repository tools.** Worktree overview, arbitrary revision comparison, reviewed-file marks, remote URLs, interactive rebase and reflog recovery are available in the interface.
+10. **Works on large repositories.** Measured on a Linux repository with 1.48 million commits and a 128 MiB file; see the [performance report (Chinese)](docs/PERFORMANCE.md).
+11. **English and Simplified Chinese, light and dark themes**, with individual author styles.
+12. **The desktop app and extension share one engine and interface.** The extension includes its own engine and does not require the desktop installation. MIT licensed.
+
+The extension updates automatically when installed from VS Code Marketplace. The desktop app has no automatic updates yet; download the installer for each new version.
+
+## This release
+
+Version **1.1.10** unifies the interface and fixes several layout problems: the toolbar stays on one line at every width, the conflict view no longer squeezes its hint and buttons, dialog confirmation buttons remain visible in short windows, and the command log shows `--` options verbatim. See the [release notes](docs/RELEASE_1.1.10.md).
+
+Chinese action labels append native Git commands across menus, dialogs, buttons and extension commands; toolbar buttons show the name only, with the command in the tooltip. **Repository settings**, available in the desktop toolbar and extension Source Control menu, can disable revert for the local repository. Both apps and linked worktrees share `pushright.disableRevert` in the local Git config; other repositories are unaffected. Revert remains allowed by default. When disabled, PushRight blocks starting or continuing revert while allowing abort. Terminal Git and other tools are outside this setting's scope.
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.1.9 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.1.10 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 The desktop client and editor extension share the new repository tools. The extension includes its own engine and does not require the desktop installation.
 
@@ -20,19 +39,19 @@ The desktop client and editor extension share the new repository tools. The exte
 
 Screenshots show the actual desktop app with a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.9.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.9.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.9/PushRight_1.1.9_x64-setup.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.9/pushright-win32-x64-1.1.9.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.9/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/PushRight_1.1.10_x64-setup.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/SHA256SUMS.txt)
 
-Download `PushRight_1.1.9_x64-setup.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.9).
+Download `PushRight_1.1.10_x64-setup.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10).
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - Microsoft Edge WebView2 Runtime is required; the installer attempts an online installation if missing.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight_1.1.9_x64-setup.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight_1.1.10_x64-setup.exe -Algorithm SHA256`.
 
 Previously named GitGod. PushRight retains the application data identifier for settings compatibility. The old GitGod installation may remain separately installed; it is not removed automatically.
 
@@ -118,14 +137,14 @@ App text, tooltips, explanations and app-generated errors are translated. Reposi
 
 ## VS Code / Cursor extension
 
-Extension **1.1.9** includes inline commit file lists and native diffs, Auto / All / branch filters, same-name push from the graph, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
+Extension **1.1.10** includes inline commit file lists and native diffs, Auto / All / branch filters, same-name push from the graph, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
 
-The same engine and interface run inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.9). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
+The same engine and interface run inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
 
 ```sh
 npm ci
 npm run ext:package
-code --install-extension extension/pushright-win32-x64-1.1.9.vsix
+code --install-extension extension/pushright-win32-x64-1.1.10.vsix
 ```
 
 - **Source Control panel**: staged, unstaged and conflicted files; stage, unstage or discard files or selected lines; commit and amend; gutter change markers and Explorer badges. On first use PushRight explains what turning off VS Code's built-in Git means and lets you decide.

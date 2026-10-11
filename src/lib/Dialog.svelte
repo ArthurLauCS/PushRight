@@ -32,6 +32,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import Explainer from './Explainer.svelte'
+  import Label from './Label.svelte'
   import { t } from './i18n.svelte'
 
   let dialog: HTMLDialogElement
@@ -73,14 +74,14 @@
         if (ready) close(true)
       }}
     >
-      <h2>{spec.title}</h2>
+      <h2><Label text={spec.title} /></h2>
       {#if spec.explain}<Explainer explain={spec.explain} />{/if}
       {#if spec.message}<p>{spec.message}</p>{/if}
       {#if spec.warning}<p class="warning">{spec.warning}</p>{/if}
       {#each spec.fields ?? [] as f (f.key)}
         {#if f.type === 'text'}
           <!-- svelte-ignore a11y_autofocus -->
-          <label class="text">{f.label}<input class="field" type="text" bind:value={values[f.key]} autofocus spellcheck="false" /></label>
+          <label class="text">{f.label}<input class="field" type="text" bind:value={values[f.key]} aria-invalid={!!f.pattern && values[f.key] !== '' && !f.pattern.test(values[f.key] as string)} autofocus spellcheck="false" /></label>
         {:else if f.type === 'select'}
           <label class="text">{f.label}
             <select class="field" bind:value={values[f.key]}>
@@ -88,12 +89,12 @@
             </select>
           </label>
         {:else if f.type === 'checkbox'}
-          <label class="check"><input type="checkbox" bind:checked={values[f.key] as boolean} />{f.label}</label>
+          <label class="check"><input type="checkbox" bind:checked={values[f.key] as boolean} /><span><Label text={f.label} /></span></label>
         {:else}
           <fieldset>
             <legend>{f.label}</legend>
             {#each f.options ?? [] as o (o.value)}
-              <label class="check"><input type="radio" value={o.value} bind:group={values[f.key]} />{o.label}</label>
+              <label class="check"><input type="radio" value={o.value} bind:group={values[f.key]} /><span><Label text={o.label} /></span></label>
             {/each}
           </fieldset>
         {/if}
@@ -103,7 +104,7 @@
       {/if}
       <div class="buttons">
         <button type="button" class="btn" onclick={() => close(false)}>{t.cancel}</button>
-        <button type="submit" class="btn primary" class:danger={spec.danger} disabled={!ready}>{spec.confirm ?? t.ok}</button>
+        <button type="submit" class="btn primary" class:danger={spec.danger} disabled={!ready}><Label text={spec.confirm ?? t.ok} /></button>
       </div>
     </form>
   {/if}
@@ -127,7 +128,7 @@
     max-height: 90vh;
   }
   form {
-    overflow-x: hidden;
+    overflow-x: clip;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -163,10 +164,17 @@
     color: var(--text);
     font-size: var(--fs-md);
   }
+  .text input[aria-invalid='true'] {
+    border-color: var(--red);
+  }
   .check {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
+  }
+  /* 命令跟在名字后面排不下时整段换到下一行，不从中间断开 */
+  .check :global(.cmd) {
+    display: inline-block;
   }
   .skip {
     color: var(--muted);
@@ -185,10 +193,16 @@
     color: var(--muted);
     font-size: var(--fs-sm);
   }
+  /* 窗口矮、内容要滚动时按钮钉在底部，不用滚到底才能确认 */
   .buttons {
+    position: sticky;
+    bottom: 0;
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    margin: 0 -24px -24px;
+    padding: 12px 24px 24px;
+    background: var(--panel);
   }
   .buttons .btn {
     min-width: 80px;

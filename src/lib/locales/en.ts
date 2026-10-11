@@ -36,6 +36,8 @@ export const messages = {
     remotes: 'Manage remotes',
     url: 'Repository URL / local path',
     addRemote: 'Add remote',
+    fetchUrl: 'Fetch URL',
+    pushUrl: 'Push URL',
     editFetch: 'Edit fetch URL',
     editPush: 'Edit push URL',
     removeRemote: 'Remove remote configuration and its tracking refs? The server repository is not deleted.',

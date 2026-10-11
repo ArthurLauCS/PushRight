@@ -2,6 +2,8 @@
   import { untrack } from 'svelte'
   import * as api from './api'
   import Detail from './Detail.svelte'
+  import Icon from './Icon.svelte'
+  import Label from './Label.svelte'
   import RevisionPicker from './RevisionPicker.svelte'
   import type { Spec, Values } from './Dialog.svelte'
   import { t, errorText } from './i18n.svelte'
@@ -81,7 +83,7 @@
 <div class="toolbox">
   <nav aria-label={t.tools.nav}>
     {#each ['compare', 'remotes', 'rebase', 'reflog'] as key}
-      <button class="btn" class:on={section === key} disabled={disabled} onclick={() => choose(key as typeof section)}>{t.tools[key as typeof section]}</button>
+      <button class="btn" class:on={section === key} disabled={disabled} onclick={() => choose(key as typeof section)}><Label text={t.tools[key as typeof section]} /></button>
     {/each}
   </nav>
   {#if error}<p class="error">{error}</p>{/if}
@@ -89,8 +91,8 @@
     <form onsubmit={(e) => { e.preventDefault(); run(async () => { comparison = await api.compare(tab, left, right, commonBase) }) }}>
       <RevisionPicker {refs} label={t.tools.left} bind:value={left} />
       <RevisionPicker {refs} label={t.tools.right} bind:value={right} />
-      <label class="check"><input type="checkbox" bind:checked={commonBase} />{t.tools.commonBase}</label>
-      <button class="btn primary" disabled={disabled}>{t.tools.compare}</button>
+      <label class="check"><input type="checkbox" bind:checked={commonBase} /><span><Label text={t.tools.commonBase} /></span></label>
+      <button class="btn primary" disabled={disabled}><Label text={t.tools.compare} /></button>
     </form>
     {#if comparison}
       <div class="comparison">
@@ -101,55 +103,73 @@
       </div>
     {/if}
   {:else if section === 'remotes'}
-    <button class="btn" disabled={disabled} onclick={() => remote('add')}>{t.tools.addRemote}</button>
+    <button class="btn" disabled={disabled} onclick={() => remote('add')}><Label text={t.tools.addRemote} /></button>
     {#each remotes as item (item.name)}
-      <article><h3>{item.name}</h3><p>Fetch: {item.fetch}</p><p>Push: {item.push}</p>
+      <article><h3>{item.name}</h3>
+        <dl><dt>{t.tools.fetchUrl}</dt><dd>{item.fetch}</dd><dt>{t.tools.pushUrl}</dt><dd>{item.push}</dd></dl>
         <div class="actions">{#each ['fetch', 'push', 'rename', 'remove'] as action}
-          <button class="btn small" disabled={disabled} onclick={() => remote(action as 'fetch' | 'push' | 'rename' | 'remove', item)}>{action === 'fetch' ? t.tools.editFetch : action === 'push' ? t.tools.editPush : action === 'rename' ? t.tools.renameRemote : t.tools.deleteRemote}</button>
+          <button class="btn small" class:danger={action === 'remove'} disabled={disabled} onclick={() => remote(action as 'fetch' | 'push' | 'rename' | 'remove', item)}><Label text={action === 'fetch' ? t.tools.editFetch : action === 'push' ? t.tools.editPush : action === 'rename' ? t.tools.renameRemote : t.tools.deleteRemote} /></button>
         {/each}</div>
       </article>
     {/each}
   {:else if section === 'reflog'}
     <button class="btn" disabled={disabled} onclick={() => loadLogs(false)}>{t.tools.refresh}</button>
-    {#each logs as entry, i (i)}
-      <article class="reflog"><code title={entry.id}>{entry.id.slice(0, 12)}</code><span>{entry.selector} · {entry.subject}</span><button class="btn small" disabled={disabled} onclick={() => recover(entry)}>{t.tools.recover}</button></article>
-    {:else}<p>{t.tools.noReflog}</p>{/each}
+    <div class="table">
+      {#each logs as entry, i (i)}
+        <div class="reflog"><code title={entry.id}>{entry.id.slice(0, 12)}</code><span title={entry.subject}><b>{entry.selector}</b>{entry.subject}</span><button class="btn small" disabled={disabled} onclick={() => recover(entry)}><Label text={t.tools.recover} /></button></div>
+      {:else}<p class="none">{t.tools.noReflog}</p>{/each}
+    </div>
     {#if moreLogs}<button class="btn" disabled={disabled} onclick={() => loadLogs(true)}>{t.tools.loadMore}</button>{/if}
   {:else}
     <p>{t.tools.rebaseWarning}</p>
     <form onsubmit={(e) => { e.preventDefault(); run(async () => { plan = await api.rebasePlan(tab, base) }) }}>
       <RevisionPicker {refs} label={t.tools.base} bind:value={base} />
-      <button class="btn" disabled={disabled || !!refs.in_progress}>{t.tools.loadPlan}</button>
+      <button class="btn" disabled={disabled || !!refs.in_progress}><Label text={t.tools.loadPlan} /></button>
     </form>
     {#if plan}
       <p><code>{plan.base.slice(0, 12)} → {plan.head.slice(0, 12)}</code></p>
       {#each plan.steps as step, index (step.id)}
         <article>
           <div class="actions">
-            <button class="btn small" title={t.tools.up} aria-label={t.tools.up} disabled={disabled || index === 0} onclick={() => move(index, -1)}>↑</button>
-            <button class="btn small" title={t.tools.down} aria-label={t.tools.down} disabled={disabled || index === plan!.steps.length - 1} onclick={() => move(index, 1)}>↓</button>
+            <button class="btn small icon" title={t.tools.up} aria-label={t.tools.up} disabled={disabled || index === 0} onclick={() => move(index, -1)}><Icon name="up" size={14} /></button>
+            <button class="btn small icon" title={t.tools.down} aria-label={t.tools.down} disabled={disabled || index === plan!.steps.length - 1} onclick={() => move(index, 1)}><Icon name="down" size={14} /></button>
             <select class="field" aria-label={t.tools.action} bind:value={step.action} disabled={disabled}>{#each ['pick', 'reword', 'edit', 'squash', 'fixup', 'drop'] as action}<option value={action}>{t.tools.rebaseActions[action]}</option>{/each}</select>
             <code>{step.id.slice(0, 8)}</code><span>{step.subject}</span>
           </div>
           {#if step.action === 'reword' || step.action === 'squash'}<label>{t.tools.rebaseMessage}<textarea class="field" bind:value={step.message} disabled={disabled}></textarea></label>{/if}
         </article>
       {/each}
-      <button class="btn primary" disabled={disabled || !plan.steps.length || !!refs.in_progress || plan.head !== refs.head_id} onclick={apply}>{t.tools.applyPlan}</button>
+      <button class="btn primary" disabled={disabled || !plan.steps.length || !!refs.in_progress || plan.head !== refs.head_id} onclick={apply}><Label text={t.tools.applyPlan} /></button>
     {/if}
   {/if}
 </div>
 
 <style>
-  .toolbox { flex: 1; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  /* 和工作树总览同一套页面留白；按钮按内容定宽，不被纵向布局拉成整行 */
+  .toolbox { flex: 1; min-height: 0; overflow: auto; padding: 24px 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+  .toolbox > :not(.btn, nav) { align-self: stretch; }
   nav, .actions, form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  form { align-items: flex-end; }
   form label { flex: 1; min-width: 200px; }
   label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
-  .check { flex-direction: row; align-items: center; }
-  article { padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); }
-  article p { overflow-wrap: anywhere; user-select: text; }
-  .reflog { display: flex; gap: 12px; align-items: center; }
-  .reflog span { flex: 1; overflow-wrap: anywhere; }
+  .check { flex: none; flex-direction: row; align-items: center; gap: 8px; height: 28px; }
+  article, .table { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); }
+  article { padding: 12px 16px; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0 0 12px; font-size: var(--fs-sm); }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; user-select: text; }
+  /* Reflog 是一张表：行高和提交图一致，不再一条记录一张卡片 */
+  .table { overflow: hidden; }
+  .reflog { display: flex; gap: 12px; align-items: center; min-height: 36px; padding: 4px 8px 4px 16px; border-top: 1px solid var(--border); font-size: var(--fs-sm); }
+  .reflog:first-child { border-top: 0; }
+  .reflog:hover { background: var(--hover); }
+  .reflog code { flex: none; color: var(--muted); }
+  .reflog span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reflog b { margin-right: 12px; font-family: var(--mono); font-weight: 400; color: var(--accent); }
+  .none { padding: 24px; text-align: center; color: var(--muted); }
   h3, p { margin: 0 0 8px; }
+  h3 { font-size: var(--fs-lg); }
+  .toolbox > p:not(.error) { max-width: 72ch; color: var(--muted); line-height: var(--lh-body); }
   .error { color: var(--red); white-space: pre-wrap; }
   .comparison { flex: 1; min-height: 300px; display: flex; flex-direction: column; }
   .comparison :global(section) { height: 100% !important; flex: 1; min-height: 0; }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { explain } from './i18n.svelte'
   import Explainer from './Explainer.svelte'
+  import Label from './Label.svelte'
   import { t } from './i18n.svelte'
 
   let dialog: HTMLDialogElement
@@ -29,7 +30,7 @@
   <div class="list">
     {#each Object.values(explain) as e (e.name)}
       <section>
-        <h3>{e.name}</h3>
+        <h3><Label text={e.name} /></h3>
         <Explainer explain={e} />
       </section>
     {/each}

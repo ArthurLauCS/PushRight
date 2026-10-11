@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.10
+
+- Keep the full graph toolbar on one line at every width. Chinese labels show the action name first and the Git command in smaller monospace text; where space is tight the command moves to the tooltip.
+- Fix the conflict view header, which squeezed its hint into a one-character column and pushed the resolve button off screen. Keep dialog buttons visible in short windows and mark invalid branch names.
+- Show `--` options verbatim in the command log, add a close button, and mark failed commands with a border as well as color.
+- Use the desktop icons for fetch, pull and push in the sidebar graph, and show the scope selector as a dropdown.
+
+完整提交图的工具栏保持一行，中文名称在前、Git 命令以小号等宽字跟随，空间不足时移入悬停提示。修复冲突视图头部被挤压、矮窗口下弹窗按钮不可见、命令日志把 `--` 画成破折号的问题。侧栏提交图改用与桌面版一致的图标。
+
 ## 1.1.9
 
 - Add Blue / Orange, Purple / Gold and Cyan / Rose diff presets, custom added/deleted HEX colors, and color pickers with a live preview in the full graph. Retain + / − markers and colored borders in shared diff views.

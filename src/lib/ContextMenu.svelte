@@ -4,6 +4,8 @@
 </script>
 
 <script lang="ts">
+  import Label from './Label.svelte'
+
   let items = $state<Item[]>([])
   let x = $state(0)
   let y = $state(0)
@@ -34,8 +36,8 @@
     {#each items as item, i (i)}
       {#if item}
         <button role="menuitem" disabled={item.disabled} class:danger={item.danger} onclick={() => (close(), item.action())}>
-          {item.label}
-          {#if item.hint}<small>{item.hint}</small>{/if}
+          <Label text={item.label} />
+          {#if item.hint}<small class="hint">{item.hint}</small>{/if}
         </button>
       {:else}
         <hr />
@@ -77,7 +79,7 @@
   button:active:enabled {
     transform: none;
   }
-  small {
+  .hint {
     display: block;
     font-size: var(--fs-sm);
     opacity: 0.7;

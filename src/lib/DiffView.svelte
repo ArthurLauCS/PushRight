@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Diff } from './api'
+  import Label from './Label.svelte'
   import { t, errorText } from './i18n.svelte'
 
   // Large previews can switch to streaming pages; editing retains the original patch.
@@ -110,11 +111,11 @@
         <div class="hunk">
           <span>{hunk.header}</span>
           {#if !page && mode === 'unstaged' && ondiscard}
-            <button class="btn small danger" onclick={() => apply(h, ondiscard)}>
-              {picked(h).length ? t.discardLines(picked(h).length) : t.discardHunk}
+            <button class="btn small danger" title={picked(h).length ? t.discardLines(picked(h).length) : t.discardHunk} onclick={() => apply(h, ondiscard)}>
+              <Label text={picked(h).length ? t.discardLines(picked(h).length) : t.discardHunk} />
             </button>
           {/if}
-          {#if !page && mode !== 'readonly'}<button class="btn small" onclick={() => apply(h)}>{label(h)}</button>{/if}
+          {#if !page && mode !== 'readonly'}<button class="btn small" title={label(h)} onclick={() => apply(h)}><Label text={label(h)} /></button>{/if}
         </div>
         {#each hunk.lines as line, i (i)}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -185,7 +186,14 @@
     white-space: nowrap;
   }
   .hunk .btn {
+    flex: none;
     font-family: var(--font);
+  }
+  /* 差异栏窄时区块按钮只留名字，命令在悬停提示里 */
+  @container (max-width: 640px) {
+    .hunk :global(.cmd) {
+      display: none;
+    }
   }
   .line {
     border-left: 3px solid transparent;

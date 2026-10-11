@@ -374,6 +374,8 @@
     color: var(--muted);
     font-size: var(--fs-sm);
     border-bottom: 1px solid var(--border);
+    /* 多出的 12px 是下面列表滚动条的宽度，表头和各列才能对齐 */
+    padding-right: 24px;
   }
   .cell {
     position: relative;
@@ -401,6 +403,9 @@
     overflow-y: auto;
     overflow-x: hidden;
     outline: none;
+  }
+  .viewport:not(.compact) {
+    scrollbar-gutter: stable;
   }
   .window {
     position: relative;

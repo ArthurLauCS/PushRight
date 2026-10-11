@@ -3,6 +3,7 @@
   import ConflictView from './ConflictView.svelte'
   import DiffView from './DiffView.svelte'
   import Icon from './Icon.svelte'
+  import Label from './Label.svelte'
   import { layout } from './layout.svelte'
   import Splitter from './Splitter.svelte'
   import { t, errorText } from './i18n.svelte'
@@ -105,10 +106,10 @@
     <div class="title">
       <span>{title}<span class="count">{items.length}</span><span class="hint">{hint}</span></span>
       {#if !isStaged}
-        <button class="btn small quiet danger" disabled={disabled || !items.length} onclick={() => discard([])}>{t.discardAll}</button>
+        <button class="btn small quiet danger" disabled={disabled || !items.length} title={t.discardAll} onclick={() => discard([])}><Label text={t.discardAll} /></button>
       {/if}
-      <button class="btn small" disabled={disabled || !items.length} onclick={() => (isStaged ? unstage(items) : stage(items))}>
-        {isStaged ? t.unstageAll : t.stageAll}
+      <button class="btn small" disabled={disabled || !items.length} title={isStaged ? t.unstageAll : t.stageAll} onclick={() => (isStaged ? unstage(items) : stage(items))}>
+        <Label text={isStaged ? t.unstageAll : t.stageAll} />
       </button>
     </div>
     <div class="items">
@@ -155,7 +156,7 @@
           <small>{amend ? t.committer : t.commitIdentity}</small>
           <strong>{(amend ? identity?.committer : identity?.author) ?? t.identityMissing}</strong>
         </span>
-        <button class="btn small" disabled={busy || identityBusy} onclick={editIdentity}>{t.editIdentity}</button>
+        <button class="btn small" disabled={busy || identityBusy} title={t.editIdentity} onclick={editIdentity}><Label text={t.editIdentity} /></button>
       </div>
       {#if amend}<small class="identity-note">{t.amendIdentityHint}</small>
       {:else if identity?.committer && identity.committer !== identity.author}
@@ -167,8 +168,8 @@
         onkeydown={(e) => e.ctrlKey && e.key === 'Enter' && commit()}
       ></textarea>
       <div class="actions">
-        <label><input type="checkbox" bind:checked={amend} onchange={toggleAmend} />{t.amend}</label>
-        <button class="btn primary" disabled={!canCommit} onclick={commit}>{t.commit}</button>
+        <label title={t.amend}><input type="checkbox" bind:checked={amend} onchange={toggleAmend} /><span><Label text={t.amend} /></span></label>
+        <button class="btn primary" disabled={!canCommit} title={t.commit} onclick={commit}><Label text={t.commit} /></button>
       </div>
     </div>
   </div>
@@ -203,6 +204,16 @@
     display: flex;
     flex-direction: column;
     background: var(--panel);
+    container-type: inline-size;
+  }
+  /* 分组标题一行放不下命令；其余按钮在面板窄时也只留名字，命令在悬停提示里 */
+  .title :global(.cmd) {
+    display: none;
+  }
+  @container (max-width: 560px) {
+    .left :global(.cmd) {
+      display: none;
+    }
   }
   .clean {
     position: absolute;
@@ -224,7 +235,6 @@
   .title {
     flex: none;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
     min-height: 36px;
@@ -356,7 +366,6 @@
   }
   .actions {
     display: flex;
-    flex-wrap: wrap;
     gap: 8px;
     align-items: center;
     justify-content: space-between;
@@ -365,8 +374,17 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     color: var(--muted);
     font-size: var(--fs-sm);
+  }
+  label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .actions .btn {
+    flex: none;
   }
   .error {
     margin: 0;

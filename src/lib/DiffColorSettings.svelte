@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DIFF_PRESETS, isDiffColor, validDiffColors, type DiffColors } from './diff-colors'
   import { diffColors, setDiffColors } from './diff-colors.svelte'
+  import Icon from './Icon.svelte'
   import { t, errorText } from './i18n.svelte'
 
   let { editor = false, onsave = setDiffColors }: { editor?: boolean; onsave?: (colors: DiffColors | null) => void | Promise<void> } = $props()
@@ -28,7 +29,7 @@
   }
 </script>
 
-<button type="button" class="btn quiet" onclick={show}>{t.diffColors.title}</button>
+<button type="button" class="btn quiet icon" title={t.diffColors.title} aria-label={t.diffColors.title} onclick={show}><Icon name="contrast" /></button>
 <dialog bind:this={dialog} aria-labelledby="diff-color-title" oncancel={(event) => { if (saving) event.preventDefault() }}>
   <form onsubmit={(event) => { event.preventDefault(); if (valid && !saving) save() }}>
     <h2 id="diff-color-title">{t.diffColors.title}</h2>
@@ -77,11 +78,14 @@
   dialog::backdrop { background: var(--backdrop); }
   form { display: flex; flex-direction: column; gap: 16px; }
   h2, p { margin: 0; }
-  p { color: var(--muted); }
-  label { display: flex; flex-direction: column; gap: 4px; }
+  h2 { font-size: var(--fs-xl); font-weight: 700; }
+  p { color: var(--muted); line-height: var(--lh-body); }
+  label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: var(--fs-sm); }
+  .field { height: 32px; color: var(--text); font-size: var(--fs-md); }
   .color, .buttons { display: flex; gap: 8px; align-items: center; }
   .color .field { flex: 1; min-width: 0; }
-  input[type=color] { width: 48px; height: 32px; padding: 2px; }
+  .buttons .btn { min-width: 80px; height: 32px; }
+  input[type=color] { width: 48px; height: 32px; padding: 2px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); }
   .preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; }
   .preview div { padding: 8px; display: flex; gap: 16px; }
   .added { background: color-mix(in srgb, var(--preview-added) 22%, transparent); border-left: 4px solid var(--preview-added); }

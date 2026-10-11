@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Refs } from './api'
   import { revisionOptions } from './revision-options'
+  import Icon from './Icon.svelte'
   import { t } from './i18n.svelte'
 
   let { refs, value = $bindable(''), label }: { refs: Refs; value?: string; label: string } = $props()
@@ -43,8 +44,8 @@
       aria-activedescendant={open && options[active] ? `${id}-${active}` : undefined}
       placeholder={t.tools.selectRevision} onfocus={show} onclick={() => { if (!open) show() }}
       oninput={(event) => { query = event.currentTarget.value; active = -1; open = true }} onkeydown={keydown} />
-    <button class="btn" type="button" aria-label={t.tools.selectRevision} aria-expanded={open} aria-controls={`${id}-list`}
-      onclick={() => { if (open) open = false; else { input.focus(); show() } }}>▾</button>
+    <button class="btn icon" type="button" aria-label={t.tools.selectRevision} aria-expanded={open} aria-controls={`${id}-list`}
+      onclick={() => { if (open) open = false; else { input.focus(); show() } }}><Icon name="down" size={14} /></button>
   </div>
   {#if open}
     <div class="options" id={`${id}-list`} role="listbox" aria-label={label}>
