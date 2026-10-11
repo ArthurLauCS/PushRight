@@ -33,9 +33,9 @@
 
 本次发布同步更新桌面客户端与编辑器扩展，两者共用新增仓库工具。扩展自带引擎，无须先安装桌面版。
 
-![PushRight 桌面版：提交图、独立作者样式与差异视图](docs/images/desktop.jpg)
+![PushRight 1.1.10：提交图、分支与文件差异](docs/images/desktop-1.1.10.png)
 
-截图来自桌面程序，使用虚构作者和本地示例仓库。
+截图来自 1.1.10 桌面程序，使用虚构作者和本地示例仓库。扩展与桌面版共用这套完整提交图界面。
 
 本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.tar.gz)。
 
@@ -92,7 +92,7 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 - 先提交或贮藏未完成的改动；此次拉取禁用自动贮藏和自动更新其他本地分支引用。
 - 遇到冲突，解决后点击「继续」，或点击「中止」恢复原状态。变基时 Git 的「我方」是上游及已重放的提交，「对方」是正在重放的本地提交。
 
-![拉取时默认勾选 Rebase instead of merge](docs/images/pull-rebase.jpg)
+![PushRight 1.1.10：拉取时默认勾选 Rebase instead of merge](docs/images/pull-rebase-1.1.10.png)
 
 这是各分支拉取上游时的策略，不规定功能分支如何合入 `dev`、`main` 或 `master`，也不会审批托管平台 PR/MR；合入方式仍按仓库的独立规范执行。变基会改变重放提交的 ID，重写共享历史前应与协作者协调。参见 [Git pull 官方文档](https://git-scm.com/docs/git-pull)。
 
@@ -107,8 +107,6 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 “本地更改”的提交区域显示 Git 实际使用的姓名和邮箱。点击“修改身份”，可保存当前仓库的 `user.name` 和 `user.email`，不影响全局配置或已有提交；关联工作树共享仓库配置。
 
 如果环境变量或 `author.*` / `committer.*` / 工作树配置覆盖了这两个值，界面会显示实际身份并提示覆盖情况。修补上次提交会保留原作者，界面显示本次提交者。
-
-![在提交区查看和修改当前仓库的提交身份](docs/images/commit-identity.jpg)
 
 ### 大仓库与大文件
 

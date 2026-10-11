@@ -74,7 +74,7 @@ exports.run = async () => {
     assert.equal(git('rev-parse', 'HEAD'), protectedHead)
     await api.engine.call('op', { tab: initialTab, op: { op: 'set_revert_disabled', disabled: false } })
     await vscode.commands.executeCommand('pushright.refresh')
-    assert.equal(api.repos[0].refs.revert_disabled, false)
+    await until('revert setting refreshed', () => api.repos[0].refs.revert_disabled === false)
     step('repository settings persist locally and the shared engine blocks revert without changing HEAD')
 
     // Pull：选择框里「Rebase instead of merge」默认勾选，直接确认应当是变基

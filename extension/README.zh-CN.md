@@ -12,6 +12,14 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 
 **[下载 VSIX · Windows x64 · 1.1.10](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10)
 
+## 界面预览
+
+![PushRight 1.1.10：共用的提交图与文件差异](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/desktop-1.1.10.png)
+
+扩展与桌面版共用完整提交图界面；上图来自 1.1.10 桌面程序，使用本地示例仓库和虚构作者。
+
+![PushRight 1.1.10：拉取默认使用 Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
+
 ## 差异配色
 
 在命令面板或源代码管理菜单运行 **PushRight: 差异配色…**，或点击完整提交图顶部的“差异配色”。提供蓝／橙、紫／金、青／玫红三组预设，也可分别输入新增、删除的 HEX 色值；完整提交图弹窗另有颜色选择器和实时预览。配色同时用于 PushRight 和 VS Code／Cursor 原生 diff（包括 Review Branch），会写入用户级 `workbench.colorCustomizations`，工作区设置可能优先覆盖。“恢复原配色”恢复此前值，同时保留无关设置和之后的手动改色。

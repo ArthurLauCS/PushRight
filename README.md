@@ -35,9 +35,9 @@ The desktop app refreshes open repositories every minute and fetches when they o
 
 The desktop client and editor extension share the new repository tools. The extension includes its own engine and does not require the desktop installation.
 
-![PushRight: commit graph, individual author styling and file differences](docs/images/desktop.jpg)
+![PushRight 1.1.10: commit graph, branches and file differences](docs/images/desktop-1.1.10.png)
 
-Screenshots show the actual desktop app with a local demo repository and fictional identities.
+Screenshots show the actual 1.1.10 desktop app with a local demo repository and fictional identities. The extension shares this full graph interface.
 
 Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.10.tar.gz).
 
@@ -95,7 +95,7 @@ Click **Pull**. The dialog shows the upstream and checks **Rebase instead of mer
 - Commit or stash unfinished work first. Automatic stashing and updates to other local branch refs are disabled for this operation.
 - On conflicts, resolve and **Continue**, or **Abort** to restore the previous local state. During rebase, “ours” is upstream plus commits already replayed; “theirs” is the local commit being replayed.
 
-![Pull with Rebase instead of merge checked by default](docs/images/pull-rebase.jpg)
+![PushRight 1.1.10: Pull with Rebase instead of merge checked by default](docs/images/pull-rebase-1.1.10.png)
 
 This is a **pull strategy** for any current branch. It does not determine how a feature branch merges into `dev`, `main` or `master`, or approve a hosted PR/MR. Follow the repository's separate merge policy. Rebase rewrites replayed commit IDs; coordinate before rewriting shared history. See the [Git pull reference](https://git-scm.com/docs/git-pull).
 
@@ -110,8 +110,6 @@ Left-click an author to highlight their commits temporarily. Keyboard users can 
 The **Local changes** commit panel shows the effective Git name and email. **Edit identity** saves repository-level `user.name` and `user.email`, without changing global configuration or existing commits. Linked worktrees share repository configuration.
 
 The app reports effective identities and overrides from environment variables, `author.*`, `committer.*` or worktree configuration. Amending preserves the original author; the panel shows the current committer.
-
-![Repository commit identity](docs/images/commit-identity.jpg)
 
 ### Large repositories and files
 
