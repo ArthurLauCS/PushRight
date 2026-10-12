@@ -112,9 +112,18 @@ async function createBranch(repo: Repo) {
 }
 
 /** 提交图显示哪个分支：与切换分支用同一个选择框，但只筛选，不检出。 */
-export async function pickScope(repo: Repo) {
+export async function pickScope(repo: Repo, current = '') {
   const fixed = [{ label: v.graphAuto, detail: v.graphAutoHint, ref: 'auto' }, { label: v.graphAll, ref: 'all' }]
-  return (await vscode.window.showQuickPick([...fixed, ...await branchItems(repo, true)], { title: `${repo.name} · ${v.graphScope}`, matchOnDetail: true }))?.ref
+  const branches = await branchItems(repo, true)
+  // 多选入口放在最后，前面各项的位置和单选时完全一样
+  const many = { label: `$(checklist) ${v.graphPickMany}`, ref: '' }
+  const title = `${repo.name} · ${v.graphScope}`
+  const pick = await vscode.window.showQuickPick([...fixed, ...branches, many], { title, matchOnDetail: true })
+  if (pick !== many) return pick?.ref
+  const chosen = current.split('\n')
+  const picked = await vscode.window.showQuickPick(branches.map((b) => ({ ...b, picked: chosen.includes(b.ref) })), { title, matchOnDetail: true, canPickMany: true })
+  // 多个引用以换行分隔交给引擎；一个都没勾等于取消
+  return picked?.map((b) => b.ref).join('\n') || undefined
 }
 
 /** 合并 / 变基停在冲突上时：继续或中止。 */

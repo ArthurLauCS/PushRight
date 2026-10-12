@@ -99,12 +99,16 @@ pub(crate) fn tips(gix: &gix::Repository) -> Result<Vec<ObjectId>> {
 }
 
 /// Auto 包含 HEAD、上游和基准远程分支；筛选改变遍历起点，不改变检出的分支。
+/// 其余取值是引用全名，多个以换行分隔（引用名里不会有换行），提交取并集。
 pub(crate) fn graph_tips(repo: &Repo, scope: &str) -> Result<Vec<ObjectId>> {
     if scope == "all" { return tips(&repo.gix()); }
     if scope != "auto" {
         let refs = list_with(repo, false)?;
-        let r = refs.refs.iter().find(|r| r.name == scope).ok_or("PR_GRAPH_REF_GONE")?;
-        return Ok(vec![ObjectId::from_hex(r.id.as_bytes()).map_err(err)?]);
+        // 已经删掉的引用跳过；一个都不在才报错
+        let ids = refs.refs.iter().filter(|r| scope.split('\n').any(|name| name == r.name))
+            .map(|r| ObjectId::from_hex(r.id.as_bytes()).map_err(err)).collect::<Result<Vec<_>>>()?;
+        if ids.is_empty() { return Err("PR_GRAPH_REF_GONE".into()); }
+        return Ok(ids);
     }
     let head = repo.gix().head_name().map_err(err)?.map(|n| n.as_bstr().to_string());
     let Some(head) = head.as_deref() else { return Ok(repo.gix().head_id().ok().map(|id| id.detach()).into_iter().collect()) };

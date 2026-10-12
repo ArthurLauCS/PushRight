@@ -26,6 +26,7 @@
     up: 'm6 15 6-6 6 6',
     down: 'm6 9 6 6 6-6',
     right: 'm9 6 6 6-6 6',
+    filter: 'M3 5h18l-7 8v6l-4 2v-8z',
     space: 'M4 10v4h16v-4',
     pilcrow: 'M13 4v16M17 4v16M19 4H9.5a4.5 4.5 0 0 0 0 9H13',
     wrap: 'M3 6h18M3 12h15a3 3 0 1 1 0 6h-4m2-2-2 2 2 2M3 18h7',

@@ -159,6 +159,13 @@ export const messages = {
   tooLarge: '改动过大，无法显示',
   noDiff: '没有文本改动',
   truncated: (n: number) => `只显示前 ${n} 行`,
+  graphFilter: {
+    showing: '只显示这些引用的提交：',
+    clear: '清除筛选',
+    only: '只看这个分支的提交',
+    add: '加入提交图筛选',
+    remove: '移出提交图筛选',
+  },
   diffTools: {
     ignoreWs: '忽略空白差异',
     hidden: '显示隐藏字符',
@@ -355,6 +362,8 @@ export const messages = {
     graphScope: '提交图显示的分支',
     graphAuto: '自动（Auto）',
     graphAll: '全部分支',
+    graphPickMany: '选择多个分支…',
+    graphBranches: (n: number) => `${n} 个分支`,
     graphAutoHint: '当前分支、上游和远程基准分支。筛选不会切换检出的分支。',
     graphCurrentBranch: (branch: string) => `当前检出：${branch}。拉取和推送作用于此分支。`,
     graphPushSame: (branch: string) => `将 ${branch} 推送到同名远程分支（git push --set-upstream）`,

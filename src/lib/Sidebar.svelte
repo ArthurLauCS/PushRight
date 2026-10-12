@@ -20,6 +20,8 @@
     onactivate,
     onstash,
     onmenu,
+    scope,
+    onscope,
     onworktree,
   }: {
     refs: Refs
@@ -37,6 +39,10 @@
     /** 单击贮藏：查看内容，不改变工作区。 */
     onstash: (name: string) => void
     onmenu: (e: MouseEvent, kind: Kind, name: string, id: string) => void
+    /** 提交图只显示这些引用的提交；空表示全部 */
+    scope: string[]
+    /** 把一个引用加入或移出提交图筛选 */
+    onscope: (name: string) => void
     /** 双击工作树：在页签中打开 */
     onworktree: (path: string) => void
   } = $props()
@@ -92,6 +98,15 @@
                 {tr.gone ? t.gone : `${tr.ahead ? '↑' + tr.ahead : ''} ${tr.behind ? '↓' + tr.behind : ''}`}
               </span>
             {/if}
+            <!-- 行本身是按钮，里面不能再套按钮；键盘从右键菜单里的同名项操作 -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <span
+              class="sub filter"
+              class:active={scope.includes(r.name)}
+              title={scope.includes(r.name) ? t.graphFilter.remove : t.graphFilter.add}
+              onclick={(e) => { e.stopPropagation(); onscope(r.name) }}
+              ondblclick={(e) => e.stopPropagation()}
+            ><Icon name="filter" size={12} /></span>
           </button>
         {/each}
       </details>
@@ -252,6 +267,24 @@
   button.head {
     color: var(--accent);
     font-weight: 600;
+  }
+  .filter {
+    margin-left: auto;
+    padding: 2px;
+    border-radius: var(--r-sm);
+    opacity: 0;
+    cursor: pointer;
+  }
+  details button:hover .filter,
+  .filter.active {
+    opacity: 1;
+  }
+  .filter:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .filter.active {
+    color: var(--accent);
   }
   .sub {
     flex: none;

@@ -10,7 +10,9 @@ export function registerGraphView(context: vscode.ExtensionContext) {
   const scopes = { ...context.workspaceState.get<Record<string, string>>('graphScopes', {}) }
   const scopeOf = (root: string, refs: { name: string }[]) => {
     const scope = scopes[root] ?? 'auto'
-    return scope === 'auto' || scope === 'all' || refs.some((r) => r.name === scope) ? scope : 'auto'
+    if (scope === 'auto' || scope === 'all') return scope
+    // 多选时是换行分隔的引用名；已删除的拿掉，一个不剩就回到 Auto
+    return scope.split('\n').filter((name) => refs.some((r) => r.name === name)).join('\n') || 'auto'
   }
   const openFile = async (args: { tab: number; id: string; path: string; preview?: boolean }) => {
     const repo = repos.find((r) => r.tab === args?.tab)
@@ -48,7 +50,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
               if (!repo) throw new Error('PR_TAB_CLOSED')
               if (m.cmd === 'graph_scope') {
                 // 范围在主机的选择框里选，Webview 不能指定任意引用。
-                const scope = await pickScope(repo)
+                const scope = await pickScope(repo, scopeOf(repo.root, repo.refs.refs))
                 if (scope) {
                   scopes[repo.root] = scope
                   await context.workspaceState.update('graphScopes', scopes)

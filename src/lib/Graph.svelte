@@ -392,15 +392,6 @@
     bottom: 0;
     display: flex;
   }
-  .chip {
-    margin-left: 8px;
-    padding: 0 8px;
-    border: 1px solid currentColor;
-    border-radius: var(--r-lg);
-    background: none;
-    font-size: var(--fs-sm);
-    cursor: pointer;
-  }
   .viewport {
     flex: 1;
     min-height: 0;

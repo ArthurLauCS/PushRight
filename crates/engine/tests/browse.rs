@@ -103,6 +103,10 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("refs/remotes/origin/feat"), ["B", "A"]);
     assert_eq!(subjects("auto"), ["M", "C", "B", "A"]);
     assert_eq!(subjects("all"), ["unrelated", "M", "C", "B", "A"]);
+    // 多个引用取并集：共同祖先 A 保留，main 独有的 C、M 不出现；已删除的引用跳过
+    assert_eq!(subjects("refs/heads/feat\nrefs/heads/unrelated"), ["unrelated", "B", "A"]);
+    assert_eq!(subjects("refs/heads/gone\nrefs/heads/feat"), ["B", "A"]);
+    assert!(Graph::load_scope(&repo, 10, "refs/heads/gone\nrefs/heads/also-gone").is_err());
     assert!(Graph::load_scope(&repo, 10, "--all").is_err());
     assert_eq!(refs::list(&repo).unwrap().head.as_deref(), Some("refs/heads/feat"));
     git(&dir, 0, &["checkout", "-q", "--detach", "feat"]);

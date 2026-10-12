@@ -160,6 +160,13 @@ export const messages = {
   tooLarge: 'The diff is too large to display',
   noDiff: 'No text changes',
   truncated: (n: number) => `Showing the first ${n} lines`,
+  graphFilter: {
+    showing: 'Showing only commits from:',
+    clear: 'Clear filter',
+    only: 'Show only this branch',
+    add: 'Add to graph filter',
+    remove: 'Remove from graph filter',
+  },
   diffTools: {
     ignoreWs: 'Ignore whitespace',
     hidden: 'Show hidden symbols',
@@ -343,6 +350,8 @@ export const messages = {
     graphScope: 'Branches shown in the graph',
     graphAuto: 'Auto',
     graphAll: 'All branches',
+    graphPickMany: 'Pick several branches…',
+    graphBranches: (n: number) => `${n} branches`,
     graphAutoHint: 'Current branch, upstream and remote base branch. Filtering does not check out a branch.',
     graphCurrentBranch: (branch: string) => `Checked out: ${branch}. Pull and push operate on this branch.`,
     graphPushSame: (branch: string) => `Push ${branch} to a same-name remote branch`,

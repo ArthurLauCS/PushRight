@@ -40,7 +40,13 @@
     autoSync?: AutoSync
   } = $props()
 
-  let count = $state(untrack(() => initialCount))
+  const savedScopes = (): Record<string, string[]> => {
+    try { return JSON.parse(localStorage.getItem('graphScopes') ?? '{}') ?? {} } catch { return {} }
+  }
+  /** 提交图只显示这些引用可达的提交，空表示全部；按仓库路径记住 */
+  let scope = $state.raw<string[]>(untrack(() => savedScopes()[path] ?? []))
+  // 有筛选时首屏不先画打开仓库时加载的全量图
+  let count = $state(untrack(() => (scope.length ? 0 : initialCount)))
   let version = $state(0)
   let loadingAll = $state(false)
   let busy = $state(false)
@@ -122,7 +128,7 @@
 
   async function loadAll() {
     loadingAll = true
-    const n = await guard(api.loadGraph(tab, true))
+    const n = await guard(api.loadGraph(tab, true, scope.join('\n') || undefined))
     loadingAll = false
     if (n === undefined) return
     count = n
@@ -130,6 +136,32 @@
     if (pendingJump) jump(pendingJump)
     pendingJump = null
   }
+
+  function saveScope(next: string[]) {
+    scope = next
+    const all = savedScopes()
+    if (next.length) all[path] = next
+    else delete all[path]
+    localStorage.setItem('graphScopes', JSON.stringify(all))
+  }
+
+  /** 被删掉的引用从筛选里拿掉；返回筛选有没有变 */
+  function pruneScope() {
+    const alive = scope.filter((name) => refs.refs.some((r) => r.name === name))
+    if (alive.length !== scope.length) saveScope(alive)
+    return alive.length !== scope.length
+  }
+
+  /** 换一组引用重画提交图；正在看的提交留着，只重新找它在第几行 */
+  async function setScope(next: string[]) {
+    if (loadingAll) return
+    saveScope(next)
+    await loadAll()
+    const id = selectedId
+    const row = id ? await guard(api.rowOf(tab, id)) : null
+    if (selectedId === id) selectedRow = row ?? null
+  }
+  const toggleScope = (name: string) => setScope(scope.includes(name) ? scope.filter((n) => n !== name) : [...scope, name])
 
   async function select(row: number, id: string) {
     const request = ++detailRequest
@@ -193,7 +225,8 @@
     const beforeHead = refs.head_id
     await loadSidebar()
     if (!started) return
-    if (graphKey(refs) === before) {
+    const pruned = pruneScope()
+    if (graphKey(refs) === before && !pruned) {
       if (!background && refs.head_id && refs.head_id !== beforeHead && view === 'history') jump(refs.head_id)
       return
     }
@@ -602,6 +635,7 @@
         items.pop()
       }
     }
+    if (kind !== 'stash') items.push(null, { label: t.graphFilter.only, action: () => setScope([name]) }, { label: scope.includes(name) ? t.graphFilter.remove : t.graphFilter.add, action: () => toggleScope(name) })
     if (kind !== 'stash') items.push(null, { label: t.tools.compareFrom, action: () => { compareLeft = name } }, { label: t.tools.compareTo, action: () => compareWith(name) })
     menu!.show(e, items)
   }
@@ -682,6 +716,7 @@
     initializing = true
     untrack(async () => {
       await loadSidebar()
+      pruneScope()
       if (refs.head_id) jump(refs.head_id)
       await loadAll()
       initializing = false
@@ -756,11 +791,22 @@
       onactivate={activate}
       onstash={viewStash}
       onmenu={(e, kind, name) => refMenu(e, kind, name)}
+      {scope}
+      onscope={toggleScope}
       onworktree={onopen}
     />
     <Splitter key="sidebar" min={180} max={520} />
     <div class="content">
       <div class="pane" class:hidden={view !== 'history'}>
+        {#if scope.length}
+          <div class="scope">
+            <span>{t.graphFilter.showing}</span>
+            {#each scope as name (name)}
+              <button class="chip" title={t.graphFilter.remove} disabled={loadingAll} onclick={() => toggleScope(name)}>{short(name)} ×</button>
+            {/each}
+            <button class="btn small quiet" disabled={loadingAll} onclick={() => setScope([])}>{t.graphFilter.clear}</button>
+          </div>
+        {/if}
         {#if count}
           <Graph
             bind:this={graph}
@@ -774,7 +820,7 @@
             onmenu={commitMenu}
           />
         {:else}
-          <p class="none">{t.noCommits}</p>
+          <p class="none">{loadingAll ? t.loadingHistory : t.noCommits}</p>
         {/if}
         <Splitter key="detail" dir="y" min={120} max={640} invert />
         <Detail {detail} onjump={jump} reviewKey={`review:${JSON.stringify([path, detailMode, detail?.id])}`}
@@ -924,6 +970,21 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+  }
+  .scope {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  .scope .chip {
+    margin-left: 0;
+    color: var(--accent);
   }
   .none {
     font-family: var(--prose);

@@ -466,6 +466,11 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   assert.equal(shown.at(-1)[3].description, '$(check) at 5')
   assert.equal(shown.at(-1)[4].description, '')
   assert.deepEqual(saved, {}, 'clicking a branch must not persist recent-use ordering')
+  // 最后一项进入多选：预勾当前范围，结果以换行分隔
+  let many
+  vscode.window.showQuickPick = async (items, options) => options.canPickMany ? (many = items, items.filter((item) => item.picked || item.ref === 'refs/heads/old')) : items.at(-1)
+  assert.equal(await pickScope(repo, 'refs/heads/main'), 'refs/heads/old\nrefs/heads/main')
+  assert.deepEqual(many.filter((item) => item.picked).map((item) => item.ref), ['refs/heads/main'])
 })
 
 test('SCM separates repositories, stops on failed saves and uses selections after formatting', async () => {

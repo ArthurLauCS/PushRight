@@ -169,7 +169,8 @@ export const initialRepos = () => host<string[]>('initial_repos')
 /** 返回 [页签 id, 工作区路径, 已加载的提交数] */
 export const openRepo = (path: string) => invoke<[number, string, number]>('open_repo', { path })
 export const closeRepo = (tab: number) => invoke<void>('close_repo', { tab })
-export const loadGraph = (tab: number, full: boolean) => invoke<number>('load_graph', { tab, full })
+/** `scope` 不传是全部引用；否则是引用全名，多个以换行分隔 */
+export const loadGraph = (tab: number, full: boolean, scope?: string) => invoke<number>('load_graph', { tab, full, scope })
 export const rows = (tab: number, start: number, count: number) => invoke<Row[]>('rows', { tab, start, count })
 export const rowOf = (tab: number, id: string) => invoke<number | null>('row_of', { tab, id })
 export const refs = (tab: number) => invoke<Refs>('refs', { tab })
