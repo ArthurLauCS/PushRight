@@ -100,6 +100,9 @@ fn git_command(dir: &Path) -> Command {
     let mut cmd = Command::new("git");
     cmd.arg("-C").arg(dir);
     cmd.env("GIT_TERMINAL_PROMPT", "0");
+    // 只读命令（status）不顺手改写索引：后台刷新不会和用户在终端里跑的 git 抢 index.lock，
+    // 应用被强行结束时也不会留下锁文件；扩展监听 .git 的变化，改写索引还会让它反复刷新
+    cmd.env("GIT_OPTIONAL_LOCKS", "0");
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW

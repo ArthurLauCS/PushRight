@@ -195,3 +195,24 @@ fn display_options_change_the_view_without_breaking_partial_staging() {
     let added = diff::worktree_with(&repo, "added.txt", true, false, with(Some(0), true)).unwrap();
     assert_eq!(added.hunks[0].lines.iter().map(|l| (l.kind, l.new_no)).collect::<Vec<_>>(), [('+', Some(1)), ('+', Some(2))]);
 }
+
+#[test]
+fn status_does_not_take_the_index_lock() {
+    // 别的 git 进程（或被强行结束的进程留下的锁）占着 index.lock 时，读状态不受影响，也不去碰它
+    let dir = init("status-lock");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    git(&dir, 0, &["add", "."]);
+    git(&dir, 1, &["commit", "-q", "-m", "a"]);
+    std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
+    let repo = Repo::open(&dir).unwrap();
+    let lock = dir.join(".git/index.lock");
+    std::fs::write(&lock, "").unwrap();
+    let index = std::fs::read(dir.join(".git/index")).unwrap();
+    assert_eq!(brief(&repo), [("a.txt".to_owned(), None, Some('M'))]);
+    assert!(lock.exists());
+    std::fs::remove_file(&lock).unwrap();
+    // 没有锁时也不改写索引
+    brief(&repo);
+    assert_eq!(std::fs::read(dir.join(".git/index")).unwrap(), index);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
