@@ -1,8 +1,8 @@
 import { basename } from 'node:path'
 import * as vscode from 'vscode'
-import type { Diff, Entry, Identity } from '../../src/lib/api'
+import type { Diff, Entry, Identity, Log, WorkflowSettings } from '../../src/lib/api'
 import {
-  activeRepo, attempt, closedRepos, closeRepo, discoverRepositories, engine, errorText, fileUri, help, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, v, write, type Repo,
+  activeRepo, attempt, closedRepos, closeRepo, discoverRepositories, engine, errorText, fileUri, help, log, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, v, write, type Repo,
 } from './core'
 import { conflictFiles, statusCommands } from './sync'
 
@@ -60,6 +60,17 @@ async function commit(repo: Repo, amend: boolean) {
     if (!repo.status.length) return void vscode.window.showInformationMessage(t.clean)
     if (!(await vscode.window.showInformationMessage(v.nothingStaged, { modal: true, detail: help.stage.what }, v.stageAllAndCommit))) return
     if ((await write(repo, 'stage', { paths: repo.status.map((e) => e.path) })) === undefined) return
+  }
+  // 仓库设置了「提交前自动检查」时先跑一遍；没通过由用户决定要不要照样提交
+  const settings = await attempt(engine.call<WorkflowSettings>('workflow_settings', { tab: repo.tab }))
+  if (settings?.check_before_commit && settings.check_command) {
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `PushRight: ${settings.check_command}` }, () => attempt(engine.call<Log>('run_check', { tab: repo.tab })))
+    if (!result) return
+    log.appendLine(`> ${result.command}\n${result.output}\n`)
+    if (!result.ok) {
+      log.show(true)
+      if (!(await vscode.window.showWarningMessage(t.check.failedTitle, { modal: true, detail: t.check.failedWarning }, t.check.commitAnyway))) return
+    }
   }
   if ((await write(repo, 'commit', { message, amend })) !== undefined) box.value = ''
 }

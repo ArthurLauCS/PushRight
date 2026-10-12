@@ -108,6 +108,8 @@
     const open = new Set(entries.filter((e) => e.conflicted).map((e) => e.path))
     return [...new Set([...(operation?.conflicts ?? []), ...open])].map((path) => ({ path, resolved: !open.has(path) }))
   })
+  /** 提交信息模板和提交前检查，存在仓库的本地 git 配置里 */
+  let workflow = $state.raw<api.WorkflowSettings>({ template: '', check_command: '', check_before_commit: false })
   /** 上游改了、本地也改着的二进制文件；拉取前提示 */
   let overlap = $state.raw<string[]>([])
   let logs = $state.raw<api.Log[]>([])
@@ -169,8 +171,8 @@
   }
 
   async function loadSidebar() {
-    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab)]))
-    if (r) [refs, stashes, worktrees, , identity] = r
+    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab), api.workflowSettings(tab)]))
+    if (r) [refs, stashes, worktrees, , identity, workflow] = r
     operation = refs.in_progress ? ((await guard(api.operation(tab))) ?? null) : null
     // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
     overlap = refs.ahead_behind?.[1] ? ((await guard(api.binaryOverlap(tab))) ?? []) : []
@@ -458,12 +460,44 @@
     const current = await guard(api.refs(tab))
     if (!current) return
     refs = current
+    workflow = (await guard(api.workflowSettings(tab))) ?? workflow
     const values = await ask({
       title: `${t.repositorySettings} · ${path}`,
       message: t.revertScope,
-      fields: [{ key: 'disabled', label: t.disableRevert, type: 'checkbox', value: refs.revert_disabled }],
+      fields: [
+        { key: 'disabled', label: t.disableRevert, type: 'checkbox', value: refs.revert_disabled },
+        { key: 'check', label: t.check.command, type: 'text', optional: true, value: workflow.check_command },
+        { key: 'auto', label: t.check.auto, type: 'checkbox', value: workflow.check_before_commit },
+        { key: 'template', label: t.commitTemplate, type: 'textarea', optional: true, value: workflow.template },
+      ],
     })
-    if (values) await exec({ op: 'set_revert_disabled', disabled: !!values.disabled })
+    if (!values) return
+    await guard(api.setWorkflowSettings(tab, { template: values.template as string, check_command: values.check as string, check_before_commit: !!values.auto }))
+    // 只有这一项会进命令日志和撤销列表，没改就不执行
+    if (!!values.disabled !== refs.revert_disabled) await exec({ op: 'set_revert_disabled', disabled: !!values.disabled })
+    else await refresh()
+  }
+
+  /** 最近一次检查的结果；null 表示还没跑过或设置变了 */
+  let checkResult = $state.raw<api.Log | null>(null)
+  let checking = $state(false)
+  /** 跑提交前检查，输出进命令日志；没通过时把日志展开。返回是否通过 */
+  async function runCheck() {
+    if (checking) return false
+    checking = true
+    checkResult = null
+    const log = await guard(api.runCheck(tab))
+    checking = false
+    if (!log) return false
+    checkResult = log
+    logs = [...logs.slice(-99), log]
+    if (!log.ok) showLog = true
+    return log.ok
+  }
+  /** 提交之前：设置了自动检查就先跑，没通过时由用户决定要不要照样提交 */
+  async function beforeCommit() {
+    if (!workflow.check_before_commit || !workflow.check_command) return true
+    return (await runCheck()) || !!(await ask({ title: t.check.failedTitle, message: workflow.check_command, warning: t.check.failedWarning, danger: true, confirm: t.check.commitAnyway }))
   }
 
   async function editIdentity() {
@@ -1038,7 +1072,7 @@
           fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip, null, diffOptions())} />
       </div>
       <div class="pane" class:hidden={view !== 'changes'}>
-        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} {conflicts} prefill={refs.in_progress && refs.in_progress !== 'rebase' ? (operation?.message ?? '') : ''} reload={refresh} oncommitted={committed} {discard} {discardLines} onfilemenu={workFileMenu} />
+        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} {conflicts} prefill={(refs.in_progress && refs.in_progress !== 'rebase' && operation?.message) || workflow.template} check={{ command: workflow.check_command, auto: workflow.check_before_commit, running: checking, result: checkResult, run: runCheck }} {beforeCommit} showLog={() => (showLog = true)} reload={refresh} oncommitted={committed} {discard} {discardLines} onfilemenu={workFileMenu} />
       </div>
       {#if view === 'worktrees'}
         <div class="pane">

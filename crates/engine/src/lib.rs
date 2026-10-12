@@ -9,6 +9,7 @@ pub mod ops;
 pub mod refs;
 pub mod status;
 pub mod tools;
+pub mod workflow;
 pub mod rebase;
 pub mod rpc;
 

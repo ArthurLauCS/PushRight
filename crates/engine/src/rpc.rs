@@ -1,7 +1,7 @@
 //! 桌面版（Tauri）和扩展（sidecar）共用的命令分发：命令名和参数只在这里定义一次。
 
 use crate::graph::Graph;
-use crate::{conflict, detail, diff, history, identity, local_files, ops, rebase, refs, status, tools, Repo, Result};
+use crate::{conflict, detail, diff, history, identity, local_files, ops, rebase, refs, status, tools, workflow, Repo, Result};
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -88,6 +88,10 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "stage" => out(status::stage(repo, &arg::<Vec<String>>(a, "paths")?)?),
         "unstage" => out(status::unstage(repo, &arg::<Vec<String>>(a, "paths")?)?),
         "commit" => out(status::commit(repo, &arg::<String>(a, "message")?, arg(a, "amend")?)?),
+        "workflow_settings" => out(workflow::read(repo)?),
+        "set_workflow_settings" => out(workflow::write(repo, &arg::<workflow::Settings>(a, "settings")?)?),
+        "recent_messages" => out(workflow::recent_messages(repo, 20)?),
+        "run_check" => out(workflow::run_check(repo)?),
         "last_message" => out(status::last_message(repo)?),
         "commit_identity" => out(identity::read(repo)?),
         "set_commit_identity" => out(identity::set(repo, &arg::<String>(a, "name")?, &arg::<String>(a, "email")?)?),

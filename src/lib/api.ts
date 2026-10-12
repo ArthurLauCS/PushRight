@@ -229,3 +229,10 @@ export const conflictTake = (tab: number, path: string, theirs: boolean) => invo
 export const mergedBranches = (tab: number, base: string) => invoke<string[]>('merged_branches', { tab, base })
 /** 上游改了、本地也改着的二进制文件 */
 export const binaryOverlap = (tab: number) => invoke<string[]>('binary_overlap', { tab })
+/** 仓库本地配置里和提交有关的约定 */
+export interface WorkflowSettings { template: string; check_command: string; check_before_commit: boolean }
+export const workflowSettings = (tab: number) => invoke<WorkflowSettings>('workflow_settings', { tab })
+export const setWorkflowSettings = (tab: number, settings: WorkflowSettings) => invoke<void>('set_workflow_settings', { tab, settings })
+export const recentMessages = (tab: number) => invoke<string[]>('recent_messages', { tab })
+/** 跑仓库设置里的检查命令，等它结束 */
+export const runCheck = (tab: number) => invoke<Log>('run_check', { tab })

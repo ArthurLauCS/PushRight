@@ -28,6 +28,9 @@
     discard,
     discardLines,
     onfilemenu,
+    check,
+    beforeCommit,
+    showLog,
     busy = $bindable(false),
   }: {
     tab: number
@@ -47,6 +50,12 @@
     discardLines: (path: string, hunk: number, header: string, lines: number[]) => void
     /** 文件行的右键菜单 */
     onfilemenu: (e: MouseEvent, entry: api.Entry, staged: boolean) => void
+    /** 提交前检查：仓库设置里的命令、是否自动、是否正在跑、上一次的结果 */
+    check: { command: string; auto: boolean; running: boolean; result: api.Log | null; run: () => Promise<boolean> }
+    /** 提交前调用；返回 false 就不提交 */
+    beforeCommit: () => Promise<boolean>
+    /** 打开命令日志，看检查的输出 */
+    showLog: () => void
     busy?: boolean
   } = $props()
 
@@ -79,7 +88,11 @@
 
   const unstaged = $derived(entries.filter((e) => e.unstaged))
   const staged = $derived(entries.filter((e) => e.staged))
-  const canCommit = $derived(!busy && !identityBusy && message.trim() !== '' && (staged.length > 0 || amend))
+  const canCommit = $derived(!busy && !identityBusy && !check.running && message.trim() !== '' && (staged.length > 0 || amend))
+
+  /** 最近的提交信息，点开下拉时才取 */
+  let recent = $state.raw<string[]>([])
+  const loadRecent = async () => (recent = await api.recentMessages(tab).catch(() => []))
 
   $effect(() => {
     const s = sel
@@ -117,10 +130,11 @@
   const unstage = (list: api.Entry[]) => run(() => api.unstage(tab, list.map((e) => e.path)))
 
   async function commit() {
-    if (!canCommit) return
+    if (!canCommit || !(await beforeCommit())) return
     await run(() => api.commit(tab, message, amend))
     if (error) return
-    message = ''
+    // 回到自动填入的内容（提交信息模板），没有就是空的
+    message = filled
     amend = false
     oncommitted()
   }
@@ -230,11 +244,24 @@
       {:else if identity?.committer && identity.committer !== identity.author}
         <small class="identity-note">{t.committer}：{identity.committer}</small>
       {/if}
+      <select class="field recent" aria-label={t.recentMessages} title={t.recentMessages} value="" onfocus={loadRecent} onchange={(e) => { message = recent[+e.currentTarget.value] ?? message; e.currentTarget.value = '' }}>
+        <option value="" disabled hidden>{t.recentMessages}</option>
+        {#each recent as m, i (i)}<option value={i}>{m.split('\n')[0].slice(0, 80)}</option>{/each}
+      </select>
       <textarea
         placeholder={t.commitPlaceholder}
         bind:value={message}
         onkeydown={(e) => e.ctrlKey && e.key === 'Enter' && commit()}
       ></textarea>
+      {#if check.command}
+        <div class="check">
+          <button class="btn small" disabled={check.running || disabled} title={`${t.check.run} · ${check.command}`} onclick={check.run}>{check.running ? t.working : t.check.run}</button>
+          <code title={check.command}>{check.command}</code>
+          {#if check.result}
+            <button class="btn small quiet" class:failed={!check.result.ok} title={t.check.output} onclick={showLog}>{check.result.ok ? t.check.passed : t.check.failed}</button>
+          {:else if check.auto}<small>{t.check.autoOn}</small>{/if}
+        </div>
+      {/if}
       <div class="actions">
         <label title={t.amend}><input type="checkbox" bind:checked={amend} onchange={toggleAmend} /><span><Label text={t.amend} /></span></label>
         <button class="btn primary" disabled={!canCommit} title={t.commit} onclick={commit}><Label text={t.commit} /></button>
@@ -418,6 +445,39 @@
     line-height: var(--lh-body);
     outline: none;
     user-select: text;
+  }
+  .recent {
+    height: 24px;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-sm);
+  }
+  .check code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .check small {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .check .btn {
+    flex: none;
+    color: var(--green);
+  }
+  .check .btn:first-child {
+    color: inherit;
+  }
+  .check .failed {
+    color: var(--red);
   }
   .identity {
     display: flex;
