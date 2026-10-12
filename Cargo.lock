@@ -958,6 +958,7 @@ dependencies = [
  "encoding_rs",
  "gix",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3754,6 +3755,7 @@ name = "pushright"
 version = "1.1.10"
 dependencies = [
  "engine",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -4256,7 +4258,6 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 name = "sidecar"
 version = "0.2.0"
 dependencies = [
- "base64 0.22.1",
  "engine",
  "serde",
  "serde_json",

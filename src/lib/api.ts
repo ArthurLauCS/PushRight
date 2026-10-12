@@ -1,7 +1,11 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as host, isTauri } from '@tauri-apps/api/core'
 import type { DiffColors } from './diff-colors'
 
-export const saveDiffColors = (colors: DiffColors | null) => invoke<void>('set_diff_colors', { colors })
+// 桌面版的引擎命令统一走 Tauri 的 `call`（命令表在 engine::rpc，与扩展的 sidecar 共用）；
+// 扩展里 host 已经是发给扩展主机的 postMessage，原样转发。
+const invoke: typeof host = isTauri() ? (cmd, args = {}) => host('call', { cmd, args }) : host
+
+export const saveDiffColors = (colors: DiffColors | null) => host<void>('set_diff_colors', { colors })
 
 export interface Row {
   id: string
@@ -156,7 +160,7 @@ export const reflog = (tab: number, skip = 0) => invoke<Reflog[]>('reflog', { ta
 export const rebasePlan = (tab: number, base: string) => invoke<RebasePlan>('rebase_plan', { tab, base })
 export const rebaseRun = (tab: number, plan: RebasePlan) => invoke<Log>('rebase_run', { tab, ...plan })
 
-export const initialRepos = () => invoke<string[]>('initial_repos')
+export const initialRepos = () => host<string[]>('initial_repos')
 /** 返回 [页签 id, 工作区路径, 已加载的提交数] */
 export const openRepo = (path: string) => invoke<[number, string, number]>('open_repo', { path })
 export const closeRepo = (tab: number) => invoke<void>('close_repo', { tab })

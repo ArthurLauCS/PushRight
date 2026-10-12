@@ -10,6 +10,7 @@ pub mod refs;
 pub mod status;
 pub mod tools;
 pub mod rebase;
+pub mod rpc;
 
 use std::path::{Path, PathBuf};
 use std::io::{Read, Write};
