@@ -283,3 +283,18 @@ pub fn tracking(repo: &Repo) -> Result<Vec<Track>> {
         })
         .collect())
 }
+
+/// 已经完全合入 `base` 的本地分支（完整引用名），「清理分支」用。
+/// 不算在内：`base` 自己、任何工作树里检出着的分支（含当前分支）、和 `base` 指向同一个提交的分支（多半是刚建还没提交的）。
+pub fn merged_branches(repo: &Repo, base: &str) -> Result<Vec<String>> {
+    let tip = crate::tools::revision(repo, base)?;
+    let out = repo.git(&["branch", "--merged", &tip, "--format=%(refname)%00%(objectname)%00%(worktreepath)"])?;
+    Ok(String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split('\0');
+            let (name, id, worktree) = (f.next()?, f.next()?, f.next()?);
+            (name.starts_with("refs/heads/") && id != tip && worktree.is_empty() && name != base && name.strip_prefix("refs/heads/") != Some(base)).then(|| name.to_owned())
+        })
+        .collect())
+}

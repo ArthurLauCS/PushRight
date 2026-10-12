@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Refs, Stash, Track, Worktree } from './api'
+  import { orderBranches } from './branch-order'
   import Icon from './Icon.svelte'
   import Label from './Label.svelte'
   import { layout } from './layout.svelte'
@@ -23,6 +24,9 @@
     scope,
     onscope,
     autoFf,
+    pinned,
+    onpin,
+    onclean,
     onworktree,
   }: {
     refs: Refs
@@ -46,6 +50,11 @@
     onscope: (name: string) => void
     /** 自动获取后会自动快进的本地分支（引用全名） */
     autoFf: string[]
+    /** 固定在前列的分支（引用全名） */
+    pinned: string[]
+    onpin: (name: string) => void
+    /** 打开「清理分支」 */
+    onclean: () => void
     /** 双击工作树：在页签中打开 */
     onworktree: (path: string) => void
   } = $props()
@@ -61,8 +70,10 @@
     refs.refs
       .filter((r) => r.name.startsWith(prefix) && r.name.toLowerCase().includes(filter.toLowerCase()))
       .map((r) => ({ ...r, label: r.name.slice(prefix.length) }))
-  const branches = $derived(group('refs/heads/'))
-  const remotes = $derived(group('refs/remotes/'))
+  const branches = $derived(orderBranches(group('refs/heads/'), refs.head, pinned))
+  const remotes = $derived(orderBranches(group('refs/remotes/'), null, pinned))
+  /** 当前分支的上游短名，显示在它那一行里；没有上游时为空 */
+  const upstream = $derived(refs.refs.find((r) => r.name === refs.head)?.upstream?.replace('refs/remotes/', ''))
   const tags = $derived(group('refs/tags/'))
   const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 </script>
@@ -83,6 +94,7 @@
     {#snippet section(kind: Kind, title: string, items: { name: string; id: string; label: string }[], open: boolean)}
       <details {open}>
         <summary>{title}<span class="count">{items.length}</span></summary>
+        {#if kind === 'branch'}<button class="clean" title={t.branchList.clean} aria-label={t.branchList.clean} onclick={onclean}><Icon name="broom" size={12} /></button>{/if}
         {#each items as r (r.name)}
           <button
             class:head={r.name === refs.head}
@@ -94,6 +106,7 @@
           >
             {#if r.name === refs.head}<span class="tick">✓</span>{/if}
             <span class="name">{r.label}</span>
+            {#if r.name === refs.head && upstream}<span class="sub up" title={t.branchList.upstream(upstream)}>→ {upstream}</span>{/if}
             {#if elsewhere.has(r.name)}<span class="sub" title={t.inOtherWorktreeMark}><Icon name="windows" size={12} /></span>{/if}
             {#if autoFf.includes(r.name)}<span class="sub" title={t.autoFf.mark}><Icon name="pull" size={12} /></span>{/if}
             {#if tracks.get(r.name)}
@@ -103,6 +116,16 @@
               </span>
             {/if}
             <!-- 行本身是按钮，里面不能再套按钮；键盘从右键菜单里的同名项操作 -->
+            {#if kind !== 'tag'}
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+              <span
+                class="sub filter pin"
+                class:active={pinned.includes(r.name)}
+                title={pinned.includes(r.name) ? t.branchList.unpin : t.branchList.pin}
+                onclick={(e) => { e.stopPropagation(); onpin(r.name) }}
+                ondblclick={(e) => e.stopPropagation()}
+              ><Icon name="pin" size={12} /></span>
+            {/if}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <span
               class="sub filter"
@@ -271,6 +294,35 @@
   button.head {
     color: var(--accent);
     font-weight: 600;
+  }
+  /* 上游名字可以被挤短，分支名优先 */
+  .up {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  details {
+    position: relative;
+  }
+  /* 分组标题右端的小按钮；选择器要压过下面 details button 的整行样式 */
+  details .clean {
+    position: absolute;
+    right: 8px;
+    top: 6px;
+    width: auto;
+    height: auto;
+    padding: 2px 4px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .clean:hover {
+    color: var(--text);
+  }
+  .pin + .filter {
+    margin-left: 0;
   }
   .filter {
     margin-left: auto;

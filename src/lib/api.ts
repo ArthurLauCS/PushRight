@@ -225,3 +225,5 @@ export const operation = (tab: number) => invoke<Operation | null>('operation', 
 export const conflictRead = (tab: number, path: string) => invoke<Conflict>('conflict_read', { tab, path })
 export const conflictResolve = (tab: number, path: string, choices: Side[]) => invoke<void>('conflict_resolve', { tab, path, choices })
 export const conflictTake = (tab: number, path: string, theirs: boolean) => invoke<void>('conflict_take', { tab, path, theirs })
+/** 已经完全合入 `base` 的本地分支（引用全名） */
+export const mergedBranches = (tab: number, base: string) => invoke<string[]>('merged_branches', { tab, base })
