@@ -116,6 +116,7 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "conflict_read" => out(conflict::read(repo, &arg::<String>(a, "path")?)?),
         "conflict_resolve" => out(conflict::resolve(repo, &arg::<String>(a, "path")?, &arg::<Vec<conflict::Side>>(a, "choices")?)?),
         "conflict_take" => out(conflict::take(repo, &arg::<String>(a, "path")?, arg(a, "theirs")?)?),
+        "merged_branches" => out(refs::merged_branches(repo, &arg::<String>(a, "base")?)?),
         "branch_tips" => out(refs::branch_tips(repo)?),
         "repositories" => out(local_files::repositories(repo)?),
         "ignored" => out(local_files::ignored(repo, &arg::<String>(a, "path")?)?),

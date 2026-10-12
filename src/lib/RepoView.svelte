@@ -57,6 +57,34 @@
   let autoFf = $state.raw<string[]>(untrack(() => savedLists('autoFastForward')[path] ?? []))
   /** 上一轮自动快进里没能快进的分支和原因 */
   let autoFfSkipped = $state.raw<string[]>([])
+  /** 固定在侧栏前列的分支（引用全名）；按仓库路径记住 */
+  let pinned = $state.raw<string[]>(untrack(() => savedLists('pinnedBranches')[path] ?? []))
+  function togglePin(name: string) {
+    pinned = pinned.includes(name) ? pinned.filter((n) => n !== name) : [...pinned, name]
+    saveList('pinnedBranches', pinned)
+  }
+
+  /** 列出可以清理的本地分支让用户勾选：已经合入主干的默认勾上，上游已删除但没合并的默认不勾 */
+  async function cleanBranches() {
+    const base = compareBases('')[0]
+    if (!base) return void (error = t.branchList.noBase)
+    const merged = new Set((await guard(api.mergedBranches(tab, short(base)))) ?? [])
+    const gone = [...tracks.values()].filter((x) => x.gone && x.name !== refs.head && !merged.has(x.name)).map((x) => x.name)
+    if (!merged.size && !gone.length) return void ask({ title: t.branchList.clean, message: t.branchList.nothing(short(base)) })
+    const v = await ask({
+      title: t.branchList.clean,
+      message: t.branchList.cleanHint(short(base)),
+      danger: true,
+      confirm: t.branchList.cleanConfirm,
+      fields: [
+        ...[...merged].map((name) => ({ key: name, label: t.branchList.merged(short(name), short(base)), type: 'checkbox' as const, value: true })),
+        ...gone.map((name) => ({ key: name, label: t.branchList.gone(short(name)), type: 'checkbox' as const })),
+      ],
+    })
+    if (!v) return
+    // 没合并的要强制删除才删得掉；每个删除都进撤销列表
+    for (const name of [...merged, ...gone]) if (v[name] && !(await exec({ op: 'delete_branch', name: short(name), force: !merged.has(name) }))) break
+  }
   // 有筛选时首屏不先画打开仓库时加载的全量图
   let count = $state(untrack(() => (scope.length ? 0 : initialCount)))
   let version = $state(0)
@@ -666,9 +694,8 @@
     const s = short(name)
     const current = name === refs.head
     const onto = head ?? 'HEAD'
-    const items: Item[] = []
     if (kind === 'stash') {
-      items.push(
+      return menu!.show(e, [
         { label: t.stashApply, hint: t.stashApplyHint, action: () => exec({ op: 'stash_apply', name, pop: false }) },
         { label: t.stashPop, hint: t.stashPopHint, action: () => exec({ op: 'stash_apply', name, pop: true }) },
         null,
@@ -680,68 +707,83 @@
             if (await ask({ title: t.dropStashTitle, warning: t.dropStashWarning, danger: true })) exec({ op: 'stash_drop', name })
           },
         },
+      ])
+    }
+    // 一级只放天天用的操作，其余按「对比」「提交图」「管理」收进子菜单
+    const items: Item[] = []
+    if (!current) {
+      items.push(
+        {
+          label: kind === 'remote' ? t.checkoutRemote : kind === 'tag' ? t.checkoutCommit : t.checkout,
+          hint: explain[kind === 'remote' ? 'track' : kind === 'tag' ? 'checkout_commit' : 'checkout'].short,
+          action: () => activate(kind, name),
+        },
+        { label: t.mergeInto(onto), hint: explain.merge.short, action: () => explained('merge', t.mergeInto(onto), { op: 'merge', target: s }) },
+        { label: t.rebaseOnto(onto), hint: explain.rebase.short, action: () => explained('rebase', t.rebaseOnto(onto), { op: 'rebase', onto: s }) },
       )
-    } else {
-      if (!current) {
-        items.push(
-          {
-            label: kind === 'remote' ? t.checkoutRemote : kind === 'tag' ? t.checkoutCommit : t.checkout,
-            hint: explain[kind === 'remote' ? 'track' : kind === 'tag' ? 'checkout_commit' : 'checkout'].short,
-            action: () => activate(kind, name),
-          },
-          { label: t.mergeInto(onto), hint: explain.merge.short, action: () => explained('merge', t.mergeInto(onto), { op: 'merge', target: s }) },
-          { label: t.rebaseOnto(onto), hint: explain.rebase.short, action: () => explained('rebase', t.rebaseOnto(onto), { op: 'rebase', onto: s }) },
+    }
+    const manage: Item[] = []
+    if (kind === 'branch') {
+      const upstream = refs.refs.find((r) => r.name === name)?.upstream
+      if (upstream) {
+        const title = t.fastForwardTo(short(upstream))
+        items.push({ label: title, hint: explain.fast_forward.short, action: () => explained('fast_forward', title, { op: 'fast_forward', branch: s }) })
+        if (desktopSync) manage.push({ label: autoFf.includes(name) ? t.autoFf.off : t.autoFf.on, hint: t.autoFf.hint, action: () => toggleAutoFf(name) })
+      }
+      items.push({ label: t.pushBranch, hint: explain.push.short, action: () => push(s) })
+      if (!current) manage.push({ label: t.openInWorktree, hint: explain.worktree.short, action: () => addWorktree(s, true) })
+      manage.push({
+        label: t.rename,
+        hint: t.renameHint,
+        action: async () => {
+          const v = await ask({ title: t.rename, fields: [{ key: 'name', label: t.newName, type: 'text', value: s }] })
+          if (v) exec({ op: 'rename_branch', old: s, new: v.name as string })
+        },
+      })
+    }
+    if (kind !== 'tag') manage.push({ label: pinned.includes(name) ? t.branchList.unpin : t.branchList.pin, action: () => togglePin(name) })
+    manage.push({ label: t.copyName, action: () => navigator.clipboard.writeText(s) })
+    if (kind === 'branch' && !current) {
+      manage.push(null, {
+        label: t.delete,
+        hint: explain.delete_branch.short,
+        danger: true,
+        action: async () => {
+          const v = await ask({ title: t.deleteBranchTitle(s), explain: explain.delete_branch, danger: true, fields: [{ key: 'force', label: t.forceDelete, type: 'checkbox' }] })
+          if (v) exec({ op: 'delete_branch', name: s, force: v.force as boolean })
+        },
+      })
+    } else if (kind === 'tag') {
+      manage.push(null, {
+        label: t.deleteTag,
+        danger: true,
+        action: async () => {
+          if (await ask({ title: t.deleteTagTitle(s), danger: true })) exec({ op: 'delete_tag', name: s })
+        },
+      })
+    }
+    items.push(
+      null,
+      {
+        label: t.menuGroups.compare,
+        hint: t.compareBranch.hint,
+        items: [
+          ...compareBases(name).map((base) => ({ label: t.compareBranch.with(short(base)), action: () => void compareBranch(name, base) })),
+          { label: t.compareBranch.other, action: () => pickCompareBase(name) },
           null,
-        )
-      }
-      if (kind === 'branch') {
-        const upstream = refs.refs.find((r) => r.name === name)?.upstream
-        if (upstream) {
-          const title = t.fastForwardTo(short(upstream))
-          items.push({ label: title, hint: explain.fast_forward.short, action: () => explained('fast_forward', title, { op: 'fast_forward', branch: s }) })
-          if (desktopSync) items.push({ label: autoFf.includes(name) ? t.autoFf.off : t.autoFf.on, hint: t.autoFf.hint, action: () => toggleAutoFf(name) })
-        }
-        items.push(
-          { label: t.pushBranch, hint: explain.push.short, action: () => push(s) },
-          ...(current ? [] : [{ label: t.openInWorktree, hint: explain.worktree.short, action: () => addWorktree(s, true) }]),
-          {
-            label: t.rename,
-            hint: t.renameHint,
-            action: async () => {
-              const v = await ask({ title: t.rename, fields: [{ key: 'name', label: t.newName, type: 'text', value: s }] })
-              if (v) exec({ op: 'rename_branch', old: s, new: v.name as string })
-            },
-          },
-        )
-        if (!current) {
-          items.push(null, {
-            label: t.delete,
-            hint: explain.delete_branch.short,
-            danger: true,
-            action: async () => {
-              const v = await ask({ title: t.deleteBranchTitle(s), explain: explain.delete_branch, danger: true, fields: [{ key: 'force', label: t.forceDelete, type: 'checkbox' }] })
-              if (v) exec({ op: 'delete_branch', name: s, force: v.force as boolean })
-            },
-          })
-        }
-      } else if (kind === 'tag') {
-        items.push({
-          label: t.deleteTag,
-          danger: true,
-          action: async () => {
-            if (await ask({ title: t.deleteTagTitle(s), danger: true })) exec({ op: 'delete_tag', name: s })
-          },
-        })
-      } else {
-        items.pop()
-      }
-    }
-    if (kind !== 'stash') items.push(null, { label: t.graphFilter.only, action: () => setScope([name]) }, { label: scope.includes(name) ? t.graphFilter.remove : t.graphFilter.add, action: () => toggleScope(name) })
-    if (kind !== 'stash') {
-      items.push(null, ...compareBases(name).map((base, i) => ({ label: t.compareBranch.with(short(base)), hint: i ? undefined : t.compareBranch.hint, action: () => void compareBranch(name, base) })), { label: t.compareBranch.other, action: () => pickCompareBase(name) })
-    }
-    if (kind !== 'stash') items.push(null, { label: t.copyName, action: () => navigator.clipboard.writeText(s) })
-    if (kind !== 'stash') items.push(null, { label: t.tools.compareFrom, action: () => { compareLeft = name } }, { label: t.tools.compareTo, action: () => compareWith(name) })
+          { label: t.tools.compareFrom, action: () => { compareLeft = name } },
+          { label: t.tools.compareTo, action: () => compareWith(name) },
+        ],
+      },
+      {
+        label: t.menuGroups.graph,
+        items: [
+          { label: t.graphFilter.only, action: () => setScope([name]) },
+          { label: scope.includes(name) ? t.graphFilter.remove : t.graphFilter.add, action: () => toggleScope(name) },
+        ],
+      },
+      { label: t.menuGroups.manage, items: manage },
+    )
     menu!.show(e, items)
   }
 
@@ -945,6 +987,9 @@
       {scope}
       onscope={toggleScope}
       {autoFf}
+      {pinned}
+      onpin={togglePin}
+      onclean={cleanBranches}
       onworktree={onopen}
     />
     <Splitter key="sidebar" min={180} max={520} />

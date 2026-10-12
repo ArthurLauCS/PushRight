@@ -122,3 +122,25 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("auto"), ["M", "C", "B", "A"], "honor the existing VS Code base setting");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn merged_branches_lists_only_safe_cleanup_candidates() {
+    let dir = fixture("merged");
+    // fixture：main 合并了 feat。再加一个没合并的、一个刚建的、一个在别的工作树里检出的
+    git(&dir, 0, &["branch", "fresh", "main"]);
+    git(&dir, 0, &["checkout", "-q", "-b", "unmerged", "main"]);
+    git(&dir, 6, &["commit", "-q", "--allow-empty", "-m", "unmerged"]);
+    git(&dir, 0, &["checkout", "-q", "main"]);
+    git(&dir, 0, &["branch", "old", "feat"]);
+    let busy = dir.with_extension("wt");
+    let _ = std::fs::remove_dir_all(&busy);
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "busy", busy.to_str().unwrap(), "feat"]);
+    let repo = Repo::open(&dir).unwrap();
+    let mut merged = refs::merged_branches(&repo, "main").unwrap();
+    merged.sort();
+    assert_eq!(merged, ["refs/heads/feat", "refs/heads/old"]);
+    assert_eq!(refs::merged_branches(&repo, "refs/heads/main").unwrap().len(), 2);
+    assert!(refs::merged_branches(&repo, "--all").is_err());
+    std::fs::remove_dir_all(busy).unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}
