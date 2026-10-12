@@ -1,0 +1,464 @@
+## 开发交接更新：2026年10月12日
+
+工作分支：`feat_SC_graphBranchFilter`。私有开发仓库：`ArthurLauCS/PushRight-private`；公开仓库 `ArthurLauCS/PushRight` 用于发行版代码。
+
+相对公开发行版提交 `e6647dd`，本地已保存以下四项更新：
+
+- `6c8ccbd`：柔化浅色主题，增强深色提交图中的分支标签。
+- `b90197a`：桌面端与扩展 sidecar 共用引擎命令分发，减少重复代码。
+- `e49a501`：加入 diff 工具、变更文件树和文件夹暂存；覆盖工作区、提交详情和版本比较，补充界面说明及测试。
+- `26a57ae`：提交图支持多分支筛选，包含桌面侧栏和扩展选择入口；多引用历史取并集，桌面按仓库保存筛选。
+
+本轮验证：`npm test` 49 项通过；`npm run check` 通过，Svelte 0 错误、0 警告；`cargo test --workspace` 34 项通过。`26a57ae` 原提交标题中的“检查待完成”已由本轮自动检查补齐，保留原提交历史。
+
+回家继续：克隆私有仓库并切换到 `feat_SC_graphBranchFilter`；已有克隆则先确认工作区状态，再使用 `git pull --rebase`。首次安装依赖运行 `npm ci`；启动桌面开发环境运行 `npm run desktop:dev`（需要 Rust 和 Tauri 的 Windows 构建环境）。
+
+接续重点：实机验证多分支筛选切换、刷新、引用删除及状态恢复，并验证 diff 工具与暂存交互。本轮未执行桌面/编辑器实机冒烟测试，未重新打包安装程序或 VSIX；自动检查通过不等同于界面验收完成。
+
+下方保留此前调研原文，其中“待开发”“尚未开始实现”均为当时状态；当前进度以上述提交及验证记录为准。
+
+---
+
+记录日期：2026年10月12日。
+
+以下六项作为 PushRight 后续开发待办，暂不修改代码。实施顺序、工期和交付日期待定。
+
+## 待开发事项
+
+1. **按分支筛选提交图**：支持选择一个或多个分支，仅渲染所选分支的提交图。
+
+2. **交互式 Rebase 补强**：PushRight 已有 Pick、Edit、Reword、Squash、Fixup、Drop 和排序；参考 Fork 补齐逐提交预览、依赖分支更新及操作反馈，保留备份与校验。
+
+3. **Diff 文件树**：以文件夹和文件的层级结构展示变更文件，避免每项都展示完整路径。
+
+4. **Fast-Forward 及自动快进**：提供 Fast-Forward 操作，并允许在自动 Fetch 设置中选择一个或多个分支自动 Fast-Forward。
+
+5. **冲突信息与提交信息**：读取 Git 生成的合并／操作信息并自动填入提交区域，清楚显示本次冲突文件、来源和解决进度。实机已确认 Fork 会显示 Git 生成的冲突清单，而 PushRight 当前未自动填入。
+
+6. **Fork 的 diff 小工具**：已确认 Windows Fork 七个工具入口，后续加入 PushRight：忽略空白差异、显示隐藏字符、自动换行、减少／增加上下文行、显示整个文件、并排 diff。与文件树、按行／按块暂存及大文件保护一起设计。
+
+## Fork diff 工具栏调研
+
+调研日期：2026年10月12日。已在安装的 Windows Fork 2.23.2 文本 diff 界面确认以下七个按钮名称。名称与用途已明确；精确过滤规则、上下文步长及设置持久化仍未逐项验证。历史资料也确认了 [Windows 空白字符显示](https://git-fork.com/blog/posts/forkwin-1.28/) 与 [Windows 并排 diff](https://git-fork.com/blog/posts/forkwin-1.38/)。
+
+| 截图位置 | 功能 | 用途 |
+| - | - | - |
+| 1，空格形符号 | 忽略空白差异（Ignore whitespaces） | 过滤空格、缩进等空白变化造成的比较噪声，便于查看实质修改。 |
+| 2，¶ | 显示隐藏字符（Show hidden symbols） | 把空格、制表符等不可见字符显示成可辨认的标记，帮助检查缩进和行尾空白。 |
+| 3，折返箭头 | 自动换行（Word wrap） | 长行在视图宽度内折行，减少横向滚动。 |
+| 4，减号与横线 | 减少上下文行（Decrease number of visible lines） | 减少变更前后展示的未修改行，让差异更紧凑。 |
+| 5，加号与横线 | 增加上下文行（Increase number of visible lines） | 展开更多变更前后的未修改行，辅助理解代码。 |
+| 6，纵向箭头与横线 | 显示整个文件（Show entire file） | 展开完整文件上下文，并保留差异标记。 |
+| 7，左右分栏 | 并排 diff（Side by side diff） | 左右对照旧版与新版；与单栏统一 diff 互相切换。 |
+
+“忽略空白差异”控制比较结果；“显示不可见字符”控制字符如何画出来。这两个功能需要分别提供，自动换行也应只影响显示。
+
+### PushRight 待实现范围与验收要点
+
+第六项按上述七个按钮推进，开发前先确认项目已有能力并复用。以下是 PushRight 的拟定要求，不代表已经验证的 Fork 实现细节。
+
+- 每个按钮提供中文提示和明确的启用状态；上下文行数到达边界时禁用对应按钮。
+
+- 自动换行不改写文件，不把折行算成新的源代码行；并排模式下两侧对应内容保持对齐。
+
+- 减少／增加上下文只改变未修改行的展示范围；显示整个文件仍保留修改高亮。
+
+- 忽略空白不修改真实文件或暂存内容。若存在按行或按块暂存操作，必须验证其与过滤后视图的对应关系。
+
+- 用纯空白修改、超长行、文件头尾变更，以及新增／删除文件检查上述显示行为。
+
+### 尚待实机确认
+
+本轮实机版本为 Fork 2.23.2；最初所附截图的具体版本仍未知。上下文行数默认值与增减步长、忽略空白的具体匹配规则、隐藏字符覆盖范围，以及设置跨文件或跨仓库的保留方式，尚未验证，不写成既定规格。
+
+另查到 Windows 的 diff 内搜索支持 Ctrl+F，但它不是截图中的七个按钮，本轮只作为参考记录。[官方说明](https://git-fork.com/blog/posts/forkwin-1.38/)。
+
+## 界面差异调研结论
+
+截至 2026年10月12日，主要差异已经足以指导后续开发。对照基线为 Windows Fork 2.23.2 与 PushRight 1.1.9，PushRight 源码提交为 `58691427890c70bdf60a4d5863b56cae39f3bfbe`。以下“桌面端”和“编辑器扩展”分别记录，不能把扩展能力直接视为桌面端已有。
+
+- **交互式 Rebase 已有基础实现。** PushRight 已支持六种动作及上下移动；后续重点是逐提交预览、依赖分支更新、操作反馈，不能按从零新增估算。
+
+- **分支筛选需补齐多选。** 桌面侧栏的分支搜索不等于筛选提交图；扩展源码已有 Auto、All、单分支范围，但没有多分支选择。
+
+- **Diff 的核心缺口清楚。** 桌面端缺少上述七项独立控制，变更文件列表也需要树形结构；现有按块、按行暂存能力应保留。
+
+- **Fast-Forward 应单独设计。** Fork 已见分支右键快进；已检查的 Fetch 与设置页面没有发现“选择多个分支自动快进”。后者仍是我们的需求，不能写成 Fork 已验证的现成功能。
+
+- **冲突提交信息应读取 Git 的操作状态。** 测试合并中 Git 已生成包含冲突文件的 `MERGE_MSG`，Fork 自动填入提交区域，PushRight 的提交文本仍为空。优先补齐读取与显示，而不是另造一套冲突文案来源。
+
+下表中的“实机”表示已查看该界面或控件，不代表执行过其写操作；“源码”表示由 PushRight 当前实现确认；“资料”表示官方说明；“待核对”表示仅发现入口或尚未展开。重复入口合并记录。按当前决定停止继续操作电脑，未核对的条件界面保留为后续开发前的检查项。
+
+### 导航与仓库入口
+
+| Fork 控件 | 功能与观察 | PushRight 对照 |
+| - | - | - |
+| Local Changes | 实机：进入工作区和暂存区 | 桌面端已有工作区页面 |
+| All Commits | 实机：提交历史及图 | 桌面端已有历史页面 |
+| Branches 模式 | 实机：浏览引用分组 | 已有分支、远端、标签与 stash |
+| Search Commits | 实机：打开搜索侧栏及搜索框 | 扩展源码有提交搜索；桌面端未见同等入口 |
+| Commit Message 搜索下拉 | 实机：当前类型为提交信息；其他类型未展开 | 扩展源码有信息、作者、文件、内容、ID 五类 |
+| Pull Requests 模式 | 实机：真实仓库出现入口；未深入 | 当前代码未见同等托管平台 PR 界面 |
+| 分支搜索框与清除 | 实机：过滤侧栏分支 | 已有侧栏过滤；不会据此筛选图 |
+| Pin | 实机：分支固定入口 | 桌面端未见对应独立控件 |
+| Show branch commits only | 实机：仅显示该分支提交 | 扩展有单分支范围；多选仍需开发 |
+| Hide branch in commit list | 实机：隐藏指定分支入口 | 未见同等独立入口 |
+| Branches、Remotes、Tags 分组 | 实机：按引用类型展开 | 已有相应列表 |
+| Stashes 分组 | 实机：列出储藏 | 已有 apply、pop、drop |
+| Submodules 分组 | 实机：存在导航分组；具体仓库状态未验证 | 桌面端未见完整管理界面 |
+| Worktrees 分组 | 实机：工作树入口 | 已有独立工作树页面 |
+| 仓库标签与关闭 | 实机：多仓库切换 | 已有多标签及关闭、新建入口 |
+| 垂直标签侧栏 | 实机：工具栏入口 | 未见同等布局切换 |
+| Quick Launch | 实机：工具栏及菜单入口 | 有最近仓库；未见同等命令入口 |
+| Notifications | 实机：通知入口；未展开全部状态 | 有操作状态反馈；不等同通知中心 |
+| Leave Feedback | 实机：反馈入口；未发送 | 未见同等独立控件 |
+| Activity Manager | 实机：任务入口；内部页面待核对 | 有操作日志；任务管理差异待定 |
+| Filter | 实机：图筛选入口；完整选项待核对 | 扩展有范围选择；桌面侧栏过滤不可替代 |
+| Branch 下拉 | 实机：工具栏入口；完整选项待核对 | 通过侧栏及上下文菜单操作分支 |
+| Workspaces | 实机：入口；配置页面待核对 | 已有仓库标签，不等同工作区管理 |
+| Appearance | 实机：入口；具体选项待核对 | 已有主题、语言和 diff 配色 |
+| Console | 实机：终端入口；未启动命令 | 桌面有 Git 日志入口 |
+| Open in 下拉 | 实机：外部打开入口；完整列表待核对 | 扩展可打开文件；桌面外部工具集成较少 |
+| 仓库齿轮 → Rename Repository | 实机：显示名称调整入口 | 未见仓库显示名管理 |
+| 仓库齿轮 → Copy Repository Path | 实机：复制仓库路径 | 对应便捷入口待补 |
+| 仓库齿轮 → Settings | 实机：仓库设置四个标签页 | 桌面仓库设置目前主要是禁止 Revert |
+| 最小化、最大化、关闭 | 实机：标准窗口按钮 | 两者均有；不列为功能开发项 |
+
+### 顶部菜单
+
+| Fork 菜单项 | 功能或状态 | PushRight 对照 |
+| - | - | - |
+| File → Init New Repository | 实机：初始化入口，Ctrl+Shift+N | 欢迎页已有初始化 |
+| Clone | 实机：克隆入口，Ctrl+N | 欢迎页已有克隆 |
+| New Tab | 实机：新标签，Ctrl+T | 已有新标签 |
+| Open Repository | 实机：打开仓库，Ctrl+O | 已有打开仓库 |
+| Quick Launch | 实机：Ctrl+P | 未见同等入口 |
+| Close Tab | 实机：Ctrl+W | 已有关闭标签 |
+| Restore Closed Tab | 实机：Ctrl+Shift+T | 扩展源码有重新打开仓库能力；桌面待补 |
+| Configure SSH Keys | 实机：入口；未操作密钥 | 未见同等管理界面 |
+| Accounts | 实机：入口；未登录或调整账户 | 未见同等托管账户管理界面 |
+| Check Updates | 实机：入口；未触发更新 | 当前项目未见应用内自动更新流程 |
+| Preferences | 实机：全局设置，Ctrl+, | 桌面分散于主题、配色、自动同步等入口 |
+| Exit | 实机：退出入口 | 标准关闭窗口 |
+| View → Show Uncommitted Changes | 实机：切换未提交修改显示 | 有独立工作区页 |
+| Show All Commits | 实机：切回历史 | 有历史页 |
+| Hide Commit Details | 实机：收起详情 | 对应独立开关未见 |
+| Show HEAD | 实机：定位当前提交入口 | 图中有当前引用，快捷定位差异待定 |
+| Hide Tags | 实机：标签显示开关 | 未见同等开关 |
+| Hide Stashes in Commit List | 实机：图内 stash 显示开关 | 有 stash 列表，显示机制不同 |
+| Show Lost Commits | 实机：Reflog 入口 | Tools 已有 Reflog 及恢复为分支 |
+| Collapse All Merges | 实机：Show First Parent | 未见同等图模式；扩展文件折叠不是此功能 |
+| Filter by Active Branch | 实机：当前分支筛选 | 扩展有单分支范围 |
+| Repository → Refresh | 实机：刷新入口 | 已有刷新、自动刷新 |
+| Fetch | 实机：同步远端引用 | 已有；弹窗差异见下表 |
+| Pull | 实机：拉取并整合 | 已有默认 Rebase 选项 |
+| Push | 实机：推送 | 已有远端、分支及强推选项 |
+| Save Stash | 实机：储藏 | 已有 |
+| New Branch | 实机：建分支 | 已有 |
+| New Tag | 实机：建标签 | 已有 |
+| New Worktree | 实机：建工作树 | 已有 |
+| Git Flow | 实机：子菜单入口；未展开 | 未见专用 Git Flow 流程界面 |
+| Git LFS | 实机：子菜单入口；未展开 | 未见专用 LFS 管理界面 |
+| Apply Patch | 实机：应用补丁入口；未执行 | 桌面未见对应导入界面 |
+| Bisect | 实机：二分定位入口；未执行 | 桌面未见对应界面 |
+| Open in File Explorer | 实机：文件管理器入口 | 对应便捷入口待核对 |
+| Open in Console | 实机：终端入口 | Git 日志不能替代交互终端 |
+| Repository Statistics | 实机：统计入口；内容待核对 | 未见对应统计界面 |
+| Repository Treemap | 实机：树图入口；内容待核对 | 未见对应可视化 |
+| Performance Benchmark | 实机：入口；未执行 | 未见面向用户的同等入口 |
+| Settings for This Repository | 实机：仓库设置 | 已检查具体差异 |
+| Window、Help | 实机：顶层菜单可见；子项未枚举 | PushRight Help 源码包含操作说明、重置不再提示 |
+
+### Fetch Pull Push 与 Stash
+
+| 控件 | Fork 实机观察 | PushRight 对照 |
+| - | - | - |
+| Fetch 主按钮 | 有快捷执行提示 | 已有 Fetch |
+| Fetch 远端下拉 | 选择远端 | 引擎默认 fetch 全部远端并 prune |
+| Fetch all remotes | 全部远端复选框 | 已有全远端能力；界面选择粒度不同 |
+| Fetch 确认与 Cancel | 提交或取消弹窗 | 本轮未执行真实远端 Fetch |
+| Pull 远端下拉 | 选择源远端 | 已有明确远端选择 |
+| Pull 分支下拉 | 选择源分支，显示目标分支 | 已有分支选择 |
+| Rebase instead of merge | 实机为勾选状态 | PushRight 默认 Rebase；本用户始终使用 Rebase |
+| Stash and reapply local changes | 自动储藏并恢复本地修改 | 当前 Pull 未见同等 autostash 选项 |
+| Pull 确认与 Cancel | 执行或取消 | 本轮只查看并取消 |
+| Push 分支下拉 | 选择本地分支 | 已有 |
+| Push 目标下拉 | 选择远端目标 | 已有远端及分支、上游跟踪设置 |
+| Push all tags | 同时推送所有标签 | 桌面未见同等复选框 |
+| Force push | 强推开关 | 已有；源码使用 force-with-lease 与 force-if-includes，未判断 Fork 的底层参数 |
+| Push 确认与 Cancel | 执行或取消 | 本轮未执行推送 |
+| Stash message | 可选说明 | 已有 |
+| Stage new files | 勾选后将新文件纳入相关流程 | PushRight 储藏对话框有包含未跟踪文件选项，默认开启 |
+| Save Stash 与 Cancel | 储藏或取消 | 已有 |
+| Stash 下拉 → Recent Stashes | 快捷选最近储藏 | 有侧栏 stash 列表 |
+| Save Snapshot | 已见入口；实际保存语义未验证 | 不直接等同普通 stash |
+| Fast-Forward to origin/分支 | 已在有上游分支右键菜单看到直接操作 | 需要明确的独立快进入口 |
+| 自动 Fetch | 全局设置有开启复选框 | 已有间隔设置，覆盖打开的仓库含后台标签 |
+| 指定分支自动 Fast-Forward | 已检查页面未发现该配置 | 保留为我们待设计的需求 |
+
+### 分支与引用上下文菜单
+
+| Fork 控件 | 用途或状态 | PushRight 对照 |
+| - | - | - |
+| Checkout | 切换到分支 | 已有；脏工作区提供 stash、携带修改或工作树方案 |
+| Checkout as Worktree | 在工作树中检出 | 已有创建工作树 |
+| Push to origin | 推送所选分支；依赖远端状态 | 已有分支推送 |
+| Merge into 当前分支 | 合并所选分支 | 已有 |
+| Rebase 当前分支 on 所选分支 | 常规 Rebase | 已有 |
+| Interactively Rebase | 打开交互式 Rebase | 已有基础流程，细节见下表 |
+| New Branch | 从选定引用建分支 | 已有起点及是否检出 |
+| New Tag | 从选定引用建标签 | 已有标签及说明输入 |
+| Change Tracking Reference | 设置上游引用 | PushRight 推送有设置跟踪能力，入口不同 |
+| Rename | 重命名本地分支 | 已有 |
+| Delete | 删除分支 | 已有，含强制删除选项 |
+| Copy Branch Name | 复制分支名 | 桌面同等快捷入口待补 |
+| Fork 提交、stash、标签、远端的完整右键菜单 | 尚未逐项展开 | 不据此判断 Fork 缺少能力 |
+| PushRight 提交右键 | 源码：比较起点／终点、检出、新分支、新标签、Cherry-pick、Revert、Reset、复制 SHA | 现有能力，避免重复排期 |
+| PushRight stash 右键 | 源码：Apply、Pop、Drop | 现有能力 |
+| PushRight 标签右键 | 源码：游离检出、删除、比较 | 现有能力 |
+| PushRight 分支比较入口 | 源码：设为比较起点或终点 | 现有能力 |
+
+### 变更文件 Diff 与提交详情
+
+| Fork 控件 | 功能与证据 | PushRight 对照 |
+| - | - | - |
+| Unstaged 列表 | 实机：未暂存文件分组 | 已有，显示文件名与父路径，非树形 |
+| Staged 列表 | 实机：已暂存文件分组 | 已有 |
+| Stage All | 实机：全部暂存入口 | 已有；另有全部取消暂存与全部丢弃 |
+| Stage selected | 实机：暂存选中文件 | 已有；可双击切换暂存状态 |
+| Unstage selected | 实机：取消选中文件暂存 | 已有 |
+| Filter | 实机：展开文件过滤输入框 | 对应文件列表过滤能力待补 |
+| View Mode → Tree | 实机：文件夹层级，当前选中 | 桌面主要缺口 |
+| View Mode → List | 实机：平面列表 | 现有列表能力接近，具体样式不同 |
+| View Mode → Combined List | 实机：第三种列表模式；组合规则未实测 | 未见同等模式 |
+| Quick Look | 实机：空格快捷预览入口 | 未见同等独立预览入口 |
+| Previous Change | 实机：Ctrl+↑，上一个变化位置 | 当前大文件上一页不是上一处差异 |
+| Next Change | 实机：Ctrl+↓，下一个变化位置 | 当前大文件下一页不是下一处差异 |
+| Diff 七个工具按钮 | 实机：名称与入口全部确认；见前文七项表 | 桌面端需补齐 |
+| Hunk → Stage | 实机：悬浮于差异块的暂存按钮 | 已有按块及选中行暂存 |
+| Hunk → Discard | 实机：丢弃该块入口 | 已有按块及选中行丢弃 |
+| Diff 右键 → Reveal Line in | 实机：定位到外部环境的子菜单 | 扩展有文件打开能力；桌面对应集成待补 |
+| History for Selected Lines | 实机：未选中行时禁用 | 扩展源码已有行历史；桌面未见 |
+| Copy | 实机：复制选中文本 | 需保留基础文本选择能力 |
+| Copy as Patch | 实机：复制补丁 | 桌面未见同等独立操作 |
+| 文件右键 → Open | 实机：打开文件入口 | 扩展已有打开文件 |
+| External Diff | 实机：外部 diff 子菜单 | 桌面未见同等工具配置 |
+| Show in File Explorer | 实机：定位文件 | 桌面便捷入口待补 |
+| Blame／Timeline | 实机：文件归属与时间线入口；未深入弹窗 | 扩展已有 Blame、文件历史 |
+| History | 实机：文件历史入口 | 扩展已有文件历史 |
+| Stage | 实机：Enter 快捷键 | 已有 |
+| Discard changes | 实机：Delete 快捷键 | 已有，并需保留确认流程 |
+| Stage All 右键入口 | 实机：Ctrl+Shift+Alt+S | 已有等效按钮 |
+| Ignore → 文件名 | 实机：忽略该文件模式入口 | 扩展源码已有本地／共享忽略 |
+| Ignore → 扩展名 | 实机：按扩展名忽略入口 | 对应便捷模式需补齐 |
+| Ignore → Custom Pattern | 实机：自定义忽略模式入口 | 桌面未见同等编辑流程 |
+| Stash 1 File | 实机：仅储藏所选文件入口 | 桌面未见文件级 stash |
+| Save as Patch | 实机：保存补丁入口 | 桌面未见同等导出操作 |
+| Copy Path | 实机：复制相对路径，Ctrl+C | 对应快捷入口待补 |
+| Copy Full Path | 实机：复制绝对路径，Ctrl+Shift+C | 对应快捷入口待补 |
+| 历史文件 → Save as | 实机：导出该历史版本文件 | 扩展有打开历史版本；导出入口不同 |
+| Commit 页签 | 实机：作者、提交者、SHA、父提交和信息 | 已有提交详情 |
+| Changes 页签 | 实机：本提交变更文件及 diff | 已有，文件列表仍平面展示 |
+| File Tree 页签 | 实机：浏览选定版本的完整文件树 | 不等于变更文件树；桌面未见完整版本浏览页 |
+| Expand All | 实机：详情内展开入口 | 同等控件待补 |
+| 父提交链接 | 实机：跳转父提交 | 已有 |
+| 作者颜色 | 实机：作者相关显示控制 | 已有作者聚焦及颜色样式 |
+| Open in separate window | 实机：详情弹出入口 | 未见同等独立窗口 |
+| Hide details | 实机：收起详情 | 同等控制待补 |
+| Reverse comparison | 实机：反向比较入口 | 桌面可选起点／终点；需提供便捷交换 |
+| 图像 diff | 资料：并排、滑动、洋葱皮模式；本轮无图像样本验证 | 桌面源码有二进制前后展示，不能视为这些交互模式 |
+
+图像模式与 diff 内 Ctrl+F 的官方说明见 [Fork Windows 1.38](https://git-fork.com/blog/posts/forkwin-1.38/)。大文件方面，PushRight 已有截断、只读与分页保护；新增“显示整个文件”时仍需维持性能与内存边界，不能简单绕过现有限制。
+
+### 提交与交互式 Rebase
+
+| 控件 | Fork 实机观察 | PushRight 对照 |
+| - | - | - |
+| Subject | 独立提交主题输入框 | 桌面使用提交信息文本区 |
+| Description | 独立正文输入框 | 通过同一文本区写多行信息 |
+| Recent Commit Messages | 历史提交信息下拉 | 未见同等入口 |
+| Amend | 修订上一提交 | 已有，会读取上一次提交信息 |
+| Commit | 提交按钮 | 已有，支持 Ctrl+Enter |
+| Commit Settings 下拉 | 已见；本轮状态下禁用，内部选项未验证 | 不能推断其全部功能 |
+| Rebase 分支与 On 目标 | 清楚显示源分支和目标 | Tools 页面输入基准，加载提交 |
+| Pick | 保留提交，P | 已有 |
+| Edit | 停下来修改提交，E | 已有 |
+| Reword | 修改提交信息，R | 已有，带信息输入 |
+| Squash | 并入前一提交并保留信息，S | 已有，带信息输入 |
+| Fixup | 并入前一提交并丢弃本条信息，F | 已有 |
+| Drop | 删除该提交，D | 已有 |
+| Move Up | 上移，Ctrl+↑ | 已有上移 |
+| Move Down | 下移，Ctrl+↓ | 已有下移 |
+| Update dependent branches | 更新依赖分支复选框 | 引擎明确设置 rebase.updateRefs=false；属于增强项 |
+| 逐提交预览 | Commit／Changes 等页签，作者、SHA、父提交、信息和 diff | 缺少集成于步骤编辑器的同等预览 |
+| Backup current state with temporary branch | 用户可选临时备份分支 | 引擎当前总是建立 pushright-backup 备份 |
+| Rebase 确认 | 执行编辑后的计划 | 已有；本轮两边均未执行历史改写 |
+| Cancel | 取消计划 | 已取消 Fork 对话框 |
+
+PushRight 源码还校验工作区干净、线性祖先关系、步骤覆盖及 HEAD 未变化，并禁用自动 squash 和自动 stash。当前不接受包含 merge 的该类线性编辑流程。这些保护属于现有能力，不应在补齐 UI 时丢失。
+
+### 冲突与恢复
+
+合并冲突使用独立临时仓库复现，未在业务仓库制造冲突。Git 生成的信息含 `# Conflicts:` 与 `src/core/demo.txt`；Fork 将其带入提交区域，PushRight 同状态下文本区为空。该临时合并随后已中止，临时仓库恢复干净状态。
+
+| 控件或信息 | Fork 实机观察 | PushRight 对照 |
+| - | - | - |
+| 操作横幅 | 显示 feature 合入 main 以及 1 个冲突 | 横幅为“合并进行中”，缺少同等分支和总数信息 |
+| Resolve | 跳到冲突文件处理 | 已有冲突文件选择和解决视图 |
+| Abort | 中止当前操作 | 已有继续／中止控制 |
+| 冲突文件标记 | 列表中有警告状态并显示路径 | 有 U 状态及文件路径 |
+| 双方来源卡片 | 显示分支、修改状态、来源提交 | 已有 ours／theirs 内容，来源说明可增强 |
+| 一侧选择复选框 | 选择对应来源内容 | 已有整文件采用 ours 或 theirs |
+| Merge | 打开内置合并编辑器 | 当前没有同等可编辑结果区 |
+| Merge in Cursor 下拉 | 外部合并工具及选择入口 | 当前未见外部工具配置 |
+| 内置编辑器上方两侧 | 并列来源及选择复选框 | 冲突块已有 ours、theirs、同时保留 |
+| 内置编辑器结果区 | 下方可编辑结果 | 当前主要通过按钮选择，不是自由结果编辑器 |
+| 冲突计数 0／1 | 显示已处理进度 | 单文件可显示冲突块数；整体进度表达可补 |
+| 上一个冲突 | 内置编辑器导航箭头 | 未见同等跳转 |
+| 下一个冲突 | 内置编辑器导航箭头 | 未见同等跳转 |
+| 滚动条冲突标记 | 辅助定位 | 未见同等定位条 |
+| 布局按钮 | 已见底部入口；切换细节未实测 | 未见同等模式 |
+| Resolve 确认 | 未解决完时禁用 | 有保存并标记解决 |
+| Cancel | 退出内置编辑器 | 本轮取消，未保存解决结果 |
+| 自动提交主题 | 自动填入 Merge branch 主题 | 当前未自动加载合并信息 |
+| 自动冲突清单 | 正文显示 Conflicts 及具体文件 | 需读取并呈现 Git 信息，保留用户编辑 |
+
+最终提交对象是否保留以 `#` 开头的清单，本轮未实际提交验证。开发验收应分别检查“界面可见”和“最终提交信息保留”，不能将二者混为一谈。
+
+### Fork 全局设置逐控件
+
+| 标签页与控件 | 实机观察 | PushRight 对照 |
+| - | - | - |
+| General → Source Code Folder | 源码目录列表 | 目前以最近仓库和打开仓库为主 |
+| Source Code Folder 加号 | 添加目录入口 | 无同等全局目录列表 |
+| Source Code Folder 浏览 | 选择文件夹入口 | 各打开／克隆流程有路径选择 |
+| Diff sample | 差异样式预览 | 配色设置已有预览 |
+| Show +− marks | 加减标记开关 | diff 显示已有标记，无同等全局开关 |
+| Font size | 当前字段为 13 | 未见桌面 diff 独立字号设置 |
+| Disable syntax highlighting | 语法高亮开关 | 未见对应设置 |
+| Sort commits → Topologically | 拓扑排序选项 | 无同等用户切换 |
+| Sort commits → By date | 日期排序选项，实机选中 | 无同等用户切换 |
+| Fetch remotes automatically | 自动 Fetch 开关，实机勾选 | 已有自动 Fetch 开关及间隔 |
+| Always include tags into fetch | Fetch 总是包含标签 | 未见同等设置 |
+| Tab indicator for uncommitted changes | 标签显示未提交状态 | 对应显示细节可单独比较 |
+| Update submodules automatically on checkout | 检出时自动更新子模块 | 未见同等选项 |
+| Space character in branch names | 分支名空格替换字符，下拉显示减号 | 当前有分支命名校验，机制不同 |
+| Push automatically on commit | 提交后自动推送 | 未见同等开关 |
+| Compact branch labels | 紧凑分支标签 | 未见同等开关 |
+| Commit → Length indicator 两个阈值 | 实机为 50、70 | 未见主题长度提示配置 |
+| Spellchecking | 拼写检查下拉，当前 Disable | 未见同等设置 |
+| Page guide at column | 正文参考列，当前 72 | 未见同等设置 |
+| Generate Commit Message → OpenAI Log In | 生成提交信息的登录入口；未登录 | 未见同等界面 |
+| Git → Git Instance | Git 实例选择，实机 Fork 内置 2.50.1.windows.1 | 引擎调用 Git；未见用户切换实例界面 |
+| Enable verbose Git output | 详细 Git 日志开关 | 有日志页，未见同等开关 |
+| 全局 User name | Git 身份名称 | 工作区可编辑身份 |
+| 全局 User email | Git 身份邮箱 | 工作区可编辑身份 |
+| Avatar 入口 | 身份头像相关入口；未打开外部服务 | 未见同等配置入口 |
+| Integration → Highlight issue tracker links | 提交信息问题链接开关 | 未见同等规则配置 |
+| External Merge Tools 列表 | 可配置 Cursor、VS Code 等 | 当前桌面缺少配置 |
+| Merge Tools 加号／减号 | 添加、删除工具入口 | 待补工具管理 |
+| Merge Tool name | 工具显示名称 | 无同等字段 |
+| Merge Tool path 与浏览 | 可执行文件路径 | 无同等字段 |
+| Merge Tool arguments | 参数模板 | 无同等字段 |
+| Merge Tool 帮助 | 参数说明入口 | 无同等入口 |
+| External Diff Tools 列表 | 外部差异工具配置 | 当前桌面缺少配置 |
+| Diff Tools 加号／减号 | 添加、删除工具入口 | 待补工具管理 |
+| Diff Tool name | 工具名称 | 无同等字段 |
+| Diff Tool path 与浏览 | 工具路径 | 无同等字段 |
+| Diff Tool arguments | 参数模板 | 无同等字段 |
+| Diff Tool 帮助 | 参数说明入口 | 无同等入口 |
+| Shell 下拉 | 终端类型，当前 Default | 未见同等配置 |
+| Shell path 与浏览 | 终端路径 | 未见同等配置 |
+| Shell arguments | 启动参数 | 未见同等配置 |
+| Custom Commands 列表 | 当前为空 | 未见同等命令配置 |
+| Custom Commands 加号／减号 | 新增、删除入口；未创建条目，内部编辑字段未核对 | 待独立评估 |
+| Updates → Automatic Updates | 通道下拉，当前 Develop Channel | 当前未见应用内自动更新流程 |
+| Close | 关闭设置 | 本轮未修改上述设置 |
+
+### Fork 仓库设置逐控件
+
+| 标签页与控件 | 实机观察 | PushRight 对照 |
+| - | - | - |
+| General → Use global git credentials | 使用全局身份开关 | 身份编辑已有；全局／仓库继承界面不同 |
+| User name | 仓库提交者名称 | 已有身份编辑 |
+| User email | 仓库提交者邮箱 | 已有身份编辑 |
+| Avatar 入口 | 头像相关入口 | 未见同等设置 |
+| Lean Branching → Main Branch | 主分支字段，当前仓库显示 develop | 不应硬编码 main；现有 RevisionPicker 可选择常用分支 |
+| No fast-forward on merge | 禁用合并快进的配置 | 与独立 Fast-Forward 操作不同，不可混为同一功能 |
+| Diff → Tab Width | 当前为 4 | 未见桌面仓库级 Tab 宽度设置 |
+| Commit → Use global git config file | 模板相关全局配置继承 | 未见同等界面 |
+| Commit template | 提交模板编辑区 | 未见同等模板配置 |
+| Add Signed-off-by | 添加签名声明开关 | 未见同等独立选项 |
+| Issue Tracker → Add hyperlinks to issue numbers | 问题编号链接开关 | 未见同等配置 |
+| Issue Tracker 规则列表 | 当前为空 | 未见同等配置 |
+| Issue Tracker 加号／减号 | 规则增删入口；具体编辑字段未核对 | 待独立评估 |
+| Custom Commands 列表 | 当前为空 | 未见同等配置 |
+| Custom Commands 加号／减号 | 增删入口；具体编辑字段未核对 | 待独立评估 |
+| Close | 关闭设置 | 所有设置保持原值 |
+
+### PushRight 已有功能补充
+
+以下用于排期去重。标“源码”的项目已核对实现入口，但不代表本轮对每个写操作做了完整回归。
+
+| 页面或控件 | 已有能力与证据 | 排期含义 |
+| - | - | - |
+| 欢迎页 | 打开、克隆、初始化、最近仓库 | 无需重复新增基本仓库入口 |
+| 标签栏 | 多仓库、新标签、关闭 | 后台仓库也属于自动同步范围 |
+| 语言与主题 | 实机已见切换入口 | 不列为缺失 |
+| Diff 配色 | 实机：预设、增删颜色、HEX、预览、确定、取消 | 保留并复用现有颜色模型 |
+| 自动同步开关 | 实机：作用于打开的仓库，包括后台标签 | 后续自动快进需明确每个仓库的授权范围 |
+| 自动刷新间隔 | 实机设置为 60 秒 | 与远端 Fetch 分开 |
+| 自动 Fetch 间隔 | 实机设置为 10 分钟，可开关 | 在此基础上增加分支选择，不必重做调度 |
+| 撤销 | 已有顶部入口；具体适用操作以现有逻辑为准 | 不泛化成所有 Git 操作都能撤销 |
+| Git 操作日志 | 已有入口与输出 | 可用于未来快进结果与失败说明 |
+| 新分支 | 源码：名称校验、起点、是否检出 | 当前命名规则有项目约束，优化时保留要求 |
+| 比较起点与终点 | 实机与源码：RevisionPicker 支持选择和直接输入 | 复用现有选择器 |
+| 比较共同祖先 | 实机：复选框 | 已有 |
+| Compare | 实机：提交比较入口 | 新 diff 控件需要覆盖此页面 |
+| Remotes | 源码：添加、编辑 URL、重命名、删除 | 无需从零新增远端管理 |
+| Worktrees | 实机：路径、分支、脏状态、远端差异、最近提交 | 已有完整独立列表 |
+| New Worktree | 源码：已有分支或新分支及路径 | 当前工作树不可删除的限制保留 |
+| Reflog 刷新与更多 | 实机／源码：查看记录、加载更多 | 已有恢复入口 |
+| Recover as new branch | 实机：将记录恢复成分支 | 继续复用以支持恢复 |
+| Reset | 源码：soft、mixed、hard | 不需新增基础能力 |
+| Cherry-pick | 源码：提交菜单入口 | 不需新增基础能力 |
+| Revert | 源码：提交菜单及禁止 Revert 的仓库设置 | 保留保护配置 |
+| 进行中操作 Continue／Abort | 源码与实机：继续或中止 | 增强说明和冲突清单 |
+| 身份编辑 | 源码：工作区可修改提交身份 | 不需从零新增 |
+| 按行与按块暂存 | 源码：暂存、取消暂存、丢弃 | 所有新 diff 模式必须兼容 |
+| 历史文件 Reviewed | 源码：按比较对象保存已查看状态 | 树形改造应保留 |
+| 作者聚焦与颜色 | 源码：其他作者淡化、填充和边框样式 | 已有图阅读辅助能力 |
+| 图列宽与虚拟列表 | 源码：调整列宽、虚拟渲染、泳道限制 | 多分支图不能破坏现有性能控制 |
+| Help | 源码：各 Git 操作解释、重置不再提示 | 新操作需接入统一帮助 |
+| 扩展图范围 | 源码：Auto、All、单分支，按仓库保存 | 多分支需扩展当前单值模型 |
+| 扩展原生 diff | 源码：调用 VS Code diff | 宿主工具栏能力不等于桌面端自有实现 |
+| 扩展 Blame | 源码：当前行、全文件、作者聚焦、CodeLens、状态栏 | 桌面迁移可复用引擎能力 |
+| 扩展 History | 源码：文件／行历史、前后版本、任意版本比较 | 桌面入口缺失不代表底层能力全部缺失 |
+| 扩展 Search | 源码：提交信息、作者、文件、内容、ID | 后续统一搜索应优先复用 |
+| 扩展文件管理 | 源码：历史版本打开、图定位、复制 ID、忽略、跟踪／取消跟踪 | 与桌面功能清单分别管理 |
+
+### 后续开发顺序建议
+
+以下仅为依赖顺序建议，尚未约定工期或交付日期，也未开始实现。
+
+1. **Diff 文件树与七个工具按钮。** 统一工作区、历史提交、任意两版本比较的显示；保留按行／按块暂存与已查看标记。先确定状态保存范围及大文件策略。
+
+2. **分支多选提交图。** 明确多分支历史取并集、共同祖先如何保留、隐藏引用与筛选提交的区别；同时覆盖桌面端和扩展的选择状态。
+
+3. **冲突信息补齐。** 读取 Git 当前操作信息，展示来源分支、全部冲突文件、未解决数和解决进度；自动填充不能覆盖用户后来手写的提交说明。
+
+4. **独立 Fast-Forward 及自动 Fetch 后的分支快进。** 检查祖先关系，只允许快进；分叉不回退到 merge／rebase，不强制移动分支。另一个工作树占用、当前分支有修改、远端删除或错误等状态需明确反馈。自动模式由用户选择仓库和分支。
+
+5. **交互式 Rebase 补强。** 增加逐提交预览与更清楚的计划反馈，再评估依赖分支更新；保留备份与现有校验。
+
+外部 diff／merge 工具、文件历史桌面入口、提交模板和忽略模式便捷操作，作为第二批候选；Git Flow、LFS、Bisect、统计、Treemap、账户管理等先记录差异，不自动扩入原六项开发范围。
+
+### 证据与保留项
+
+实机已覆盖主窗口、主要菜单、分支菜单、工作区与提交详情、文本 diff、Fetch／Pull／Push／Stash 弹窗、交互式 Rebase、实际冲突及内置合并编辑器、全局六个设置标签页、仓库四个设置标签页，以及 PushRight 工作区、比较、工作树、Reflog、配色和自动同步页面。写入类按钮以查看、取消为主。
+
+源码核对范围为 PushRight 的 App、RepoView、Sidebar、Tools、WorkingCopy、ConflictView、DiffView、Detail、Graph、Worktrees、RevisionPicker、Help、Dialog、自动同步，以及引擎 ops／rebase／refs／graph 和编辑器扩展入口。基线路径为 `C:\WorkFile\CodeBase\PushRight`；上方给出的提交号用于固定本次对照范围。
+
+仍待特定环境或后续开发前核对的项目：Window／Help 子菜单、完整图筛选和搜索类型、Workspaces／Appearance／Activity Manager、Git Flow／LFS／子模块界面、托管账户与 PR 页面、SSH 管理、统计与 Treemap、图像 diff、外部工具实际调用、提交设置下拉、自定义命令和问题链接规则编辑、所有禁用态的启用条件，以及七个 diff 开关的边界与持久化行为。
+
+本次没有执行真实仓库的提交、推送、历史改写或冲突处理，也没有修改 PushRight 产品代码。冲突样本仅存在于临时仓库 `C:\Users\LBQ\AppData\Local\Temp\pushright-fork-audit-ecea182c`，其测试合并已中止并恢复干净；样本文件保留，方便以后复现。本清单不是“每个按钮所有状态均已测试”的承诺。
