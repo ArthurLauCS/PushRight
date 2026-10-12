@@ -41,13 +41,18 @@ impl Graph {
     }
 
     pub fn load_scope(repo: &Repo, limit: usize, scope: &str) -> Result<Graph> {
+        Self::load_view(repo, limit, scope, false)
+    }
+
+    /// `first_parent`：只沿每个提交的第一个父提交走，合并进来的那一串提交不展开（同 `git log --first-parent`）。
+    pub fn load_view(repo: &Repo, limit: usize, scope: &str, first_parent: bool) -> Result<Graph> {
         let gix = repo.gix();
         let (tips, hidden) = refs::graph_tips(repo, scope)?;
         let nodes = if tips.is_empty() {
             Vec::new()
         } else {
-            gix.rev_walk(tips)
-                .with_hidden(hidden)
+            let walk = gix.rev_walk(tips).with_hidden(hidden);
+            if first_parent { walk.first_parent_only() } else { walk }
                 .sorting(gix::revision::walk::Sorting::ByCommitTime(Default::default()))
                 .all()
                 .map_err(err)?
@@ -66,7 +71,12 @@ impl Graph {
                 }
             }
         }
-        let key = |i: usize| (nodes[i].commit_time, Reverse(i));
+        // 只看主线时遍历不带提交时间，自己从提交里读；否则同一时刻可选的几条线会按遍历顺序而不是时间排
+        let times: Vec<i64> = nodes
+            .iter()
+            .map(|c| c.commit_time.or_else(|| Some(gix.find_commit(c.id).ok()?.time().ok()?.seconds)).unwrap_or(0))
+            .collect();
+        let key = |i: usize| (times[i], Reverse(i));
         let mut heap: BinaryHeap<_> = (0..nodes.len()).filter(|&i| indegree[i] == 0).map(key).collect();
         let mut ids = Vec::with_capacity(nodes.len());
         while let Some((_, Reverse(i))) = heap.pop() {

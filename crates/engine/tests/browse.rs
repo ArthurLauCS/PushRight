@@ -112,6 +112,13 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("refs/heads/unrelated\nrefs/heads/main\n^refs/heads/feat"), ["unrelated", "M", "C"]);
     assert_eq!(subjects("refs/heads/feat\n^refs/heads/main"), [] as [&str; 0]);
     assert_eq!(subjects("refs/heads/feat\n^refs/heads/gone"), ["B", "A"]);
+    // 只看主线：合并提交 M 留着，被合并进来的 B 不展开，M 只剩一条向下的线
+    let mainline = Graph::load_view(&repo, usize::MAX, "refs/heads/main", true).unwrap().rows(&repo, 0, 100).unwrap();
+    assert_eq!(mainline.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["M", "C", "A"]);
+    assert_eq!(mainline[0].out.len(), 1);
+    // 多个起点时仍按时间排：较新的 unrelated 在 M 前面，feat 自己的 B 夹在 C 和 A 之间
+    let all = Graph::load_view(&repo, usize::MAX, "all", true).unwrap().rows(&repo, 0, 100).unwrap();
+    assert_eq!(all.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["unrelated", "M", "C", "B", "A"]);
     assert!(Graph::load_scope(&repo, 10, "--all").is_err());
     assert_eq!(refs::list(&repo).unwrap().head.as_deref(), Some("refs/heads/feat"));
     git(&dir, 0, &["checkout", "-q", "--detach", "feat"]);

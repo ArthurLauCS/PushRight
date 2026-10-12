@@ -78,6 +78,12 @@ export const messages = {
     failedWarning: '检查命令以失败结束，输出在命令日志里。可以取消后先修好，也可以照样提交。',
     commitAnyway: '仍然提交（git commit）',
   },
+  graphView: {
+    tags: '标签',
+    tagsHint: '在提交图里显示或隐藏标签',
+    firstParent: '只看主线',
+    firstParentHint: '折叠合并：每个合并提交只占一行，不展开被合并进来的那一串提交（git log --first-parent）',
+  },
   binaryOverlap: (files: string) => `远程也改了你正在改的二进制文件：${files}。二进制文件无法合并，拉取后只能整个文件选一边，另一边的修改会作废；请先和对方确认以谁的为准。`,
   pullAutostash: '先收起未提交的改动，拉取后放回（git pull --autostash）',
   pushTags: '同时推送所有标签（git push --tags）',

@@ -183,7 +183,7 @@ export const initialRepos = () => host<string[]>('initial_repos')
 export const openRepo = (path: string) => invoke<[number, string, number]>('open_repo', { path })
 export const closeRepo = (tab: number) => invoke<void>('close_repo', { tab })
 /** `scope` 不传是全部引用；否则是引用全名，多个以换行分隔 */
-export const loadGraph = (tab: number, full: boolean, scope?: string) => invoke<number>('load_graph', { tab, full, scope })
+export const loadGraph = (tab: number, full: boolean, scope?: string, firstParent = false) => invoke<number>('load_graph', { tab, full, scope, firstParent })
 export const rows = (tab: number, start: number, count: number) => invoke<Row[]>('rows', { tab, start, count })
 export const rowOf = (tab: number, id: string) => invoke<number | null>('row_of', { tab, id })
 export const refs = (tab: number) => invoke<Refs>('refs', { tab })

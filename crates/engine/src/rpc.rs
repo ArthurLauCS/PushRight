@@ -67,7 +67,8 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "rebase_run" => out(rebase::run(repo, &arg::<String>(a, "base")?, &arg::<String>(a, "head")?, &arg::<Vec<rebase::Step>>(a, "steps")?, arg::<Option<bool>>(a, "updateRefs")?.unwrap_or(false))?),
         "load_graph" => {
             let scope: Option<String> = arg(a, "scope")?;
-            let graph = Arc::new(Graph::load_scope(repo, if arg(a, "full")? { usize::MAX } else { FIRST_PAGE }, scope.as_deref().unwrap_or("all"))?);
+            let first_parent = arg::<Option<bool>>(a, "firstParent")?.unwrap_or(false);
+            let graph = Arc::new(Graph::load_view(repo, if arg(a, "full")? { usize::MAX } else { FIRST_PAGE }, scope.as_deref().unwrap_or("all"), first_parent)?);
             let len = graph.len();
             // 加载期间页签可能已经关闭
             if let Some(s) = tabs.sessions.write().unwrap().get_mut(&tab) {

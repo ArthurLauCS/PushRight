@@ -79,6 +79,12 @@ export const messages = {
     failedWarning: 'The check command ended with a failure; its output is in the command log. Cancel to fix it first, or commit anyway.',
     commitAnyway: 'Commit anyway',
   },
+  graphView: {
+    tags: 'Tags',
+    tagsHint: 'Show or hide tags in the commit graph',
+    firstParent: 'Main line only',
+    firstParentHint: 'Collapse merges: each merge commit takes one row and the commits it brought in are not expanded',
+  },
   binaryOverlap: (files: string) => `The remote also changed binary files you are changing: ${files}. Binary files cannot be merged; after pulling you can only keep one whole version and the other side's work is lost. Agree on whose version to keep first.`,
   pullAutostash: 'Stash local changes first and reapply them after pulling',
   pushTags: 'Push all tags too',

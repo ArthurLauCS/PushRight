@@ -1,11 +1,12 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import * as api from './api'
   import { authorColor } from './author'
   import Icon from './Icon.svelte'
   import { errorText, fmtTime, t } from './i18n.svelte'
 
   /** 提交图上方的搜索条：按说明、作者、文件、改动内容或提交号找提交，也用来显示单个文件的历史。 */
-  let { tab, onjump }: { tab: number; onjump: (id: string) => void } = $props()
+  let { tab, onjump, children }: { tab: number; onjump: (id: string) => void; /** 搜索栏右端的附加按钮 */ children?: Snippet } = $props()
 
   const KINDS: api.SearchKind[] = ['message', 'author', 'file', 'content', 'id']
   const PAGE = 200
@@ -69,6 +70,7 @@
     </select>
     <input class="field" type="search" placeholder={t.search.placeholder} aria-label={t.search.placeholder} bind:value={query} />
     {#if results || error}<button type="button" class="btn small quiet icon" title={t.search.close} aria-label={t.search.close} onclick={close}><Icon name="close" size={14} /></button>{/if}
+    {@render children?.()}
   </form>
   {#if error}<p class="note">{error}</p>{/if}
   {#if results}

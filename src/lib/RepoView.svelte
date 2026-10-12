@@ -151,9 +151,17 @@
 
   const badges = $derived.by(() => {
     const map = new Map<string, api.Ref[]>()
-    for (const r of refs.refs) map.set(r.id, [...(map.get(r.id) ?? []), r])
+    for (const r of refs.refs) if (!graphView.hideTags || !r.name.startsWith('refs/tags/')) map.set(r.id, [...(map.get(r.id) ?? []), r])
     return map
   })
+  /** 提交图的显示开关，所有仓库共用：隐藏标签只影响标记；只看主线要重新加载图 */
+  const graphView = $state<{ hideTags: boolean; firstParent: boolean }>({ hideTags: false, firstParent: false, ...untrack(() => { try { return JSON.parse(localStorage.getItem('graphView') ?? '{}') } catch { return {} } }) })
+  async function setGraphView(key: 'hideTags' | 'firstParent') {
+    if (loadingAll) return
+    graphView[key] = !graphView[key]
+    localStorage.setItem('graphView', JSON.stringify(graphView))
+    if (key === 'firstParent') await setScope(scope)
+  }
   /** 当前分支的短名；游离 HEAD 时为 null */
   const head = $derived(refs.head?.startsWith('refs/heads/') ? refs.head.slice(11) : null)
   const short = (name: string) => name.replace(/^refs\/(heads|tags|remotes)\//, '')
@@ -185,7 +193,7 @@
 
   async function loadAll() {
     loadingAll = true
-    const n = await guard(api.loadGraph(tab, true, scope.join('\n') || undefined))
+    const n = await guard(api.loadGraph(tab, true, scope.join('\n') || undefined, graphView.firstParent))
     loadingAll = false
     if (n === undefined) return
     count = n
@@ -1035,7 +1043,10 @@
     <Splitter key="sidebar" min={180} max={520} />
     <div class="content">
       <div class="pane" class:hidden={view !== 'history'}>
-        <CommitSearch bind:this={search} {tab} onjump={reveal} />
+        <CommitSearch bind:this={search} {tab} onjump={reveal}>
+          <button type="button" class="btn small quiet" class:on={!graphView.hideTags} aria-pressed={!graphView.hideTags} title={t.graphView.tagsHint} onclick={() => setGraphView('hideTags')}>{t.graphView.tags}</button>
+          <button type="button" class="btn small quiet" class:on={graphView.firstParent} aria-pressed={graphView.firstParent} disabled={loadingAll} title={t.graphView.firstParentHint} onclick={() => setGraphView('firstParent')}>{t.graphView.firstParent}</button>
+        </CommitSearch>
         {#if scope.length}
           <div class="scope">
             <span>{t.graphFilter.showing}</span>
