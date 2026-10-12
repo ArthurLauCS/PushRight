@@ -1,7 +1,11 @@
 <script lang="ts">
   import * as api from './api'
   import ConflictView from './ConflictView.svelte'
+  import { diffOptions } from './diff-prefs.svelte'
   import DiffView from './DiffView.svelte'
+  import FileListBar from './FileListBar.svelte'
+  import FileTree from './FileTree.svelte'
+  import { indent } from './file-tree'
   import Icon from './Icon.svelte'
   import Label from './Label.svelte'
   import { layout } from './layout.svelte'
@@ -45,6 +49,13 @@
   let error = $state('')
   const disabled = $derived(busy || identityBusy)
 
+  let filter = $state('')
+  const trees = $state<{ unstaged?: { setAll(open: boolean): void }; staged?: { setAll(open: boolean): void } }>({})
+  function shown(list: api.Entry[]) {
+    const query = filter.trim().toLowerCase()
+    return query ? list.filter((e) => e.path.toLowerCase().includes(query)) : list
+  }
+
   const unstaged = $derived(entries.filter((e) => e.unstaged))
   const staged = $derived(entries.filter((e) => e.staged))
   const canCommit = $derived(!busy && !identityBusy && message.trim() !== '' && (staged.length > 0 || amend))
@@ -64,7 +75,7 @@
     const fail = (e: unknown) => stale || (error = String(e))
     conflicted = entry.conflicted
     if (entry.conflicted) api.conflictRead(tab, s.path).then((c) => stale || (conflict = c), fail)
-    else api.diffWorktree(tab, s.path, s.staged, !s.staged && entry.unstaged === '?').then((d) => stale || (diff = d), fail)
+    else api.diffWorktree(tab, s.path, s.staged, !s.staged && entry.unstaged === '?', diffOptions()).then((d) => stale || (diff = d), fail)
     return () => (stale = true)
   })
 
@@ -104,7 +115,7 @@
 {#snippet list(title: string, hint: string, items: api.Entry[], isStaged: boolean)}
   <div class="group">
     <div class="title">
-      <span>{title}<span class="count">{items.length}</span><span class="hint">{hint}</span></span>
+      <span>{title}<span class="count">{filter.trim() ? t.fileList.shown(shown(items).length, items.length) : items.length}</span><span class="hint">{hint}</span></span>
       {#if !isStaged}
         <button class="btn small quiet danger" disabled={disabled || !items.length} title={t.discardAll} onclick={() => discard([])}><Label text={t.discardAll} /></button>
       {/if}
@@ -113,33 +124,53 @@
       </button>
     </div>
     <div class="items">
-      {#each items as e (e.path)}
-        {@const s = (isStaged ? e.staged : e.unstaged) ?? ''}
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div
-          class="item"
-          class:selected={sel?.path === e.path && sel.staged === isStaged}
-          title={e.path}
-          onclick={() => (sel = { path: e.path, staged: isStaged })}
-          ondblclick={() => (isStaged ? unstage([e]) : stage([e]))}
-        >
-          <span class="status s{s === '?' ? 'A' : s}" title={t.status[s] ?? s}>{s}</span>
-          <span class="path">{base(e.path) || e.path}<span class="dir">{dir(e.path.replace(/\/$/, ''))}</span></span>
-          {#if !isStaged && !e.conflicted}
-            <button class="btn small quiet icon danger" disabled={disabled} title={t.discardFile} onclick={(ev) => (ev.stopPropagation(), discard([e.path]))}>
+      <FileTree items={shown(items)} bind:this={trees[isStaged ? 'staged' : 'unstaged']}>
+        {#snippet row(e, depth)}
+          {@const s = (isStaged ? e.staged : e.unstaged) ?? ''}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            class="item"
+            class:selected={sel?.path === e.path && sel.staged === isStaged}
+            style:padding-left={indent(depth)}
+            title={e.path}
+            onclick={() => (sel = { path: e.path, staged: isStaged })}
+            ondblclick={() => (isStaged ? unstage([e]) : stage([e]))}
+          >
+            <span class="status s{s === '?' ? 'A' : s}" title={t.status[s] ?? s}>{s}</span>
+            <span class="path">{base(e.path) || e.path}{#if depth < 0}<span class="dir">{dir(e.path.replace(/\/$/, ''))}</span>{/if}</span>
+            {#if !isStaged && !e.conflicted}
+              <button class="btn small quiet icon danger" disabled={disabled} title={t.discardFile} onclick={(ev) => (ev.stopPropagation(), discard([e.path]))}>
+                <Icon name="undo" size={14} />
+              </button>
+            {/if}
+            <button
+              class="btn small quiet icon"
+              disabled={disabled}
+              title={isStaged ? t.unstageFile : t.stageFile}
+              onclick={(ev) => (ev.stopPropagation(), isStaged ? unstage([e]) : stage([e]))}
+            >
+              <Icon name={isStaged ? 'minus' : 'plus'} size={14} />
+            </button>
+          </div>
+        {/snippet}
+        {#snippet folder(list)}
+          {#if !isStaged}
+            <!-- 空列表在 discard 里表示「全部」，文件夹里没有可丢弃的文件时必须禁用 -->
+            {@const paths = list.filter((e) => !e.conflicted).map((e) => e.path)}
+            <button class="btn small quiet icon danger" disabled={disabled || !paths.length} title={t.fileList.discardFolder} onclick={(ev) => (ev.stopPropagation(), discard(paths))}>
               <Icon name="undo" size={14} />
             </button>
           {/if}
           <button
             class="btn small quiet icon"
             disabled={disabled}
-            title={isStaged ? t.unstageFile : t.stageFile}
-            onclick={(ev) => (ev.stopPropagation(), isStaged ? unstage([e]) : stage([e]))}
+            title={isStaged ? t.fileList.unstageFolder : t.fileList.stageFolder}
+            onclick={(ev) => (ev.stopPropagation(), isStaged ? unstage(list) : stage(list))}
           >
             <Icon name={isStaged ? 'minus' : 'plus'} size={14} />
           </button>
-        </div>
-      {/each}
+        {/snippet}
+      </FileTree>
     </div>
   </div>
 {/snippet}
@@ -147,6 +178,7 @@
 <div class="working">
   <div class="left" style:width="min({layout.changes}px, 50%)">
     {#if !entries.length}<p class="clean">{t.clean}</p>{/if}
+    <FileListBar bind:filter onfold={(open) => { trees.unstaged?.setAll(open); trees.staged?.setAll(open) }} />
     {@render list(t.unstaged, t.unstagedHint, unstaged, false)}
     {@render list(t.staged, t.stagedHint, staged, true)}
     <div class="commit">
@@ -184,9 +216,9 @@
   {:else}
     <DiffView
       {diff}
-      fetchPage={sel ? (skip) => api.diffPage(tab, sel!.staged ? 'staged' : entries.find((e) => e.path === sel!.path)?.unstaged === '?' ? 'untracked' : 'unstaged', '', '', sel!.path, skip) : undefined}
+      fetchPage={sel ? (skip) => api.diffPage(tab, sel!.staged ? 'staged' : entries.find((e) => e.path === sel!.path)?.unstaged === '?' ? 'untracked' : 'unstaged', '', '', sel!.path, skip, null, diffOptions()) : undefined}
       mode={sel?.staged ? 'staged' : 'unstaged'}
-      onapply={(hunk, header, lines) => sel && run(() => api.applyLines(tab, sel!.path, sel!.staged, hunk, header, lines))}
+      onapply={(hunk, header, lines) => sel && run(() => api.applyLines(tab, sel!.path, sel!.staged, hunk, header, lines, diffOptions().context))}
       ondiscard={(hunk, header, lines) => sel && discardLines(sel.path, hunk, header, lines)}
     />
   {/if}
@@ -295,6 +327,14 @@
   .item:hover .btn:enabled,
   .item.selected .btn:enabled,
   .item .btn:focus-visible {
+    opacity: 1;
+  }
+  /* 文件夹行在 FileTree 里，按钮是这里传进去的 */
+  :global(.folder) .btn {
+    opacity: 0;
+  }
+  :global(.folder:hover) .btn:enabled,
+  :global(.folder) .btn:focus-visible {
     opacity: 1;
   }
   .status {

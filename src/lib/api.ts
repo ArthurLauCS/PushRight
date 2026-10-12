@@ -136,6 +136,11 @@ export interface Hunk {
   header: string
   lines: Line[]
 }
+/** diff 的显示参数；不传就是 git 的默认（3 行上下文、不忽略空白） */
+export interface DiffOptions {
+  context?: number
+  ignore_ws?: boolean
+}
 export interface Diff {
   binary: boolean
   too_large: boolean
@@ -153,8 +158,8 @@ export interface RebaseStep { id: string; subject: string; action: string; messa
 export interface RebasePlan { head: string; base: string; steps: RebaseStep[] }
 export const createRepo = (path: string, url: string | null) => invoke<string>('create_repo', { path, url })
 export const compare = (tab: number, left: string, right: string, commonBase: boolean) => invoke<Comparison>('compare', { tab, left, right, commonBase })
-export const diffBetween = (tab: number, left: string, right: string, path: string, oldPath: string | null) => invoke<Diff>('diff_between', { tab, left, right, path, oldPath })
-export const diffPage = (tab: number, mode: string, left: string, right: string, path: string, skip: number, oldPath: string | null = null) => invoke<Diff>('diff_page', { tab, mode, left, right, path, skip, oldPath })
+export const diffBetween = (tab: number, left: string, right: string, path: string, oldPath: string | null, options?: DiffOptions) => invoke<Diff>('diff_between', { tab, left, right, path, oldPath, options })
+export const diffPage = (tab: number, mode: string, left: string, right: string, path: string, skip: number, oldPath: string | null = null, options?: DiffOptions) => invoke<Diff>('diff_page', { tab, mode, left, right, path, skip, oldPath, options })
 export const remoteDetails = (tab: number) => invoke<Remote[]>('remote_details', { tab })
 export const reflog = (tab: number, skip = 0) => invoke<Reflog[]>('reflog', { tab, skip, limit: 201 })
 export const rebasePlan = (tab: number, base: string) => invoke<RebasePlan>('rebase_plan', { tab, base })
@@ -180,17 +185,18 @@ export const lastMessage = (tab: number) => invoke<string>('last_message', { tab
 export const commitIdentity = (tab: number) => invoke<Identity>('commit_identity', { tab })
 export const setCommitIdentity = (tab: number, name: string, email: string) =>
   invoke<Identity>('set_commit_identity', { tab, name, email })
-export const diffWorktree = (tab: number, path: string, staged: boolean, untracked: boolean) =>
-  invoke<Diff>('diff_worktree', { tab, path, staged, untracked })
-export const diffCommit = (tab: number, id: string, path: string) => invoke<Diff>('diff_commit', { tab, id, path })
-export const stashDiff = (tab: number, id: string, path: string) => invoke<Diff>('stash_diff', { tab, id, path })
-export const applyLines = (tab: number, path: string, staged: boolean, hunk: number, header: string, lines: number[]) =>
-  invoke<void>('apply_lines', { tab, path, staged, hunk, header, lines })
+export const diffWorktree = (tab: number, path: string, staged: boolean, untracked: boolean, options?: DiffOptions) =>
+  invoke<Diff>('diff_worktree', { tab, path, staged, untracked, options })
+export const diffCommit = (tab: number, id: string, path: string, options?: DiffOptions) => invoke<Diff>('diff_commit', { tab, id, path, options })
+export const stashDiff = (tab: number, id: string, path: string, options?: DiffOptions) => invoke<Diff>('stash_diff', { tab, id, path, options })
+/** `context` 要和界面显示这个区块时用的上下文行数一致 */
+export const applyLines = (tab: number, path: string, staged: boolean, hunk: number, header: string, lines: number[], context?: number) =>
+  invoke<void>('apply_lines', { tab, path, staged, hunk, header, lines, context })
 export const op = (tab: number, op: Op) => invoke<Log>('op', { tab, op })
 export const remotes = (tab: number) => invoke<string[]>('remotes', { tab })
 export const tracking = (tab: number) => invoke<Track[]>('tracking', { tab })
-export const discardLines = (tab: number, path: string, hunk: number, header: string, lines: number[]) =>
-  invoke<void>('discard_lines', { tab, path, hunk, header, lines })
+export const discardLines = (tab: number, path: string, hunk: number, header: string, lines: number[], context?: number) =>
+  invoke<void>('discard_lines', { tab, path, hunk, header, lines, context })
 export const conflictRead = (tab: number, path: string) => invoke<Conflict>('conflict_read', { tab, path })
 export const conflictResolve = (tab: number, path: string, choices: Side[]) => invoke<void>('conflict_resolve', { tab, path, choices })
 export const conflictTake = (tab: number, path: string, theirs: boolean) => invoke<void>('conflict_take', { tab, path, theirs })

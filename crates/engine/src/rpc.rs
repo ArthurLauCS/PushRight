@@ -30,6 +30,11 @@ fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T> {
     serde_json::from_value(args[key].clone()).map_err(|e| format!("{key}: {e}"))
 }
 
+/// diff 命令可选的 `options`；不传就是 git 的默认显示。
+fn options(args: &Value) -> Result<diff::Options> {
+    Ok(arg::<Option<diff::Options>>(args, "options")?.unwrap_or_default())
+}
+
 fn out(value: impl Serialize) -> Result<Value> {
     serde_json::to_value(value).map_err(|e| e.to_string())
 }
@@ -54,8 +59,8 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
     let repo = &*s.repo;
     match cmd {
         "compare" => out(tools::compare(repo, &arg::<String>(a, "left")?, &arg::<String>(a, "right")?, arg(a, "commonBase")?)?),
-        "diff_between" => out(diff::between(repo, &arg::<String>(a, "left")?, &arg::<String>(a, "right")?, &arg::<String>(a, "path")?, arg::<Option<String>>(a, "oldPath")?.as_deref())?),
-        "diff_page" => out(diff::page(repo, &arg::<String>(a, "mode")?, &arg::<String>(a, "left")?, &arg::<String>(a, "right")?, &arg::<String>(a, "path")?, arg::<Option<String>>(a, "oldPath")?.as_deref(), arg(a, "skip")?)?),
+        "diff_between" => out(diff::between_with(repo, &arg::<String>(a, "left")?, &arg::<String>(a, "right")?, &arg::<String>(a, "path")?, arg::<Option<String>>(a, "oldPath")?.as_deref(), options(a)?)?),
+        "diff_page" => out(diff::page_with(repo, &arg::<String>(a, "mode")?, &arg::<String>(a, "left")?, &arg::<String>(a, "right")?, &arg::<String>(a, "path")?, arg::<Option<String>>(a, "oldPath")?.as_deref(), arg(a, "skip")?, options(a)?)?),
         "remote_details" => out(tools::remotes(repo)?),
         "reflog" => out(tools::reflog(repo, arg(a, "skip")?, arg(a, "limit")?)?),
         "rebase_plan" => out(rebase::plan(repo, &arg::<String>(a, "base")?)?),
@@ -86,23 +91,25 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "last_message" => out(status::last_message(repo)?),
         "commit_identity" => out(identity::read(repo)?),
         "set_commit_identity" => out(identity::set(repo, &arg::<String>(a, "name")?, &arg::<String>(a, "email")?)?),
-        "diff_worktree" => out(diff::worktree(repo, &arg::<String>(a, "path")?, arg(a, "staged")?, arg(a, "untracked")?)?),
-        "diff_commit" => out(diff::commit(repo, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?)?),
-        "stash_diff" => out(diff::stash(repo, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?)?),
-        "apply_lines" => out(diff::apply_lines(
+        "diff_worktree" => out(diff::worktree_with(repo, &arg::<String>(a, "path")?, arg(a, "staged")?, arg(a, "untracked")?, options(a)?)?),
+        "diff_commit" => out(diff::commit_with(repo, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?, options(a)?)?),
+        "stash_diff" => out(diff::stash_with(repo, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?, options(a)?)?),
+        "apply_lines" => out(diff::apply_lines_with(
             repo,
             &arg::<String>(a, "path")?,
             arg(a, "staged")?,
             arg(a, "hunk")?,
             &arg::<String>(a, "header")?,
             &arg::<Vec<usize>>(a, "lines")?,
+            arg(a, "context")?,
         )?),
-        "discard_lines" => out(diff::discard_lines(
+        "discard_lines" => out(diff::discard_lines_with(
             repo,
             &arg::<String>(a, "path")?,
             arg(a, "hunk")?,
             &arg::<String>(a, "header")?,
             &arg::<Vec<usize>>(a, "lines")?,
+            arg(a, "context")?,
         )?),
         "op" => out(ops::run(repo, arg(a, "op")?)?),
         "conflict_read" => out(conflict::read(repo, &arg::<String>(a, "path")?)?),

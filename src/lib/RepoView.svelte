@@ -5,6 +5,7 @@
   import { BRANCH_NAME } from './branch-name'
   import ContextMenu, { type Item } from './ContextMenu.svelte'
   import Detail from './Detail.svelte'
+  import { diffOptions } from './diff-prefs.svelte'
   import Dialog from './Dialog.svelte'
   import type { ExplainKey } from './explain'
   import { explain } from './i18n.svelte'
@@ -290,7 +291,7 @@
     if (busy || workingBusy) return
     if (!(await ask({ title: t.discardLinesTitle, explain: explain.discard, danger: true, confirm: t.discardLinesConfirm }))) return
     busy = true
-    await guard(api.discardLines(tab, file, hunk, header, lines))
+    await guard(api.discardLines(tab, file, hunk, header, lines, diffOptions().context))
     await refresh()
     busy = false
   }
@@ -777,8 +778,8 @@
         {/if}
         <Splitter key="detail" dir="y" min={120} max={640} invert />
         <Detail {detail} onjump={jump} reviewKey={`review:${JSON.stringify([path, detailMode, detail?.id])}`}
-          fetchDiff={(id, path) => detailMode === 'stash' ? api.stashDiff(tab, id, path) : api.diffCommit(tab, id, path)}
-          fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip)} />
+          fetchDiff={(id, path) => detailMode === 'stash' ? api.stashDiff(tab, id, path, diffOptions()) : api.diffCommit(tab, id, path, diffOptions())}
+          fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip, null, diffOptions())} />
       </div>
       <div class="pane" class:hidden={view !== 'changes'}>
         <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} reload={refresh} oncommitted={committed} {discard} {discardLines} />

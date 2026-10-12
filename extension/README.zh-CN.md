@@ -24,6 +24,20 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 
 在命令面板或源代码管理菜单运行 **PushRight: 差异配色…**，或点击完整提交图顶部的“差异配色”。提供蓝／橙、紫／金、青／玫红三组预设，也可分别输入新增、删除的 HEX 色值；完整提交图弹窗另有颜色选择器和实时预览。配色同时用于 PushRight 和 VS Code／Cursor 原生 diff（包括 Review Branch），会写入用户级 `workbench.colorCustomizations`，工作区设置可能优先覆盖。“恢复原配色”恢复此前值，同时保留无关设置和之后的手动改色。
 
+## Diff 工具与文件树
+
+完整提交图里的 diff 上方有七个工具：忽略空白差异、显示隐藏字符、自动换行、减少／增加上下文行、显示整个文件、并排对比；变更文件可按文件夹显示、筛选、整夹暂存。原生 diff 编辑器不重复这些按钮，用 VS Code／Cursor 自带的设置：
+
+| 工具 | 原生 diff 的对应设置 |
+| - | - |
+| 忽略空白差异 | `diffEditor.ignoreTrimWhitespace`（编辑器右上角的空白图标） |
+| 显示隐藏字符 | `editor.renderWhitespace` |
+| 自动换行 | `diffEditor.wordWrap` |
+| 上下文行、整个文件 | `diffEditor.hideUnchangedRegions.enabled` 与 `contextLineCount` |
+| 并排对比 | `diffEditor.renderSideBySide` |
+
+源代码管理面板的树／列表切换用面板自带的“以树查看”。侧栏提交图展开提交后，文件按文件夹缩进显示。
+
 ## 使用条件
 
 - Windows 10 / 11 x64、VS Code 1.90 及以上、PATH 中可运行 Git。

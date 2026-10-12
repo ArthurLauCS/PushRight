@@ -2,6 +2,7 @@
   import { untrack } from 'svelte'
   import * as api from './api'
   import Detail from './Detail.svelte'
+  import { diffOptions } from './diff-prefs.svelte'
   import Icon from './Icon.svelte'
   import Label from './Label.svelte'
   import RevisionPicker from './RevisionPicker.svelte'
@@ -98,8 +99,8 @@
       <div class="comparison">
         <Detail detail={compareDetail} comparison onjump={() => {}}
           reviewKey={`review:${JSON.stringify([path, comparison.left, comparison.right])}`}
-          fetchDiff={(_, file) => api.diffBetween(tab, comparison!.left, comparison!.right, file, comparison!.files.find((f) => f.path === file)?.old_path ?? null)}
-          fetchPage={(_, file, skip) => api.diffPage(tab, 'compare', comparison!.left, comparison!.right, file, skip, comparison!.files.find((f) => f.path === file)?.old_path ?? null)} />
+          fetchDiff={(_, file) => api.diffBetween(tab, comparison!.left, comparison!.right, file, comparison!.files.find((f) => f.path === file)?.old_path ?? null, diffOptions())}
+          fetchPage={(_, file, skip) => api.diffPage(tab, 'compare', comparison!.left, comparison!.right, file, skip, comparison!.files.find((f) => f.path === file)?.old_path ?? null, diffOptions())} />
       </div>
     {/if}
   {:else if section === 'remotes'}

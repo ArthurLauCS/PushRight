@@ -24,6 +24,20 @@ The full graph interface is shared with the desktop app, shown here in 1.1.10 wi
 
 Run **PushRight: Diff Colors…** from the command palette or Source Control menu, or open **Diff Colors** in the full graph toolbar. Choose Blue / Orange, Purple / Gold, Cyan / Rose, or custom added/deleted HEX colors; the full graph dialog also provides color pickers and a live preview. Applies to PushRight and native VS Code / Cursor diff editors, including Review Branch. This updates user-level `workbench.colorCustomizations`; workspace overrides may take precedence. **Restore original colors** restores the previous values while preserving unrelated settings and later manual edits.
 
+## Diff tools and file tree
+
+Diffs in the full graph have seven tools above them: ignore whitespace, show hidden symbols, word wrap, fewer / more context lines, show entire file, and side by side. Changed files can be shown as a folder tree, filtered, and staged a folder at a time. Native diff editors do not repeat these buttons; use the settings VS Code / Cursor already provide:
+
+| Tool | Native diff setting |
+| - | - |
+| Ignore whitespace | `diffEditor.ignoreTrimWhitespace` (the whitespace icon at the top right of the editor) |
+| Show hidden symbols | `editor.renderWhitespace` |
+| Word wrap | `diffEditor.wordWrap` |
+| Context lines, entire file | `diffEditor.hideUnchangedRegions.enabled` and `contextLineCount` |
+| Side by side | `diffEditor.renderSideBySide` |
+
+The Source Control panel switches between tree and list with its own **View as Tree**. Files under an expanded commit in the sidebar graph are indented by folder.
+
 ## Requirements
 
 - Windows 10 / 11 x64, VS Code 1.90 or newer, and Git on PATH.

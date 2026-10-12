@@ -142,3 +142,56 @@ fn oversized_diffs_are_bounded_and_cannot_apply_stale_lines() {
     assert!(diff::commit(&repo, &"a".repeat(40), "large.txt").is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn display_options_change_the_view_without_breaking_partial_staging() {
+    let dir = init("diff-options");
+    std::fs::write(dir.join("f.txt"), lines(1, 20)).unwrap();
+    std::fs::write(dir.join("gone.txt"), lines(1, 3)).unwrap();
+    git(&dir, 0, &["add", "."]);
+    git(&dir, 1, &["commit", "-q", "-m", "base"]);
+    let repo = Repo::open(&dir).unwrap();
+    let with = |context, ignore_ws| diff::Options { context, ignore_ws };
+    let view = |opts| diff::worktree_with(&repo, "f.txt", false, false, opts).unwrap();
+
+    // 文件头、中间、文件尾各改一处，另有一行只动了缩进
+    let edited = lines(1, 20).replace("l1\n", "L1\n").replace("l10\n", "L10\nnew\n").replace("l15\n", "  l15\n").replace("l20\n", "L20\n");
+    std::fs::write(dir.join("f.txt"), &edited).unwrap();
+
+    assert_eq!(view(with(None, false)).hunks.len(), 2);
+    let changed = |d: &diff::Diff| d.hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind != ' ').map(|l| l.text.clone()).collect::<Vec<_>>();
+    assert!(changed(&view(with(None, false))).contains(&"  l15".to_owned()));
+    assert!(!changed(&view(with(None, true))).iter().any(|t| t.contains("l15")));
+
+    // 上下文 1 行：四处改动各成一个区块，文件头尾的行号照常
+    let narrow = view(with(Some(1), false));
+    assert_eq!(narrow.hunks.len(), 4);
+    assert_eq!((narrow.hunks[0].lines[0].kind, narrow.hunks[0].lines[0].old_no), ('-', Some(1)));
+    assert_eq!(narrow.hunks[3].lines.last().unwrap().new_no, Some(21));
+    // 按界面显示的上下文暂存「new」一行；不带上下文参数时区块标题对不上
+    let pos = narrow.hunks[1].lines.iter().position(|l| l.text == "new").unwrap();
+    assert!(diff::apply_lines(&repo, "f.txt", false, 1, &narrow.hunks[1].header, &[pos]).is_err());
+    diff::apply_lines_with(&repo, "f.txt", false, 1, &narrow.hunks[1].header, &[pos], Some(1)).unwrap();
+    assert_eq!(index_content(&dir, "f.txt"), lines(1, 20).replace("l10\n", "l10\nnew\n"));
+
+    // 整个文件：只有一个区块，修改标记还在，照样能按行暂存
+    let whole = view(with(Some(1_000_000), false));
+    assert_eq!(whole.hunks.len(), 1);
+    assert_eq!(whole.hunks[0].lines.iter().filter(|l| l.kind == ' ').count(), 17);
+    let tail: Vec<_> = whole.hunks[0].lines.iter().enumerate().filter(|(_, l)| l.text.ends_with("20")).map(|(i, _)| i).collect();
+    diff::apply_lines_with(&repo, "f.txt", false, 0, &whole.hunks[0].header, &tail, Some(1_000_000)).unwrap();
+    assert_eq!(index_content(&dir, "f.txt"), lines(1, 20).replace("l10\n", "l10\nnew\n").replace("l20\n", "L20\n"));
+
+    // 没有上下文行的部分补丁不可靠，直接拒绝
+    let bare = view(with(Some(0), false));
+    assert_eq!(diff::apply_lines_with(&repo, "f.txt", false, 0, &bare.hunks[0].header, &[0], Some(0)).unwrap_err(), "PR_DIFF_FILTERED");
+
+    // 新增和删除的文件
+    std::fs::remove_file(dir.join("gone.txt")).unwrap();
+    let gone = diff::worktree_with(&repo, "gone.txt", false, false, with(Some(1_000_000), false)).unwrap();
+    assert_eq!(gone.hunks[0].lines.iter().map(|l| (l.kind, l.old_no)).collect::<Vec<_>>(), [('-', Some(1)), ('-', Some(2)), ('-', Some(3))]);
+    std::fs::write(dir.join("added.txt"), lines(1, 2)).unwrap();
+    git(&dir, 2, &["add", "added.txt"]);
+    let added = diff::worktree_with(&repo, "added.txt", true, false, with(Some(0), true)).unwrap();
+    assert_eq!(added.hunks[0].lines.iter().map(|l| (l.kind, l.new_no)).collect::<Vec<_>>(), [('+', Some(1)), ('+', Some(2))]);
+}

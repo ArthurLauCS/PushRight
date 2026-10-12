@@ -1,11 +1,29 @@
 use crate::{decode, err, Repo, Result};
 use gix::ObjectId;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::{BufReader, Read};
 use base64::Engine;
 
 // Editable patches stay bounded; larger patches use the read-only streaming pages below.
 const MAX_PATCH: usize = 4 << 20;
+
+/// 界面上的 diff 工具：上下文行数和忽略空白。缺省即 git 的默认（3 行、不忽略）。
+#[derive(Deserialize, Default, Clone, Copy)]
+pub struct Options {
+    pub context: Option<u32>,
+    #[serde(default)]
+    pub ignore_ws: bool,
+}
+
+impl Options {
+    fn flags(&self) -> Vec<String> {
+        let mut flags: Vec<String> = self.context.iter().map(|n| format!("-U{n}")).collect();
+        if self.ignore_ws {
+            flags.push("-w".into());
+        }
+        flags
+    }
+}
 
 #[derive(Serialize, Default)]
 pub struct Diff {
@@ -100,8 +118,10 @@ fn parse(patch: &[u8]) -> Diff {
     Diff { binary: raw.binary, hunks, ..Default::default() }
 }
 
-fn patch(repo: &Repo, path: &str, staged: bool) -> Result<Vec<u8>> {
+fn patch(repo: &Repo, path: &str, staged: bool, opts: Options) -> Result<Vec<u8>> {
+    let flags = opts.flags();
     let mut args = vec!["diff", "--no-color", "--no-ext-diff"];
+    args.extend(flags.iter().map(String::as_str));
     if staged {
         args.push("--cached");
     }
@@ -111,8 +131,12 @@ fn patch(repo: &Repo, path: &str, staged: bool) -> Result<Vec<u8>> {
 
 /// 工作区（`staged` 为 false）或暂存区的单文件改动。未跟踪文件整个显示为新增。
 pub fn worktree(repo: &Repo, path: &str, staged: bool, untracked: bool) -> Result<Diff> {
+    worktree_with(repo, path, staged, untracked, Options::default())
+}
+
+pub fn worktree_with(repo: &Repo, path: &str, staged: bool, untracked: bool, opts: Options) -> Result<Diff> {
     if !untracked {
-        let mut diff = parse(&patch(repo, path, staged)?);
+        let mut diff = parse(&patch(repo, path, staged, opts)?);
         if diff.binary { diff.images = images(repo, if staged { Some("HEAD") } else { Some("") }, if staged { Some("") } else { None }, path, path)?; }
         return Ok(diff);
     }
@@ -139,8 +163,15 @@ pub fn worktree(repo: &Repo, path: &str, staged: bool, untracked: bool) -> Resul
 
 /// 某个提交里单个文件的改动；合并提交对比第一个父提交。
 pub fn commit(repo: &Repo, id: &str, path: &str) -> Result<Diff> {
+    commit_with(repo, id, path, Options::default())
+}
+
+pub fn commit_with(repo: &Repo, id: &str, path: &str, opts: Options) -> Result<Diff> {
     let oid = ObjectId::from_hex(id.as_bytes()).map_err(err)?.to_string();
-    let args = ["show", "--format=", "--no-color", "--no-ext-diff", "--diff-merges=first-parent", &oid, "--", path];
+    let flags = opts.flags();
+    let mut args = vec!["show", "--format=", "--no-color", "--no-ext-diff", "--diff-merges=first-parent"];
+    args.extend(flags.iter().map(String::as_str));
+    args.extend([oid.as_str(), "--", path]);
     let mut diff = parse(&repo.git_limited(&args, MAX_PATCH)?);
     if diff.binary {
         let detail = crate::detail::detail(repo, &oid)?;
@@ -163,14 +194,26 @@ fn stash_part(repo: &Repo, id: &str, path: &str) -> Result<String> {
 
 /// 贮藏里的单文件改动；`-u` 保存的文件从贮藏的未跟踪父提交读取。
 pub fn stash(repo: &Repo, id: &str, path: &str) -> Result<Diff> {
-    commit(repo, &stash_part(repo, id, path)?, path)
+    stash_with(repo, id, path, Options::default())
+}
+
+pub fn stash_with(repo: &Repo, id: &str, path: &str, opts: Options) -> Result<Diff> {
+    commit_with(repo, &stash_part(repo, id, path)?, path, opts)
 }
 
 pub fn between(repo: &Repo, left: &str, right: &str, path: &str, old_path: Option<&str>) -> Result<Diff> {
+    between_with(repo, left, right, path, old_path, Options::default())
+}
+
+pub fn between_with(repo: &Repo, left: &str, right: &str, path: &str, old_path: Option<&str>, opts: Options) -> Result<Diff> {
     let left = crate::tools::revision(repo, left)?;
     let right = crate::tools::revision(repo, right)?;
     let old = old_path.unwrap_or(path);
-    let mut diff = parse(&repo.git_limited(&["--literal-pathspecs", "diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv", &left, &right, "--", old, path], MAX_PATCH)?);
+    let flags = opts.flags();
+    let mut args = vec!["--literal-pathspecs", "diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv"];
+    args.extend(flags.iter().map(String::as_str));
+    args.extend([left.as_str(), right.as_str(), "--", old, path]);
+    let mut diff = parse(&repo.git_limited(&args, MAX_PATCH)?);
     if diff.binary { diff.images = images(repo, Some(&left), Some(&right), old, path)?; }
     Ok(diff)
 }
@@ -212,7 +255,13 @@ fn images(repo: &Repo, left: Option<&str>, right: Option<&str>, old: &str, path:
 /// Stream a read-only page. Long lines are clipped without retaining their remainder.
 /// ponytail: later pages rescan the Git stream; add a disk spool only if profiling warrants it.
 pub fn page(repo: &Repo, mode: &str, left: &str, right: &str, path: &str, old_path: Option<&str>, skip: usize) -> Result<Diff> {
+    page_with(repo, mode, left, right, path, old_path, skip, Options::default())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn page_with(repo: &Repo, mode: &str, left: &str, right: &str, path: &str, old_path: Option<&str>, skip: usize, opts: Options) -> Result<Diff> {
     if mode == "untracked" { return untracked_page(repo, path, skip); }
+    let flags = opts.flags();
     let mut args = vec!["--literal-pathspecs", "diff", "-M", "--no-color", "--no-ext-diff", "--no-textconv"];
     let resolved_stash;
     match mode {
@@ -227,6 +276,7 @@ pub fn page(repo: &Repo, mode: &str, left: &str, right: &str, path: &str, old_pa
         "unstaged" => {},
         _ => return Err("PR_INVALID_NAME".into()),
     }
+    args.extend(flags.iter().map(String::as_str));
     args.extend(["--", old_path.unwrap_or(path), path]);
     let mut child = crate::git_command(&repo.path).args(&args).stdin(std::process::Stdio::null()).spawn().map_err(err)?;
     let mut stderr = child.stderr.take().unwrap();
@@ -291,7 +341,12 @@ fn untracked_page(repo: &Repo, path: &str, skip: usize) -> Result<Diff> {
 
 /// 暂存（`staged` 为 false）或取消暂存第 `hunk` 个区块里选中的行。`lines` 是区块内的行下标。
 pub fn apply_lines(repo: &Repo, path: &str, staged: bool, hunk: usize, header: &str, lines: &[usize]) -> Result<()> {
-    let out = partial(repo, path, staged, staged, hunk, header, lines)?;
+    apply_lines_with(repo, path, staged, hunk, header, lines, None)
+}
+
+/// `context` 是界面当前显示用的上下文行数：区块要按同样的行数重新取，标题才对得上。
+pub fn apply_lines_with(repo: &Repo, path: &str, staged: bool, hunk: usize, header: &str, lines: &[usize], context: Option<u32>) -> Result<()> {
+    let out = partial(repo, path, staged, staged, hunk, header, lines, context)?;
     let mut args = vec!["apply", "--cached", "--recount", "--whitespace=nowarn"];
     if staged {
         args.push("--reverse");
@@ -301,7 +356,11 @@ pub fn apply_lines(repo: &Repo, path: &str, staged: bool, hunk: usize, header: &
 
 /// 丢弃工作区里第 `hunk` 个区块中选中的行。丢弃前把当前全部改动存进贮藏列表，后悔了可以取回。
 pub fn discard_lines(repo: &Repo, path: &str, hunk: usize, header: &str, lines: &[usize]) -> Result<()> {
-    let out = partial(repo, path, false, true, hunk, header, lines)?;
+    discard_lines_with(repo, path, hunk, header, lines, None)
+}
+
+pub fn discard_lines_with(repo: &Repo, path: &str, hunk: usize, header: &str, lines: &[usize], context: Option<u32>) -> Result<()> {
+    let out = partial(repo, path, false, true, hunk, header, lines, context)?;
     // stash create 只生成备份提交，不动工作区；store 把它挂进贮藏列表
     let backup = String::from_utf8_lossy(&repo.git(&["stash", "create"])?).trim().to_owned();
     if !backup.is_empty() {
@@ -312,8 +371,13 @@ pub fn discard_lines(repo: &Repo, path: &str, hunk: usize, header: &str, lines: 
 
 /// 从 `path` 的补丁里取出第 `hunk` 个区块，只保留选中的行，拼成一个可以单独应用的补丁。
 /// `staged` 决定用暂存区还是工作区的补丁，`reverse` 说明这个补丁之后会不会被反向应用。
-fn partial(repo: &Repo, path: &str, staged: bool, reverse: bool, hunk: usize, header: &str, lines: &[usize]) -> Result<Vec<u8>> {
-    let patch = patch(repo, path, staged)?;
+#[allow(clippy::too_many_arguments)]
+fn partial(repo: &Repo, path: &str, staged: bool, reverse: bool, hunk: usize, header: &str, lines: &[usize], context: Option<u32>) -> Result<Vec<u8>> {
+    // 没有上下文行的部分补丁，git apply 无法可靠定位
+    if context == Some(0) {
+        return Err("PR_DIFF_FILTERED".into());
+    }
+    let patch = patch(repo, path, staged, Options { context, ignore_ws: false })?;
     if patch.len() > MAX_PATCH {
         return Err("PR_DIFF_TOO_LARGE".into());
     }
