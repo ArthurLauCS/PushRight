@@ -227,3 +227,5 @@ export const conflictResolve = (tab: number, path: string, choices: Side[]) => i
 export const conflictTake = (tab: number, path: string, theirs: boolean) => invoke<void>('conflict_take', { tab, path, theirs })
 /** 已经完全合入 `base` 的本地分支（引用全名） */
 export const mergedBranches = (tab: number, base: string) => invoke<string[]>('merged_branches', { tab, base })
+/** 上游改了、本地也改着的二进制文件 */
+export const binaryOverlap = (tab: number) => invoke<string[]>('binary_overlap', { tab })

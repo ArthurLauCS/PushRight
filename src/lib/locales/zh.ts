@@ -64,6 +64,7 @@ export const messages = {
     pickBranch: '要查看哪个分支',
     label: (branch: string, base: string) => `${branch} 相比 ${base}`,
   },
+  binaryOverlap: (files: string) => `远程也改了你正在改的二进制文件：${files}。二进制文件无法合并，拉取后只能整个文件选一边，另一边的修改会作废；请先和对方确认以谁的为准。`,
   pullAutostash: '先收起未提交的改动，拉取后放回（git pull --autostash）',
   pushTags: '同时推送所有标签（git push --tags）',
   search: {

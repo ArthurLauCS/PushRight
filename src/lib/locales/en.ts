@@ -65,6 +65,7 @@ export const messages = {
     pickBranch: 'Branch to inspect',
     label: (branch: string, base: string) => `${branch} vs ${base}`,
   },
+  binaryOverlap: (files: string) => `The remote also changed binary files you are changing: ${files}. Binary files cannot be merged; after pulling you can only keep one whole version and the other side's work is lost. Agree on whose version to keep first.`,
   pullAutostash: 'Stash local changes first and reapply them after pulling',
   pushTags: 'Push all tags too',
   search: {
