@@ -216,3 +216,40 @@ fn status_does_not_take_the_index_lock() {
     assert_eq!(std::fs::read(dir.join(".git/index")).unwrap(), index);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn workflow_settings_recent_messages_and_check_command() {
+    use engine::workflow::{self, Settings};
+    let dir = init("workflow");
+    let repo = Repo::open(&dir).unwrap();
+    assert_eq!(workflow::read(&repo).unwrap(), Settings::default());
+    assert!(workflow::recent_messages(&repo, 5).unwrap().is_empty(), "a repository without commits has no messages");
+    assert_eq!(workflow::run_check(&repo).unwrap_err(), "PR_NO_CHECK_COMMAND");
+
+    // Git 自己的 commit.template 文件是后备
+    std::fs::write(dir.join("tpl.txt"), "type: \n\nwhy:\n").unwrap();
+    git(&dir, 0, &["config", "commit.template", "tpl.txt"]);
+    assert_eq!(workflow::read(&repo).unwrap().template, "type: \n\nwhy:");
+
+    let settings = Settings { template: "类型：\n\n说明：".into(), check_command: "git --version".into(), check_before_commit: true };
+    workflow::write(&repo, &settings).unwrap();
+    assert_eq!(workflow::read(&Repo::open(&dir).unwrap()).unwrap(), settings, "multi-line values survive the round trip");
+    let log = workflow::run_check(&repo).unwrap();
+    assert!(log.ok && log.output.starts_with("git version") && log.command == "git --version", "{log:?}");
+
+    // 失败的命令：退出码非 0，输出里既有标准输出也有错误输出，在仓库根目录执行
+    std::fs::write(dir.join("marker.txt"), "x").unwrap();
+    let failing = if cfg!(windows) { "dir /b marker.txt & echo oops 1>&2 & exit /b 3" } else { "ls marker.txt; echo oops 1>&2; exit 3" };
+    workflow::write(&repo, &Settings { check_command: failing.into(), ..Settings::default() }).unwrap();
+    let log = workflow::run_check(&repo).unwrap();
+    assert!(!log.ok && log.output.contains("marker.txt") && log.output.contains("oops"), "{log:?}");
+    // 清空后回到 Git 的模板文件，其余恢复默认
+    let cleared = workflow::read(&repo).unwrap();
+    assert_eq!((cleared.template.as_str(), cleared.check_before_commit), ("type: \n\nwhy:", false));
+
+    for (n, message) in ["one", "two\n\nbody", "one"].into_iter().enumerate() {
+        git(&dir, n as u32, &["commit", "-q", "--allow-empty", "-m", message]);
+    }
+    assert_eq!(workflow::recent_messages(&repo, 5).unwrap(), ["one", "two\n\nbody"], "newest first, duplicates removed");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

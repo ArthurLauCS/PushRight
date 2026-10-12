@@ -4,7 +4,7 @@
   export interface Field {
     key: string
     label: string
-    type: 'text' | 'checkbox' | 'radio' | 'select'
+    type: 'text' | 'textarea' | 'checkbox' | 'radio' | 'select'
     value?: string | boolean
     /** radio / select 的选项；radio 没有默认值时必须选一个才能确认 */
     options?: { value: string; label: string }[]
@@ -82,6 +82,8 @@
         {#if f.type === 'text'}
           <!-- svelte-ignore a11y_autofocus -->
           <label class="text">{f.label}<input class="field" type="text" bind:value={values[f.key]} aria-invalid={!!f.pattern && values[f.key] !== '' && !f.pattern.test(values[f.key] as string)} autofocus spellcheck="false" /></label>
+        {:else if f.type === 'textarea'}
+          <label class="text">{f.label}<textarea class="field" rows="4" bind:value={values[f.key] as string} spellcheck="false"></textarea></label>
         {:else if f.type === 'select'}
           <label class="text">{f.label}
             <select class="field" bind:value={values[f.key]}>
@@ -150,6 +152,13 @@
     border-radius: var(--r-md);
     color: var(--red);
     background: color-mix(in srgb, var(--red) 12%, transparent);
+  }
+  .text textarea {
+    height: auto;
+    padding: 8px;
+    resize: vertical;
+    font-family: var(--mono);
+    user-select: text;
   }
   .text {
     display: flex;
