@@ -298,3 +298,20 @@ pub fn merged_branches(repo: &Repo, base: &str) -> Result<Vec<String>> {
         })
         .collect())
 }
+
+/// 上游改了、本地也改着（未提交或已提交未推送）的二进制文件。
+/// 二进制文件没法合并，两边都改就必有一方白做，所以拉取之前就要提示。没有上游时返回空。
+pub fn binary_overlap(repo: &Repo) -> Result<Vec<String>> {
+    // numstat 里二进制文件的增删行数都是 "-"；三个点表示「上游相对共同祖先的改动」
+    let Ok(theirs) = repo.git(&["diff", "--numstat", "--no-renames", "-z", "HEAD...@{upstream}"]) else { return Ok(Vec::new()) };
+    let theirs = String::from_utf8_lossy(&theirs);
+    let binary: Vec<&str> = theirs.split('\0').filter_map(|rec| rec.strip_prefix("-\t-\t")).collect();
+    if binary.is_empty() {
+        return Ok(Vec::new());
+    }
+    let committed = repo.git(&["diff", "--name-only", "--no-renames", "-z", "@{upstream}...HEAD"])?;
+    let committed = String::from_utf8_lossy(&committed);
+    let working = crate::status::status(repo)?;
+    let mine: std::collections::HashSet<&str> = committed.split('\0').chain(working.iter().map(|e| e.path.as_str())).collect();
+    Ok(binary.into_iter().filter(|path| mine.contains(path)).map(str::to_owned).collect())
+}

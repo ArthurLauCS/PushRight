@@ -108,6 +108,8 @@
     const open = new Set(entries.filter((e) => e.conflicted).map((e) => e.path))
     return [...new Set([...(operation?.conflicts ?? []), ...open])].map((path) => ({ path, resolved: !open.has(path) }))
   })
+  /** 上游改了、本地也改着的二进制文件；拉取前提示 */
+  let overlap = $state.raw<string[]>([])
   let logs = $state.raw<api.Log[]>([])
   let showLog = $state(false)
   let view = $state<'history' | 'changes' | 'worktrees' | 'tools'>('history')
@@ -170,6 +172,8 @@
     const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab)]))
     if (r) [refs, stashes, worktrees, , identity] = r
     operation = refs.in_progress ? ((await guard(api.operation(tab))) ?? null) : null
+    // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
+    overlap = refs.ahead_behind?.[1] ? ((await guard(api.binaryOverlap(tab))) ?? []) : []
     // 各分支的同步状态在分支多时要算一两秒，不等它
     api.tracking(tab).then(
       (list) => (tracks = new Map(list.map((x) => [x.name, x]))),
@@ -587,6 +591,7 @@
       title: t.pull,
       explain: explain.pull,
       message: t.pullFrom(upstream ? short(upstream) : t.noUpstream),
+      warning: overlap.length ? t.binaryOverlap(overlap.join('、')) : undefined,
       confirm: t.pull,
       fields: [
         { key: 'rebase', label: t.pullRebase, type: 'checkbox', value: true },
@@ -953,6 +958,7 @@
   {#if error}<p class="error">{errorText(error)}</p>{/if}
   {#if autoFetchError}<p class="error">{t.autoFetchFailed}</p>{/if}
   {#if autoFfSkipped.length}<p class="error">{t.autoFf.skipped}{autoFfSkipped.join(' · ')}</p>{/if}
+  {#if overlap.length}<p class="notice">{t.binaryOverlap(overlap.join('、'))}</p>{/if}
   {#if refs.in_progress}
     {@const what = refs.in_progress}
     <p class="progress">
@@ -1204,6 +1210,14 @@
     padding: 8px 16px;
     color: var(--red);
     background: color-mix(in srgb, var(--red) 12%, transparent);
+    font-size: var(--fs-sm);
+    user-select: text;
+  }
+  .notice {
+    margin: 0;
+    padding: 8px 16px;
+    color: var(--yellow);
+    background: color-mix(in srgb, var(--yellow) 12%, transparent);
     font-size: var(--fs-sm);
     user-select: text;
   }

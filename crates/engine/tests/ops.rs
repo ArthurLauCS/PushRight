@@ -504,3 +504,45 @@ fn pull_autostash_single_file_stash_push_tags_and_patch_text() {
     std::fs::remove_dir_all(&dir).unwrap();
     std::fs::remove_dir_all(&origin).unwrap();
 }
+
+#[test]
+fn binary_overlap_reports_binary_files_changed_on_both_sides_before_pulling() {
+    let origin = init("overlap-origin");
+    let bin = |tag: u8| [&[0u8, 1, 2, tag][..], b"binary"].concat();
+    for name in ["place.rbxl", "icon.png", "untouched.bin"] {
+        std::fs::write(origin.join(name), bin(0)).unwrap();
+    }
+    commit_file(&origin, 1, "notes.txt", "text\n");
+    let dir = std::env::temp_dir().join(format!("gitgod-test-overlap-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    git(&origin, 0, &["clone", "-q", ".", dir.to_str().unwrap()]);
+    for kv in [["user.name", "t"], ["user.email", "t@t"]] {
+        git(&dir, 0, &["config", kv[0], kv[1]]);
+    }
+    let repo = Repo::open(&dir).unwrap();
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty());
+
+    // 远程改了两个二进制文件和一个文本文件
+    for name in ["place.rbxl", "icon.png"] {
+        std::fs::write(origin.join(name), bin(9)).unwrap();
+    }
+    commit_file(&origin, 2, "notes.txt", "remote text\n");
+    // 本地：一个二进制文件未提交、一个已提交未推送，文本文件也改了
+    std::fs::write(dir.join("icon.png"), bin(7)).unwrap();
+    git(&dir, 3, &["commit", "-q", "-am", "local icon"]);
+    std::fs::write(dir.join("place.rbxl"), bin(8)).unwrap();
+    std::fs::write(dir.join("notes.txt"), "local text\n").unwrap();
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty(), "nothing is known before fetching");
+    ok(&repo, Op::Fetch { background: false });
+    let mut overlap = refs::binary_overlap(&repo).unwrap();
+    overlap.sort();
+    assert_eq!(overlap, ["icon.png", "place.rbxl"], "text files can be merged and are not reported");
+
+    // 没有上游的分支不报错
+    ok(&repo, Op::Discard { paths: vec![] });
+    ok(&repo, Op::CreateBranch { name: "solo".into(), start: "HEAD".into(), checkout: true });
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty());
+
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&origin).unwrap();
+}
