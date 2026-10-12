@@ -12,7 +12,9 @@ export function registerGraphView(context: vscode.ExtensionContext) {
     const scope = scopes[root] ?? 'auto'
     if (scope === 'auto' || scope === 'all') return scope
     // 多选时是换行分隔的引用名；已删除的拿掉，一个不剩就回到 Auto
-    return scope.split('\n').filter((name) => refs.some((r) => r.name === name)).join('\n') || 'auto'
+    // 以 ^ 开头的是「相比」的基准；要看的分支一个不剩时基准也没有意义
+    const alive = scope.split('\n').filter((name) => refs.some((r) => r.name === name.replace(/^\^/, '')))
+    return alive.some((name) => !name.startsWith('^')) ? alive.join('\n') : 'auto'
   }
   const openFile = async (args: { tab: number; id: string; path: string; preview?: boolean }) => {
     const repo = repos.find((r) => r.tab === args?.tab)

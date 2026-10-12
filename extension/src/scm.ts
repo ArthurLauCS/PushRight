@@ -4,7 +4,7 @@ import type { Diff, Entry, Identity } from '../../src/lib/api'
 import {
   activeRepo, attempt, closedRepos, closeRepo, discoverRepositories, engine, errorText, fileUri, help, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, v, write, type Repo,
 } from './core'
-import { statusCommands } from './sync'
+import { conflictFiles, statusCommands } from './sync'
 
 /** 源代码管理面板里的一行 */
 export interface Resource extends vscode.SourceControlResourceState {
@@ -162,6 +162,8 @@ export function registerScm(context: vscode.ExtensionContext) {
   /** 每个仓库里有改动的文件：小写路径 → 状态 */
   const changed = new Map<Repo, Map<string, Entry>>()
   const groups = new Map<Repo, Record<'conflicts' | 'staged' | 'changes', vscode.SourceControlResourceGroup>>()
+  /** 上一次自动填进提交输入框的内容 */
+  const filled = new WeakMap<Repo, string>()
   const timers = new Map<Repo, { timer: ReturnType<typeof setTimeout>; git: boolean; notify: boolean }>()
 
   const addControl = (repo: Repo) => {
@@ -204,6 +206,12 @@ export function registerScm(context: vscode.ExtensionContext) {
     g.conflicts.resourceStates = repo.status.filter((e) => e.conflicted).map((e) => resource(repo, e, false))
     g.staged.resourceStates = repo.status.filter((e) => e.staged).map((e) => resource(repo, e, true))
     g.changes.resourceStates = repo.status.filter((e) => e.unstaged && !e.conflicted).map((e) => resource(repo, e, false))
+    const files = conflictFiles(repo)
+    g.conflicts.label = files.length ? `${v.conflicts} · ${t.conflictProgress(files.filter((f) => f.resolved).length, files.length)}` : v.conflicts
+    // 合并 / 摘取 / 撤销进行中时预填 Git 准备的提交信息；输入框里还是上次自动填的内容（或空着）才换，用户写过的不动
+    const prefill = repo.refs.in_progress && repo.refs.in_progress !== 'rebase' ? (repo.operation?.message ?? '') : ''
+    if (control.inputBox.value === (filled.get(repo) ?? '')) control.inputBox.value = prefill
+    filled.set(repo, prefill)
     control.count = repo.status.length
     control.statusBarCommands = statusCommands(repo)
     control.inputBox.placeholder = repo.identity?.name ? v.commitAs(`${repo.identity.name} <${repo.identity.email}>`) : t.identityMissing

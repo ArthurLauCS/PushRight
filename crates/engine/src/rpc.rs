@@ -64,7 +64,7 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "remote_details" => out(tools::remotes(repo)?),
         "reflog" => out(tools::reflog(repo, arg(a, "skip")?, arg(a, "limit")?)?),
         "rebase_plan" => out(rebase::plan(repo, &arg::<String>(a, "base")?)?),
-        "rebase_run" => out(rebase::run(repo, &arg::<String>(a, "base")?, &arg::<String>(a, "head")?, &arg::<Vec<rebase::Step>>(a, "steps")?)?),
+        "rebase_run" => out(rebase::run(repo, &arg::<String>(a, "base")?, &arg::<String>(a, "head")?, &arg::<Vec<rebase::Step>>(a, "steps")?, arg::<Option<bool>>(a, "updateRefs")?.unwrap_or(false))?),
         "load_graph" => {
             let scope: Option<String> = arg(a, "scope")?;
             let graph = Arc::new(Graph::load_scope(repo, if arg(a, "full")? { usize::MAX } else { FIRST_PAGE }, scope.as_deref().unwrap_or("all"))?);
@@ -112,6 +112,7 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
             arg(a, "context")?,
         )?),
         "op" => out(ops::run(repo, arg(a, "op")?)?),
+        "operation" => out(conflict::operation(repo)?),
         "conflict_read" => out(conflict::read(repo, &arg::<String>(a, "path")?)?),
         "conflict_resolve" => out(conflict::resolve(repo, &arg::<String>(a, "path")?, &arg::<Vec<conflict::Side>>(a, "choices")?)?),
         "conflict_take" => out(conflict::take(repo, &arg::<String>(a, "path")?, arg(a, "theirs")?)?),
@@ -121,6 +122,8 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "is_tracked" => out(local_files::tracked(repo, &arg::<String>(a, "path")?)?),
         "ignore_file" => out(local_files::ignore_file(repo, &arg::<String>(a, "path")?, arg(a, "shared")?)?),
         "track_file" => out(local_files::track(repo, &arg::<String>(a, "path")?, arg(a, "track")?)?),
+        "reveal" => out(local_files::reveal(repo, &arg::<String>(a, "path")?, arg(a, "open")?)?),
+        "patch" => out(local_files::patch(repo, &arg::<String>(a, "mode")?, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?)?),
         "file_history" => out(history::file_page(repo, &arg::<String>(a, "path")?, arg(a, "limit")?, arg::<Option<usize>>(a, "skip")?.unwrap_or(0))?),
         "line_history" => out(history::lines(repo, &arg::<String>(a, "path")?, arg(a, "start")?, arg(a, "end")?, arg(a, "limit")?)?),
         "line_history_page" => out(history::lines_page(repo, &arg::<String>(a, "path")?, arg(a, "start")?, arg(a, "end")?, arg(a, "limit")?, arg(a, "skip")?, arg::<Option<String>>(a, "contents")?.as_deref())?),

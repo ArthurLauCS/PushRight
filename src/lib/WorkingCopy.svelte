@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import * as api from './api'
   import ConflictView from './ConflictView.svelte'
   import { diffOptions } from './diff-prefs.svelte'
   import DiffView from './DiffView.svelte'
+  import FileIcon from './FileIcon.svelte'
   import FileListBar from './FileListBar.svelte'
   import FileTree from './FileTree.svelte'
   import { indent } from './file-tree'
@@ -19,10 +21,13 @@
     editIdentity,
     identityBusy,
     rebasing,
+    conflicts,
+    prefill,
     reload,
     oncommitted,
     discard,
     discardLines,
+    onfilemenu,
     busy = $bindable(false),
   }: {
     tab: number
@@ -31,11 +36,17 @@
     editIdentity: () => void
     identityBusy: boolean
     rebasing: boolean
+    /** 进行中的操作冲突过的全部文件，已解决的也在内 */
+    conflicts: { path: string; resolved: boolean }[]
+    /** Git 为进行中的合并 / 摘取 / 撤销准备好的提交信息；没有时为空 */
+    prefill: string
     reload: () => Promise<void>
     oncommitted: () => void
     /** 丢弃这些路径的改动；确认对话框和执行都由上层负责 */
     discard: (paths: string[]) => void
     discardLines: (path: string, hunk: number, header: string, lines: number[]) => void
+    /** 文件行的右键菜单 */
+    onfilemenu: (e: MouseEvent, entry: api.Entry, staged: boolean) => void
     busy?: boolean
   } = $props()
 
@@ -48,6 +59,16 @@
   let amend = $state(false)
   let error = $state('')
   const disabled = $derived(busy || identityBusy)
+
+  /** 上一次自动填进提交框的内容。提交框里还是它（或还空着）才会换，用户写过的不动 */
+  let filled = ''
+  $effect(() => {
+    const next = prefill
+    untrack(() => {
+      if (message === filled) message = next
+      filled = next
+    })
+  })
 
   let filter = $state('')
   const trees = $state<{ unstaged?: { setAll(open: boolean): void }; staged?: { setAll(open: boolean): void } }>({})
@@ -135,8 +156,10 @@
             title={e.path}
             onclick={() => (sel = { path: e.path, staged: isStaged })}
             ondblclick={() => (isStaged ? unstage([e]) : stage([e]))}
+            oncontextmenu={(ev) => { sel = { path: e.path, staged: isStaged }; onfilemenu(ev, e, isStaged) }}
           >
             <span class="status s{s === '?' ? 'A' : s}" title={t.status[s] ?? s}>{s}</span>
+            <FileIcon path={e.path} />
             <span class="path">{base(e.path) || e.path}{#if depth < 0}<span class="dir">{dir(e.path.replace(/\/$/, ''))}</span>{/if}</span>
             {#if !isStaged && !e.conflicted}
               <button class="btn small quiet icon danger" disabled={disabled} title={t.discardFile} onclick={(ev) => (ev.stopPropagation(), discard([e.path]))}>
@@ -178,6 +201,19 @@
 <div class="working">
   <div class="left" style:width="min({layout.changes}px, 50%)">
     {#if !entries.length}<p class="clean">{t.clean}</p>{/if}
+    {#if conflicts.length}
+      <div class="conflicts">
+        <div class="title"><span>{t.conflictFiles}<span class="count">{t.conflictProgress(conflicts.filter((c) => c.resolved).length, conflicts.length)}</span></span></div>
+        {#each conflicts as c (c.path)}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div class="item" class:selected={sel?.path === c.path} title={c.path} onclick={() => (sel = { path: c.path, staged: c.resolved })}>
+            <span class="status" class:sA={c.resolved} class:sU={!c.resolved} title={c.resolved ? t.conflictResolved : t.conflictOpen}>{c.resolved ? '✓' : '!'}</span>
+            <FileIcon path={c.path} />
+            <span class="path">{base(c.path)}<span class="dir">{dir(c.path)}</span></span>
+          </div>
+        {/each}
+      </div>
+    {/if}
     <FileListBar bind:filter onfold={(open) => { trees.unstaged?.setAll(open); trees.staged?.setAll(open) }} />
     {@render list(t.unstaged, t.unstagedHint, unstaged, false)}
     {@render list(t.staged, t.stagedHint, staged, true)}
@@ -216,6 +252,7 @@
   {:else}
     <DiffView
       {diff}
+      path={sel?.path}
       fetchPage={sel ? (skip) => api.diffPage(tab, sel!.staged ? 'staged' : entries.find((e) => e.path === sel!.path)?.unstaged === '?' ? 'untracked' : 'unstaged', '', '', sel!.path, skip, null, diffOptions()) : undefined}
       mode={sel?.staged ? 'staged' : 'unstaged'}
       onapply={(hunk, header, lines) => sel && run(() => api.applyLines(tab, sel!.path, sel!.staged, hunk, header, lines, diffOptions().context))}
@@ -262,6 +299,13 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    border-bottom: 1px solid var(--border);
+  }
+  /* 冲突清单最多占三成高度，文件多时自己滚动，不挤掉下面两组 */
+  .conflicts {
+    flex: none;
+    max-height: 30%;
+    overflow-y: auto;
     border-bottom: 1px solid var(--border);
   }
   .title {

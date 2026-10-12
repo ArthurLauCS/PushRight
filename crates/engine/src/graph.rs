@@ -42,11 +42,12 @@ impl Graph {
 
     pub fn load_scope(repo: &Repo, limit: usize, scope: &str) -> Result<Graph> {
         let gix = repo.gix();
-        let tips = refs::graph_tips(repo, scope)?;
+        let (tips, hidden) = refs::graph_tips(repo, scope)?;
         let nodes = if tips.is_empty() {
             Vec::new()
         } else {
             gix.rev_walk(tips)
+                .with_hidden(hidden)
                 .sorting(gix::revision::walk::Sorting::ByCommitTime(Default::default()))
                 .all()
                 .map_err(err)?

@@ -107,6 +107,11 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("refs/heads/feat\nrefs/heads/unrelated"), ["unrelated", "B", "A"]);
     assert_eq!(subjects("refs/heads/gone\nrefs/heads/feat"), ["B", "A"]);
     assert!(Graph::load_scope(&repo, 10, "refs/heads/gone\nrefs/heads/also-gone").is_err());
+    // 相比某个基准：只剩基准上没有的提交；基准已经包含全部提交时是空图，基准被删掉时等于没有基准
+    assert_eq!(subjects("refs/heads/main\n^refs/heads/feat"), ["M", "C"]);
+    assert_eq!(subjects("refs/heads/unrelated\nrefs/heads/main\n^refs/heads/feat"), ["unrelated", "M", "C"]);
+    assert_eq!(subjects("refs/heads/feat\n^refs/heads/main"), [] as [&str; 0]);
+    assert_eq!(subjects("refs/heads/feat\n^refs/heads/gone"), ["B", "A"]);
     assert!(Graph::load_scope(&repo, 10, "--all").is_err());
     assert_eq!(refs::list(&repo).unwrap().head.as_deref(), Some("refs/heads/feat"));
     git(&dir, 0, &["checkout", "-q", "--detach", "feat"]);

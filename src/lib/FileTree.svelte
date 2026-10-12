@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte'
   import { diffPrefs } from './diff-prefs.svelte'
   import { treeRows } from './file-tree'
+  import FileIcon from './FileIcon.svelte'
   import Icon from './Icon.svelte'
 
   let {
@@ -41,6 +42,7 @@
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
       <div class="folder" class:compact style:padding-left="{12 + r.depth * 16}px" title={r.key} onclick={() => toggle(r.key)}>
         <Icon name={r.open ? 'down' : 'right'} size={12} />
+        <FileIcon folder />
         <span class="name">{r.name}</span>
         <span class="count">{r.items!.length}</span>
         {@render folder?.(r.items!)}

@@ -22,6 +22,7 @@
     onmenu,
     scope,
     onscope,
+    autoFf,
     onworktree,
   }: {
     refs: Refs
@@ -43,6 +44,8 @@
     scope: string[]
     /** 把一个引用加入或移出提交图筛选 */
     onscope: (name: string) => void
+    /** 自动获取后会自动快进的本地分支（引用全名） */
+    autoFf: string[]
     /** 双击工作树：在页签中打开 */
     onworktree: (path: string) => void
   } = $props()
@@ -92,6 +95,7 @@
             {#if r.name === refs.head}<span class="tick">✓</span>{/if}
             <span class="name">{r.label}</span>
             {#if elsewhere.has(r.name)}<span class="sub" title={t.inOtherWorktreeMark}><Icon name="windows" size={12} /></span>{/if}
+            {#if autoFf.includes(r.name)}<span class="sub" title={t.autoFf.mark}><Icon name="pull" size={12} /></span>{/if}
             {#if tracks.get(r.name)}
               {@const tr = tracks.get(r.name)!}
               <span class="sub track" title={tr.gone ? t.gone : `${t.toPush(tr.ahead)} · ${t.toPull(tr.behind)}`}>

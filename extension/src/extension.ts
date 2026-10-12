@@ -7,7 +7,7 @@ import { registerHistory } from './history'
 import { registerGraphView } from './graph-view'
 import { openPanel } from './panel'
 import { offerTakeover, registerScm, repoArg } from './scm'
-import { checkout, fetch, inProgress, pull, push } from './sync'
+import { checkout, fastForward, fetch, inProgress, pull, push } from './sync'
 import { registerLocalFiles } from './local-files'
 import { registerDiffColors } from './diff-colors'
 
@@ -32,6 +32,7 @@ export async function activate(context: vscode.ExtensionContext) {
     command('pull', onRepo(pull)),
     command('push', onRepo(push)),
     command('fetch', onRepo(fetch)),
+    command('fastForward', onRepo(fastForward)),
     command('checkout', onRepo(checkout)),
     command('inProgress', onRepo(inProgress)),
     command('showLog', () => log.show()),

@@ -444,7 +444,7 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   let choose = 2, typed
   const vscode = { window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed } } }
   const core = {
-    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
+    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
     stored: () => saved, store: async (key, value) => { saved[key] = value }, run: (_, op) => sent.push(op), headBranch: () => 'main', ago: (time) => `at ${time}`,
     engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest' }] } },
   }
@@ -471,18 +471,26 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   vscode.window.showQuickPick = async (items, options) => options.canPickMany ? (many = items, items.filter((item) => item.picked || item.ref === 'refs/heads/old')) : items.at(-1)
   assert.equal(await pickScope(repo, 'refs/heads/main'), 'refs/heads/old\nrefs/heads/main')
   assert.deepEqual(many.filter((item) => item.picked).map((item) => item.ref), ['refs/heads/main'])
+  // 倒数第二项是「与某个分支相比」：先选分支再选基准，基准列表里没有刚选的分支
+  const lists = []
+  vscode.window.showQuickPick = async (items) => { lists.push(items); return lists.length === 1 ? items.at(-2) : items[0] }
+  assert.equal(await pickScope(repo), 'refs/heads/old\n^refs/heads/recent')
+  assert.ok(!lists[2].some((item) => item.ref === 'refs/heads/old'))
 })
 
 test('SCM separates repositories, stops on failed saves and uses selections after formatting', async () => {
   const commands = new Map(), providers = new Map(), calls = [], writes = [], controls = []
-  const repos = [{ tab: 0, root: '/one', name: 'one', status: [] }, { tab: 1, root: '/two', name: 'two', status: [] }]
+  const repos = [
+    { tab: 0, root: '/one', name: 'one', status: [], refs: {} },
+    { tab: 1, root: '/two', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
+  ]
   const selection = (line) => ({ start: { line, character: 0 }, end: { line, character: 1 } })
   const editor = { document: { uri: uri('/one/file'), isDirty: true, lineCount: 2, save: async () => false }, selections: [selection(0)] }
   const event = () => ({ dispose() {} })
   const vscode = {
     EventEmitter: Event, Uri: { file: uri },
     FileType: { File: 1 }, FileChangeType: { Changed: 1 }, FileSystemError: { NoPermissions: () => new Error('readonly') },
-    scm: { createSourceControl: (id, label, rootUri) => { const control = { id, label, rootUri, createResourceGroup: () => ({}), inputBox: {}, dispose() { this.disposed = true } }; controls.push(control); return control } },
+    scm: { createSourceControl: (id, label, rootUri) => { const control = { id, label, rootUri, groups: [], createResourceGroup(id) { const group = { id }; this.groups.push(group); return group }, inputBox: { value: '' }, dispose() { this.disposed = true } }; controls.push(control); return control } },
     commands: { registerCommand: (id, fn) => commands.set(id, fn) },
     window: { activeTextEditor: editor, onDidChangeWindowState: event },
     workspace: {
@@ -495,13 +503,23 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
   vscode.window.registerFileDecorationProvider = event
   const diff = { hunks: [{ header: '@@ -1,0 +1,2 @@', lines: [1, 2].map((n) => ({ kind: '+', new_no: n })) }] }
   const core = {
-    repos, onRepoChange: new Event(), REV: 'rev', v: {}, t: { identityMissing: '' }, help: {},
+    repos, onRepoChange: new Event(), REV: 'rev', v: { conflicts: 'Conflicts' }, t: { identityMissing: '', conflictProgress: (done, total) => `${done}/${total}` }, help: {},
     repoOf: () => repos[0], rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
     revUri: () => uri('/one/file').with({ scheme: 'rev', query: '{"rev":""}' }),
     engine: { call: async (cmd) => { calls.push(cmd); return diff } },
     write: async (repo, cmd, args) => { writes.push([repo.tab, cmd, args]); return null },
   }
-  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [] } }).registerScm({ subscriptions: [] })
+  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [], conflictFiles: (repo) => repo.files ?? [] } }).registerScm({ subscriptions: [] })
+  // 合并进行中：输入框预填 Git 的信息（含冲突清单），冲突分组带进度；用户写过的内容和操作结束后的空框都不被覆盖
+  assert.deepEqual(controls.map((c) => [c.inputBox.value, c.groups[0].label]), [['', 'Conflicts'], ["Merge branch 'x'\n\n# Conflicts:\n#\ta.txt", 'Conflicts · 1/2']])
+  controls[1].inputBox.value = 'my own message'
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, 'my own message')
+  controls[1].inputBox.value = ''
+  repos[1].refs = {}
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, '')
+  repos[1].files = []
   assert.deepEqual(controls.map(({ id, label, rootUri }) => [id, label, rootUri.fsPath]), [['pushright', 'PushRight', '/one'], ['pushright', 'PushRight', '/two']], 'shared provider IDs use one quick-diff menu label while roots distinguish repositories')
   await commands.get('pushright.stage')({ repo: repos[0], entry: { path: 'a' } }, { repo: repos[1], entry: { path: 'b' } })
   assert.deepEqual(writes.splice(0), [[0, 'stage', { paths: ['a'] }], [1, 'stage', { paths: ['b'] }]])
@@ -569,6 +587,14 @@ test('disabled revert offers abort only, while other operations retain continue'
   await sync.inProgress(repo)
   assert.deepEqual(shown[1], ['git rebase --continue', 'git rebase --abort'])
   assert.deepEqual(calls[1], { op: 'continue', what: 'rebase' })
+
+  // 冲突信息：正在处理的提交、变基步数、进度和逐个文件的状态；已解决的文件仍在清单里
+  Object.assign(t, { inProgressHint: 'hint', rebaseConflictHint: 'sides', operationCommit: (id, subject) => `${id} ${subject}`, operationStep: (n, total) => `step ${n}/${total}`, conflictProgress: (done, total) => `${done}/${total}` })
+  Object.assign(repo, { status: [{ path: 'b.txt', conflicted: true }, { path: 'c.txt' }], operation: { id: '0123456789abcdef', message: 'subject\n\n# Conflicts:', conflicts: ['a.txt', 'b.txt'], step: [2, 5] } })
+  assert.deepEqual(sync.conflictFiles(repo), [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }])
+  vscode.window.showWarningMessage = async (_, options) => void shown.push(options.detail)
+  await sync.inProgress(repo)
+  assert.equal(shown[2], '01234567 subject · step 2/5 · 1/2\n\n✓ a.txt\n! b.txt\n\nhint\n\nsides')
 })
 
 test('local files expand lazily and tracking commands distinguish local rules, shared rules and deletion', async () => {

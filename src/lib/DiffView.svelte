@@ -2,6 +2,7 @@
   import type { Diff, Line } from './api'
   import { CONTEXT_STEPS, diffPrefs, partialBlocked, setDiffPref } from './diff-prefs.svelte'
   import { splitRows, whitespaceMarks, type Cell } from './diff-rows'
+  import { highlightHunk, languageOf } from './highlight'
   import Icon, { type IconName } from './Icon.svelte'
   import Label from './Label.svelte'
   import { t, errorText } from './i18n.svelte'
@@ -11,12 +12,15 @@
 
   let {
     diff: source,
+    path = '',
     mode = 'readonly',
     onapply,
     ondiscard,
     fetchPage,
   }: {
     diff: Diff | null
+    /** 文件路径，用来按类型做语法高亮；不给就不高亮 */
+    path?: string
     /** unstaged / staged 时可以按区块、按行暂存或取消暂存 */
     mode?: 'readonly' | 'unstaged' | 'staged'
     onapply?: (hunk: number, header: string, lines: number[]) => void
@@ -47,6 +51,7 @@
   $effect(() => {
     diff
     selected = new Set()
+    if (hscroll) hscroll.scrollLeft = 0
   })
 
   const hunks = $derived.by(() => {
@@ -54,9 +59,42 @@
     return (diff?.hunks ?? []).map((h) => {
       const lines = h.lines.slice(0, Math.max(0, budget))
       budget -= h.lines.length
-      return { ...h, lines }
+      return { ...h, lines, html: highlightHunk(lines, language) }
     })
   })
+  const language = $derived(languageOf(path))
+
+  // 并排时两栏各占视窗的固定比例，不随内容变宽；长行靠底部一条共用的横向滚动条左右移动，两栏一起动
+  let hscroll = $state<HTMLDivElement>()
+  let shiftX = $state(0)
+  let viewWidth = $state(0)
+  /** 一行占多少个等宽字符位：制表符按 4、中日韩字符按 2 */
+  const columns = (text: string) => {
+    let n = 0
+    for (const ch of text) n += ch === '\t' ? 4 : ch.codePointAt(0)! >= 0x2e80 ? 2 : 1
+    return n
+  }
+  const widest = $derived(diffPrefs.sideBySide && !diffPrefs.wrap ? hunks.reduce((max, h) => h.lines.reduce((m, l) => Math.max(m, columns(l.text)), max), 0) : 0)
+
+  /** 拖动分隔条：拖的过程只改内存里的比例，松手才保存 */
+  function drag(e: PointerEvent) {
+    const bar = e.currentTarget as HTMLElement
+    const left = scroller!.getBoundingClientRect().left
+    bar.setPointerCapture(e.pointerId)
+    const move = (ev: PointerEvent) => (diffPrefs.splitRatio = Math.min(0.8, Math.max(0.2, (ev.clientX - left) / viewWidth)))
+    bar.addEventListener('pointermove', move)
+    bar.addEventListener('pointerup', () => { bar.removeEventListener('pointermove', move); setDiffPref('splitRatio', diffPrefs.splitRatio) }, { once: true })
+  }
+
+  let scroller = $state<HTMLDivElement>()
+  /** 跳到上一处 / 下一处改动：一段连续的增删行算一处，以它的第一行为准 */
+  function jump(direction: 1 | -1) {
+    if (!scroller) return
+    const top = scroller.getBoundingClientRect().top + 40
+    const starts = [...scroller.querySelectorAll<HTMLElement>('.line.add, .line.del')].filter((el) => !el.previousElementSibling?.matches('.line.add, .line.del'))
+    const target = direction > 0 ? starts.find((el) => el.getBoundingClientRect().top > top + 4) : starts.findLast((el) => el.getBoundingClientRect().top < top - 4)
+    if (target) scroller.scrollTop += target.getBoundingClientRect().top - top
+  }
   const truncated = $derived((diff?.hunks ?? []).reduce((n, h) => n + h.lines.length, 0) > MAX_LINES)
 
   /** 能不能按行 / 按区块暂存：只读、分页预览、过滤过的视图都不行 */
@@ -93,6 +131,10 @@
   <button class="btn small quiet icon" class:on title={label} aria-label={label} aria-pressed={on} {disabled} onclick={action}><Icon name={icon} size={14} /></button>
 {/snippet}
 
+{#snippet code(line: Line, html: string | undefined)}
+  <span class="clip"><span class="text" data-marks={diffPrefs.hidden ? whitespaceMarks(line.text) : undefined}>{#if html}{@html html}{:else}{line.text}{/if}</span></span>
+{/snippet}
+
 {#snippet half(h: number, cell: Cell<Line> | undefined, old: boolean)}
   {#if cell}
     {@const line = cell.line}
@@ -107,13 +149,16 @@
       class:right={!old}
       onclick={() => toggle(h, cell.index, line.kind)}
     >
-      <span class="no">{(old ? line.old_no : line.new_no) ?? ''}</span><span class="sign">{line.kind}</span><span class="text" data-marks={diffPrefs.hidden ? whitespaceMarks(line.text) : undefined}>{line.text}</span>
+      <span class="no">{(old ? line.old_no : line.new_no) ?? ''}</span><span class="sign">{line.kind}</span>{@render code(line, hunks[h].html?.[cell.index])}
     </div>
   {:else}<div class="line gap" class:right={!old}></div>{/if}
 {/snippet}
 
 <div class="view">
 <div class="bar" role="toolbar">
+  {@render tool('up', t.diffTools.previous, undefined, () => jump(-1), !diff?.hunks.length)}
+  {@render tool('down', t.diffTools.next, undefined, () => jump(1), !diff?.hunks.length)}
+  <span class="sep"></span>
   {@render tool('space', t.diffTools.ignoreWs, diffPrefs.ignoreWs, () => setDiffPref('ignoreWs', !diffPrefs.ignoreWs))}
   {@render tool('pilcrow', t.diffTools.hidden, diffPrefs.hidden, () => setDiffPref('hidden', !diffPrefs.hidden))}
   {@render tool('wrap', t.diffTools.wrap, diffPrefs.wrap, () => setDiffPref('wrap', !diffPrefs.wrap))}
@@ -124,7 +169,12 @@
   <span class="sep"></span>
   {@render tool('split', t.diffTools.sideBySide, diffPrefs.sideBySide, () => setDiffPref('sideBySide', !diffPrefs.sideBySide))}
 </div>
-<div class="diff" class:wrap={diffPrefs.wrap}>
+<div class="area">
+{#if diffPrefs.sideBySide && diff?.hunks.length}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <i class="divider" title={t.dragHint} style:left="{diffPrefs.splitRatio * viewWidth - 3}px" onpointerdown={drag} ondblclick={() => setDiffPref('splitRatio', 0.5)}></i>
+{/if}
+<div class="diff" class:wrap={diffPrefs.wrap} bind:this={scroller} bind:clientWidth={viewWidth} onwheel={(e) => { if (hscroll && (e.deltaX || e.shiftKey)) hscroll.scrollLeft += e.deltaX || e.deltaY }}>
   {#if error}<p class="note">{error}</p>{/if}
   {#if page}
     <div class="hunk">
@@ -149,7 +199,7 @@
   {:else if !diff.hunks.length}
     <p class="note">{t.noDiff}</p>
   {:else}
-    <div class="body" class:split={diffPrefs.sideBySide}>
+    <div class="body" class:split={diffPrefs.sideBySide} style:--ratio={diffPrefs.splitRatio} style:--sx="{shiftX}px">
       {#if mode !== 'readonly' && !page && partialBlocked()}<p class="hint">{t.diffTools.filtered}</p>{/if}
       {#each hunks as hunk, h (h)}
         <div class="hunk">
@@ -177,15 +227,17 @@
               class:selected={selected.has(`${h}:${i}`)}
               onclick={() => toggle(h, i, line.kind)}
             >
-              <span class="no">{line.old_no ?? ''}</span><span class="no">{line.new_no ?? ''}</span><span class="sign">{line.kind}</span><span class="text" data-marks={diffPrefs.hidden ? whitespaceMarks(line.text) : undefined}>{line.text}</span>
+              <span class="no">{line.old_no ?? ''}</span><span class="no">{line.new_no ?? ''}</span><span class="sign">{line.kind}</span>{@render code(line, hunk.html?.[i])}
             </div>
           {/each}
         {/if}
       {/each}
       {#if truncated}<p class="note">{t.truncated(MAX_LINES)}</p>{#if fetchPage}<button class="btn" disabled={loading} onclick={() => load(0)}>{t.tools.pagedPreview}</button>{/if}{/if}
       {#if diff.clipped}<p class="note">{t.tools.clippedLine}</p>{/if}
+      {#if widest}<div class="hscroll" bind:this={hscroll} style:--cols={widest} onscroll={() => (shiftX = hscroll!.scrollLeft)}><div></div></div>{/if}
     </div>
   {/if}
+</div>
 </div>
 </div>
 
@@ -298,14 +350,67 @@
     flex: 1;
     min-width: 0;
   }
-  /* 并排：整个 diff 共用一个两列网格。每栏至少占一半宽，再按自己最长的一行伸展，
-     所以右栏不会被左栏的长行推出屏幕；同一网格行里两侧自动等高 */
+  .area {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .clip {
+    display: contents;
+  }
+  /* 并排：整个 diff 共用一个两列网格，同一网格行里两侧自动等高。两栏按比例占满视窗，
+     不随内容变宽，所以右栏不会被左栏的长行推出屏幕；超出的部分在各自的栏里裁掉 */
   .split {
     display: grid;
-    grid-template-columns: repeat(2, minmax(50cqw, max-content));
+    width: 100cqw;
+    min-width: 0;
+    grid-template-columns: calc(var(--ratio) * 100cqw) minmax(0, 1fr);
   }
-  .wrap .split {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .split .line {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .split .clip {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  /* 行号列不动，只有正文跟着底部的滚动条左右移 */
+  .split .text {
+    display: inline-block;
+    margin-left: calc(var(--sx) * -1);
+  }
+  .wrap .split .text {
+    display: inline;
+    margin-left: 0;
+  }
+  /* 两栏共用的横向滚动条，贴在视窗底部。可滚动的距离 = 最长一行的宽度 − 较窄一栏的正文宽度 */
+  .hscroll {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    width: 100cqw;
+    overflow: auto hidden;
+    background: var(--bg);
+  }
+  .hscroll div {
+    height: 1px;
+    width: calc(100cqw + var(--cols) * 1ch + 80px - min(var(--ratio), 1 - var(--ratio)) * 100cqw);
+  }
+  .divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 6px;
+    cursor: col-resize;
+  }
+  .divider:hover,
+  .divider:active {
+    background: color-mix(in srgb, var(--accent) 50%, transparent);
   }
   .split > :not(.line) {
     grid-column: 1 / -1;

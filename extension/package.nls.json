@@ -11,6 +11,7 @@
   "command.pull": "Pull…",
   "command.push": "Push…",
   "command.fetch": "Fetch",
+  "command.fastForward": "Fast-Forward a Branch to Its Upstream",
   "command.checkout": "Switch Branch…",
   "command.inProgress": "Continue or Abort Operation…",
   "command.showLog": "Show Command Log",

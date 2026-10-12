@@ -22,7 +22,9 @@
   const short = (name: string) => name.replace(/^refs\/(heads|remotes)\//, '')
   /** 多选时范围是换行分隔的引用名 */
   const scoped = $derived(scope.split('\n'))
-  const scopeLabel = $derived(scope === 'auto' ? t.vscode.graphAuto : scope === 'all' ? t.vscode.graphAll : scoped.length > 1 ? t.vscode.graphBranches(scoped.length) : short(scope))
+  /** 「相比」的基准在范围里是以 ^ 开头的一行 */
+  const versus = $derived(scoped.find((name) => name.startsWith('^'))?.slice(1))
+  const scopeLabel = $derived(scope === 'auto' ? t.vscode.graphAuto : scope === 'all' ? t.vscode.graphAll : versus ? t.compareBranch.label(short(scoped[0]), short(versus)) : scoped.length > 1 ? t.vscode.graphBranches(scoped.length) : short(scope))
   let loadedKey = ''
   let running = false
   let again = false
@@ -115,7 +117,7 @@
     <span title={t.vscode.graphCurrentBranch(head)}>{head}</span>
   </div>
   <div class="toolbar">
-    <button class="scope" aria-label={t.vscode.graphScope} onclick={changeScope} disabled={!repo || busy || loading} title={scope === 'auto' ? t.vscode.graphAutoHint : scoped.map(short).join('\n')}><span>{scopeLabel}</span><Icon name="down" size={12} /></button>
+    <button class="scope" aria-label={t.vscode.graphScope} onclick={changeScope} disabled={!repo || busy || loading} title={scope === 'auto' ? t.vscode.graphAutoHint : scoped.map((name) => (name.startsWith('^') ? t.compareBranch.against(short(name.slice(1))) : short(name))).join('\n')}><span>{scopeLabel}</span><Icon name="down" size={12} /></button>
     <button class="action" disabled={!repo || busy} title={`${t.fetch} · ${repo?.name ?? ''}`} aria-label={t.fetch} onclick={() => sync('fetch')}><Icon name="fetch" size={14} /></button>
     <button class="action" disabled={!repo || busy || !repo.refs.head} title={`${t.pull} · ${head}`} aria-label={t.pull} onclick={() => sync('pull')}><Icon name="pull" size={14} /><small>{repo?.refs.ahead_behind?.[1] || ''}</small></button>
     <button class="action" disabled={!repo || busy || !repo.refs.head} title={t.vscode.graphPushSame(head)} aria-label={t.vscode.graphPushSame(head)} onclick={() => sync('push')}><Icon name="push" size={14} /><small>{repo?.refs.ahead_behind?.[0] || ''}</small></button>

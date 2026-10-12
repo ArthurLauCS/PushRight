@@ -128,3 +128,70 @@ pub fn take(repo: &Repo, path: &str, theirs: bool) -> Result<()> {
     repo.git(&["checkout", if theirs { "--theirs" } else { "--ours" }, "--", path])?;
     repo.git(&["add", "--", path]).map(drop)
 }
+
+/// 进行中的合并 / 变基 / 摘取 / 撤销：Git 自己记下的提交信息、正在处理的提交和冲突清单。
+#[derive(Serialize, Default, Debug, PartialEq)]
+pub struct Operation {
+    /// Git 准备好的提交信息原文，`# Conflicts:` 清单也在里面；界面预填到提交框
+    pub message: String,
+    /// 正在并入或重放的提交
+    pub id: Option<String>,
+    /// 操作停下来时冲突的全部文件，已经解决的也在内
+    pub conflicts: Vec<String>,
+    /// 变基进行到第几步、共几步
+    pub step: Option<(u32, u32)>,
+}
+
+/// Git 给含特殊字符或非 ASCII 的路径加的 C 风格引号。
+// ponytail: 只还原八进制、\n、\t 和原样转义（\" \\）；路径里有响铃之类的控制字符时显示不准
+fn unquote(s: &str) -> String {
+    let Some(inner) = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')) else { return s.to_owned() };
+    let mut out = Vec::new();
+    let mut bytes = inner.bytes().peekable();
+    while let Some(b) = bytes.next() {
+        if b != b'\\' {
+            out.push(b);
+            continue;
+        }
+        match bytes.next() {
+            Some(d @ b'0'..=b'7') => {
+                let mut n = (d - b'0') as u32;
+                for _ in 0..2 {
+                    if let Some(d) = bytes.next_if(|d| (b'0'..=b'7').contains(d)) {
+                        n = n * 8 + (d - b'0') as u32;
+                    }
+                }
+                out.push(n as u8);
+            }
+            Some(b'n') => out.push(b'\n'),
+            Some(b't') => out.push(b'\t'),
+            Some(c) => out.push(c),
+            None => {}
+        }
+    }
+    decode(&out)
+}
+
+/// 没有进行中的操作时返回 None。只读 Git 目录里的状态文件，不启动 git 进程。
+// ponytail: 冲突清单按默认的注释符 `#` 识别；改过 core.commentChar 的仓库里 `conflicts` 为空，进度只按还没解决的文件算
+pub fn operation(repo: &Repo) -> Result<Option<Operation>> {
+    let dir = repo.gix().git_dir().to_owned();
+    let read = |name: &str| std::fs::read(dir.join(name)).ok().map(|b| decode(&b));
+    let Some(id) = ["MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"].into_iter().find_map(read) else {
+        let rebasing = dir.join("rebase-merge").exists() || dir.join("rebase-apply").exists();
+        return Ok(rebasing.then(Operation::default));
+    };
+    let text = read("MERGE_MSG").unwrap_or_default();
+    let (mut conflicts, mut listing) = (Vec::new(), false);
+    for line in text.lines() {
+        match line.strip_prefix('#') {
+            None => listing = false,
+            Some(rest) if rest.trim() == "Conflicts:" => listing = true,
+            Some(rest) if listing && rest.starts_with('\t') => conflicts.push(unquote(rest.trim())),
+            Some(_) => listing = false,
+        }
+    }
+    let number = |name: &str| read(name)?.trim().parse::<u32>().ok();
+    let step = number("rebase-merge/msgnum").zip(number("rebase-merge/end")).or_else(|| number("rebase-apply/next").zip(number("rebase-apply/last")));
+    Ok(Some(Operation { message: text.trim().to_owned(), id: id.lines().next().map(str::to_owned), conflicts, step }))
+}

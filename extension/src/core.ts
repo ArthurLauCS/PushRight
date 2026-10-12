@@ -1,7 +1,7 @@
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
 import * as vscode from 'vscode'
-import type { Entry, Identity, Log, Op, Refs } from '../../src/lib/api'
+import type { Entry, Identity, Log, Op, Operation, Refs } from '../../src/lib/api'
 import { explanations as enHelp, messages as en } from '../../src/lib/locales/en'
 import { explanations as zhHelp, messages as zh } from '../../src/lib/locales/zh'
 import type { AuthorStyle } from '../../src/lib/prefs.svelte'
@@ -27,6 +27,8 @@ export interface Repo {
   root: string
   name: string
   refs: Refs
+  /** 进行中的合并 / 变基 / 摘取 / 撤销在 Git 里记下的信息；没有时为 null */
+  operation: Operation | null
   status: Entry[]
   identity: Identity | null
   remotes: string[]
@@ -75,7 +77,7 @@ async function discover(extra: string[]) {
         else {
           const parent = repos.filter((r) => fold(root).startsWith(fold(r.root) + sep)).sort((a, b) => b.root.length - a.root.length)[0]
           repo = {
-            tab, root, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [],
+            tab, root, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [], operation: null,
             refs: { head: null, head_id: null, ahead_behind: null, in_progress: null, revert_disabled: false, refs: [] },
           }
           repos.push(repo)
@@ -155,6 +157,7 @@ export async function refresh(repo: Repo, git = true, notify = git) {
           engine.call<Identity>('commit_identity', a).catch(() => null),
           engine.call<string[]>('remotes', a),
         ])
+        repo.operation = repo.refs.in_progress ? await engine.call<Operation | null>('operation', a) : null
       } else repo.status = await engine.call<Entry[]>('status', a)
     } catch (e) {
       log.appendLine(errorText(e))

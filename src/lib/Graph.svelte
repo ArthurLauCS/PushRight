@@ -2,6 +2,7 @@
   import type { FileChange, Ref, Row } from './api'
   import { expansionRanges, graphIndex, graphPosition } from './graph-rows'
   import { treeRows, type TreeRow } from './file-tree'
+  import FileIcon from './FileIcon.svelte'
   import { authorColor, authorKey } from './author'
   import Dialog from './Dialog.svelte'
   import { layout } from './layout.svelte'
@@ -312,8 +313,10 @@
             <span class="file-content" role="gridcell" style:padding-left="{14 + (node?.depth ?? 0) * 10}px">
               {#if file}
                 <span class="file-status" class:added={file.status === 'A'} class:deleted={file.status === 'D'} aria-hidden="true">{file.status}</span>
+                <FileIcon path={file.path} size={13} />
                 <span class="file-name">{node!.name}</span>
               {:else if node}
+                <FileIcon folder size={13} />
                 <span class="file-path">{node.name}/</span>
               {:else if entry?.error}
                 <span role="alert">{entry.error}</span><button onclick={(e) => { e.stopPropagation(); if (row) void expand(commit, row.id, true) }}>{t.vscode.graphRetryFiles}</button>

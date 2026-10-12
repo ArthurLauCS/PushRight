@@ -110,6 +110,11 @@ export const diagrams = {
     before: g('A:0,0 B:1,0', 'A>B', 'B=main* B=origin/main:2'),
     after: g('A:0,0 B:1,0 C:2,0::new', 'A>B B>C', 'C=main* C=origin/main:2'),
   },
+  fast_forward: {
+    // B 和 C 隔开两格：相邻节点上的两个标签会叠在一起
+    before: g('A:0,0 B:1,0 C:3,0:2', 'A>B B>C', 'B=main* C=origin/main:2'),
+    after: g('A:0,0 B:1,0 C:3,0', 'A>B B>C', 'C=main* C=origin/main:2'),
+  },
   push: {
     before: g(LINE, 'A>B B>C', 'C=main* B=origin/main:2'),
     after: g(LINE, 'A>B B>C', 'C=main* C=origin/main:2'),

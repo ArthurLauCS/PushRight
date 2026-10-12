@@ -63,6 +63,12 @@
         "icon": "$(sync)"
       },
       {
+        "command": "pushright.fastForward",
+        "title": "%command.fastForward%",
+        "category": "PushRight",
+        "enablement": "pushright.hasRepo"
+      },
+      {
         "command": "pushright.checkout",
         "title": "%command.checkout%",
         "category": "PushRight"
@@ -363,6 +369,11 @@
           "command": "pushright.fetch",
           "when": "scmProvider == pushright",
           "group": "1_sync@1"
+        },
+        {
+          "command": "pushright.fastForward",
+          "when": "scmProvider == pushright",
+          "group": "1_sync@2"
         },
         {
           "command": "pushright.checkout",

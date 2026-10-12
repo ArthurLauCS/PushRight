@@ -12,6 +12,7 @@
   "command.pull": "拉取…（git pull）",
   "command.push": "推送…（git push）",
   "command.fetch": "获取（git fetch --all --prune）",
+  "command.fastForward": "把分支快进到上游（git merge --ff-only）",
   "command.checkout": "切换分支…（git checkout）",
   "command.inProgress": "继续或中止当前操作…（git … --continue / --abort）",
   "command.showLog": "显示命令日志",

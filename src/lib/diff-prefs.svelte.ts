@@ -6,7 +6,7 @@ import type { DiffOptions } from './api'
 /** 上下文行数的档位，减少 / 增加按钮在两头禁用 */
 export const CONTEXT_STEPS = [0, 1, 3, 6, 12, 25, 50]
 
-const DEFAULTS = { ignoreWs: false, hidden: false, wrap: false, sideBySide: false, context: 3, tree: true }
+const DEFAULTS = { ignoreWs: false, hidden: false, wrap: false, sideBySide: false, context: 3, tree: true, splitRatio: 0.5 }
 type Saved = typeof DEFAULTS
 
 let saved: Partial<Saved> = {}
@@ -20,6 +20,8 @@ export const diffPrefs = $state({
   ...DEFAULTS,
   ...saved,
   context: CONTEXT_STEPS.includes(saved.context!) ? saved.context! : DEFAULTS.context,
+  /** 并排时左栏占的比例，拖中间的分隔条调整 */
+  splitRatio: Math.min(0.8, Math.max(0.2, Number(saved.splitRatio) || DEFAULTS.splitRatio)),
   /** 显示整个文件：只在本次运行内有效，免得每打开一个文件都取全文 */
   whole: false,
 })
