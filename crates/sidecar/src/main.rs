@@ -16,8 +16,6 @@ struct Request {
 }
 
 fn main() {
-    // 扩展靠监听 .git 的变化来刷新；不让只读命令（status）顺手改写索引，否则每次刷新又触发一次变化
-    std::env::set_var("GIT_OPTIONAL_LOCKS", "0");
     let tabs = Arc::new(Tabs::default());
     // 标准输入关闭（扩展主机退出）时循环结束，进程随之退出
     for line in std::io::stdin().lock().lines() {
