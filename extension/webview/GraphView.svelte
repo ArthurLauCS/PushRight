@@ -140,6 +140,7 @@
     --accent: var(--vscode-focusBorder);
     --accent-soft: var(--vscode-list-inactiveSelectionBackground);
     --ref-branch: var(--vscode-textLink-foreground);
+    --ref-bg: color-mix(in srgb, var(--vscode-textLink-foreground) 28%, transparent);
     --border-strong: var(--vscode-contrastBorder, var(--vscode-widget-border, var(--vscode-descriptionForeground)));
     --fs-md: 12px;
     --fs-sm: 11px;

@@ -21,6 +21,8 @@
   /* 陶土色：全应用唯一的强调色 */
   --accent: #e08363;
   --accent-soft: rgba(224, 131, 99, 0.16);
+  /* 提交图里本地分支标签的底色，比选中行的 --accent-soft 重一档 */
+  --ref-bg: rgba(224, 131, 99, 0.3);
   --on-accent: #1f1e1d;
   --green: #91b876;
   --yellow: #e0b35a;
@@ -85,17 +87,18 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #faf9f5;
-  --panel: #f0eee6;
-  --raised: #e6e3d8;
-  --border: #dbd8cc;
-  --border-strong: #b4b0a2;
-  --text: #141413;
+  --bg: #f4f2ea;
+  --panel: #ebe8de;
+  --raised: #e0dccf;
+  --border: #d4d0c2;
+  --border-strong: #ada999;
+  --text: #1f1e1c;
   --muted: #5e5d57;
   --hover: rgba(20, 20, 19, 0.05);
 
   --accent: #a04423;
   --accent-soft: rgba(160, 68, 35, 0.12);
+  --ref-bg: var(--accent-soft);
   --on-accent: #faf9f5;
   --green: #3f6b2f;
   --yellow: #7a5607;

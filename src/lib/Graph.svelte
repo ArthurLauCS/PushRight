@@ -503,8 +503,8 @@
   }
   .badge.branch {
     color: var(--text);
-    background: var(--accent-soft);
-    border-color: var(--border-strong);
+    background: var(--ref-bg, var(--accent-soft));
+    border-color: color-mix(in srgb, var(--ref-branch, var(--accent)) 55%, var(--border-strong));
     border-left: 3px solid var(--ref-branch, var(--accent));
   }
   .badge.remote {
