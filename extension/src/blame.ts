@@ -157,7 +157,7 @@ export function registerBlame(context: vscode.ExtensionContext) {
           hoverMessage: first ? hover(root, c) : undefined,
           renderOptions: {
             before: {
-              contentText: first ? `${author} · ${isUncommitted(c) ? '' : new Date(c.time * 1000).toISOString().slice(0, 10)}` : ' ',
+              contentText: first ? `${author} · ${isUncommitted(c) ? '' : date(c.time, true)}` : ' ',
               color: new vscode.ThemeColor('editor.foreground'),
               backgroundColor: (byAge ? '#d9822b' : tint) + alpha.toString(16).padStart(2, '0'),
               border: `none; border-left: 3px solid ${tint}${s?.border ? `; outline: 1px solid ${tint}; outline-offset: -1px` : ''}`,

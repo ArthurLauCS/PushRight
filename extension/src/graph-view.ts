@@ -39,6 +39,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
         onPrefsChange.event(() => {
           webview.postMessage({ store: 'prefs', value: stored().prefs ?? '{}' })
           webview.postMessage({ store: 'diffColors', value: stored().diffColors ?? 'null' })
+          webview.postMessage({ store: 'timeZone', value: stored().timeZone ?? '' })
         }),
         webview.onDidReceiveMessage(async (m) => {
           if (m.store === 'prefs' || m.store === 'graphView') return void await store(m.store, m.value)

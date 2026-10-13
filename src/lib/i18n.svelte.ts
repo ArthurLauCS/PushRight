@@ -1,9 +1,20 @@
 import { messages as en, explanations as enHelp } from './locales/en'
 import { messages as zh, explanations as zhHelp } from './locales/zh'
 import { diagrams, type Explain, type ExplainKey } from './explain'
+import { formatTime, readTimeZone } from './time'
 
 export type Locale = 'en' | 'zh-CN'
 export const locale = $state({ current: (localStorage.getItem('locale') === 'zh-CN' ? 'zh-CN' : 'en') as Locale })
+export const timeZone = $state({ current: readTimeZone(localStorage.getItem('timeZone')) })
+
+export function setTimeZone(value: string) {
+  timeZone.current = readTimeZone(value)
+  localStorage.setItem('timeZone', timeZone.current)
+}
+
+globalThis.addEventListener?.('storage', (event) => {
+  if (event.key === 'timeZone' || event.key === null) timeZone.current = readTimeZone(localStorage.getItem('timeZone'))
+})
 const catalogues = { en, 'zh-CN': zh }
 const help = { en: enHelp, 'zh-CN': zhHelp }
 const makeHelp = (language: Locale) => Object.fromEntries(
@@ -30,7 +41,5 @@ export function errorText(error: unknown): string {
 }
 
 export function fmtTime(sec: number): string {
-  const d = new Date(sec * 1000)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return formatTime(sec, timeZone.current)
 }

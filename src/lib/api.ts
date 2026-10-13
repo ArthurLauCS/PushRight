@@ -258,6 +258,6 @@ export interface Lfs { version: string | null; installed: boolean; patterns: str
 export const lfs = (tab: number) => invoke<Lfs>('lfs', { tab })
 export const lfsLocks = (tab: number) => invoke<string>('lfs_locks', { tab })
 export interface Count { name: string; count: number }
-/** 当前分支的提交统计；`months` 逐月连续，`files` 是改动次数最多的 100 个 */
-export interface Stats { commits: number; first: string; last: string; authors: Count[]; months: Count[]; files: Count[] }
+/** 当前分支的提交统计；`times` 为作者时间戳，`files` 是改动次数最多的 100 个 */
+export interface Stats { commits: number; times: number[]; authors: Count[]; files: Count[] }
 export const stats = (tab: number) => invoke<Stats>('stats', { tab })

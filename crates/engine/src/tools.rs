@@ -116,30 +116,24 @@ pub struct Count { pub name: String, pub count: u32 }
 pub struct Stats {
     /// 当前分支历史里的提交数，含合并提交
     pub commits: u32,
-    /// 最早和最近一次提交的日期（YYYY-MM-DD，按作者当时的时区）
-    pub first: String,
-    pub last: String,
+    /// 作者时间戳；界面按用户选择的时区计算日期与月份。
+    pub times: Vec<i64>,
     /// 按提交数从多到少
     pub authors: Vec<Count>,
-    /// 从最早到最近逐月的提交数，没有提交的月份也在（计 0）
-    pub months: Vec<Count>,
     /// 被改动次数最多的 100 个文件；合并提交不计
     pub files: Vec<Count>,
 }
 
 /// 当前分支的提交统计。只数文件名不数增删行数：实测 5938 个提交的仓库上 `--name-only` 约 0.3 秒，`--numstat` 约 5.6 秒。
 pub fn stats(repo: &Repo) -> Result<Stats> {
-    use std::collections::{BTreeMap, HashMap};
-    let out = decode(&repo.git(&["-c", "core.quotepath=false", "log", "--format=%x01%ad%x09%aN", "--date=format:%Y-%m-%d", "--name-only", "--no-renames", "HEAD"])?);
-    let (mut authors, mut files, mut months) = (HashMap::<&str, u32>::new(), HashMap::<&str, u32>::new(), BTreeMap::<&str, u32>::new());
-    let (mut commits, mut first, mut last) = (0, "", "");
+    use std::collections::HashMap;
+    let out = decode(&repo.git(&["-c", "core.quotepath=false", "log", "--format=%x01%at%x09%aN", "--name-only", "--no-renames", "HEAD"])?);
+    let (mut authors, mut files) = (HashMap::<&str, u32>::new(), HashMap::<&str, u32>::new());
+    let mut times = Vec::new();
     for line in out.lines() {
-        if let Some((date, author)) = line.strip_prefix('\x01').and_then(|l| l.split_once('\t')) {
-            commits += 1;
+        if let Some((time, author)) = line.strip_prefix('\x01').and_then(|l| l.split_once('\t')) {
+            times.push(time.parse::<i64>().map_err(err)?);
             *authors.entry(author).or_default() += 1;
-            *months.entry(&date[..7]).or_default() += 1;
-            if first.is_empty() || date < first { first = date; }
-            if date > last { last = date; }
         } else if !line.is_empty() {
             *files.entry(line).or_default() += 1;
         }
@@ -149,15 +143,7 @@ pub fn stats(repo: &Repo) -> Result<Stats> {
         list.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
         list
     };
-    let mut filled = Vec::new();
-    if let (Some(start), Some(end)) = (months.keys().next(), months.keys().next_back()) {
-        let index = |ym: &str| ym[..4].parse::<u32>().unwrap_or(0) * 12 + ym[5..].parse::<u32>().unwrap_or(1) - 1;
-        for m in index(start)..=index(end) {
-            let name = format!("{:04}-{:02}", m / 12, m % 12 + 1);
-            filled.push(Count { count: months.get(name.as_str()).copied().unwrap_or(0), name });
-        }
-    }
     let mut files = ranked(files);
     files.truncate(100);
-    Ok(Stats { commits, first: first.to_owned(), last: last.to_owned(), authors: ranked(authors), months: filled, files })
+    Ok(Stats { commits: times.len() as u32, times, authors: ranked(authors), files })
 }

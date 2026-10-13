@@ -2,7 +2,8 @@
   import * as api from './api'
   import Label from './Label.svelte'
   import RevisionPicker from './RevisionPicker.svelte'
-  import { t, errorText } from './i18n.svelte'
+  import { t, errorText, timeZone } from './i18n.svelte'
+  import { calendarStats } from './time'
 
   let { tab, path, refs, disabled, section, run, onopen }: {
     tab: number; path: string; refs: api.Refs; disabled: boolean
@@ -25,7 +26,8 @@
   let modules = $state.raw<api.Submodule[]>([])
   let lfs = $state.raw<api.Lfs | null>(null)
   let stats = $state.raw<api.Stats | null>(null)
-  const peak = $derived(stats?.months.reduce((a, b) => (b.count > a.count ? b : a)))
+  const dates = $derived(stats ? calendarStats(stats.times, timeZone.current) : null)
+  const peak = $derived(dates?.months.length ? dates.months.reduce((a, b) => (b.count > a.count ? b : a)) : undefined)
   /** null 表示还没查过 */
   let locks = $state<string | null>(null)
   let pattern = $state('')
@@ -98,16 +100,16 @@
   </div>
 {:else if section === 'stats'}
   <p>{r.statsHint}</p>
-  {#if stats && peak}
+  {#if stats && dates && peak}
     <div class="tiles">
       <div><b>{stats.commits.toLocaleString()}</b>{r.statsCommits}</div>
       <div><b>{stats.authors.length}</b>{r.statsAuthors}</div>
-      <div><b>{stats.first}</b>{r.statsFirst}</div>
-      <div><b>{stats.last}</b>{r.statsLast}</div>
+      <div><b>{dates.first}</b>{r.statsFirst}</div>
+      <div><b>{dates.last}</b>{r.statsLast}</div>
     </div>
     <h3>{r.statsMonths}</h3>
-    <div class="months">{#each stats.months as m (m.name)}<i style:height="{(m.count / peak.count) * 100}%" title={r.statsMonth(m.name, m.count)}></i>{/each}</div>
-    <div class="axis"><span>{stats.months[0].name}</span><span>{r.statsPeak(peak.name, peak.count)}</span><span>{stats.months.at(-1)!.name}</span></div>
+    <div class="months">{#each dates.months as m (m.name)}<i style:height="{(m.count / peak.count) * 100}%" title={r.statsMonth(m.name, m.count)}></i>{/each}</div>
+    <div class="axis"><span>{dates.months[0].name}</span><span>{r.statsPeak(peak.name, peak.count)}</span><span>{dates.months.at(-1)!.name}</span></div>
     {#each [[r.statsByAuthor, stats.authors], [r.statsByFile, stats.files]] as const as [title, list]}
       <h3>{title}</h3>
       <div class="table ranked">

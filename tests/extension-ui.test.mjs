@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
+import * as time from '../src/lib/time.ts'
 
 // Exercise host handlers without launching VS Code; the smoke test covers the actual host.
 const require = createRequire(import.meta.url)
@@ -11,7 +12,7 @@ function load(name, deps) {
   const source = readFileSync(new URL(`../extension/src/${name}.ts`, import.meta.url), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText
   const exports = {}
-  new Function('require', 'exports', js)((id) => deps[id] ?? require(id), exports)
+  new Function('require', 'exports', js)((id) => deps[id] ?? (id === '../../src/lib/time' ? time : require(id)), exports)
   return exports
 }
 class Event {
@@ -106,6 +107,37 @@ test('diff editors show current-line blame on both sides and reload inactive ind
   assert.equal(annotation(blank), undefined)
   closed.fire(index.document)
   assert.equal(requests.at(-1).cancelled, true)
+
+  show(right)
+  core.cfg = (key) => key === 'blame.line.format' ? '${date}' : true
+  core.date = () => '2025-12-31 16:15'
+  prefs.fire()
+  assert.equal(annotation(right), '2025-12-31 16:15', 'time zone changes redraw cached blame without requesting Git again')
+})
+
+test('extension time zones persist globally, notify views and keep native dates and gutter dates consistent', async () => {
+  const saved = { webview: { prefs: '{"authorStyles":{}}' } }
+  const vscode = { EventEmitter: Event, env: { language: 'en' },
+    window: { createOutputChannel: () => ({}) }, workspace: {}, commands: { executeCommand() {} } }
+  const locale = { messages: { vscode: {} }, explanations: {} }
+  const deps = { vscode, './engine': { startEngine: () => ({}) }, '../../src/lib/locales/en': locale, '../../src/lib/locales/zh': locale }
+  const context = { workspaceState: { get: (_, fallback) => fallback },
+    globalState: { get: (key, fallback) => saved[key] ?? fallback, update: async (key, value) => { saved[key] = value } } }
+  const core = load('core', deps)
+  await core.openRepos(context, '')
+  let changes = 0
+  core.onPrefsChange.event(() => changes++)
+  const instant = Date.parse('2026-01-01T00:15:00Z') / 1000
+  for (const [zone, day] of [['Asia/Shanghai', '2026-01-01'], ['America/Los_Angeles', '2025-12-31'], ['', undefined]]) {
+    await core.store('timeZone', zone)
+    assert.equal(core.date(instant), new Date(instant * 1000).toLocaleString('en', { timeZone: zone || undefined }))
+    assert.equal(core.date(instant, true), day ?? time.formatTime(instant, '').slice(0, 10))
+    const reloaded = load('core', deps)
+    await reloaded.openRepos(context, '')
+    assert.equal(reloaded.date(instant), core.date(instant), 'a fresh extension host uses the saved global preference')
+  }
+  assert.equal(changes, 3)
+  assert.equal(core.stored().prefs, '{"authorStyles":{}}')
 })
 
 test('file-only refreshes read status alone and stay quiet until it changes', async () => {
@@ -217,9 +249,10 @@ test('SCM graph routes only bounded reads to workspace repositories and disposes
   let picked = 'all'
   load('graph-view', { vscode, './core': core, './sync': { pickScope: async () => picked, fetch: (r) => syncs.push(['fetch', r.tab]), pull: (r) => syncs.push(['pull', r.tab]), push: (r, same) => syncs.push(['push', r.tab, same]) }, './webview': { setupWebview: () => ({ dispose() {} }) } }).registerGraphView({ subscriptions: [], workspaceState: { get: (_, fallback) => fallback, update: (key, value) => saved[key] = value } })
   provider.resolveWebviewView(view)
-  core.stored = () => ({ diffColors: '{"added":"#0072b2","deleted":"#e69f00"}' })
+  core.stored = () => ({ diffColors: '{"added":"#0072b2","deleted":"#e69f00"}', timeZone: 'Asia/Shanghai' })
   prefs.fire()
-  assert.deepEqual(posted.at(-1), { store: 'diffColors', value: core.stored().diffColors }, 'an open sidebar receives color changes')
+  assert.deepEqual(posted.at(-2), { store: 'diffColors', value: core.stored().diffColors }, 'an open sidebar receives color changes')
+  assert.deepEqual(posted.at(-1), { store: 'timeZone', value: 'Asia/Shanghai' }, 'an open sidebar receives time zone changes')
   const send = async (cmd, args = {}) => { await Promise.all(messages.fire({ id: 1, cmd, args })); return posted.at(-1) }
   assert.deepEqual((await send('graph_repos')).value, repos.map((r) => ({ ...r, scope: 'auto' })))
   await send('rows', { tab: 1, start: 0, count: 128 })
@@ -314,11 +347,16 @@ test('history context menus resolve their list and stale file requests cannot re
     commands: { registerCommand: (id, fn) => commands.set(id, fn), executeCommand: (...args) => diffs.push(args) },
   }
   const core = {
-    repos: [repo], onRepoChange: repoChanged, repoOf: () => repo, rel: (_, u) => u.fsPath, v: {}, attempt: (p) => p,
+    repos: [repo], onRepoChange: repoChanged, onPrefsChange: new Event(), repoOf: () => repo, rel: (_, u) => u.fsPath, v: {}, attempt: (p) => p,
     revUri: (_, path, rev) => ({ path, rev }),
     engine: { call: (_, { path }) => { const d = deferred(); pending.set(path, d); return d.promise } },
   }
   load('history', { vscode, './core': core }).registerHistory({ subscriptions: [] })
+  const refreshed = []
+  for (const [id, view] of views) view.provider.onDidChangeTreeData(() => refreshed.push(id))
+  core.onPrefsChange.fire()
+  assert.deepEqual(refreshed, [...views.keys()], 'file, line and search histories redraw when time zone changes')
+  assert.equal(pending.size, 0, 'a display preference does not reload history from Git')
   const follow = async (path) => { vscode.window.activeTextEditor = { document: { uri: uri(path) } }; editorChanged.fire(); await Promise.resolve() }
   const a = [{ id: 'a', path: 'a.txt', subject: 'a' }]
   await follow('a.txt'); pending.get('a.txt').resolve(a); await new Promise(setImmediate)
@@ -374,7 +412,7 @@ test('line history follows selection without focus, coalesces reads and rejects 
     workspace: { onDidChangeTextDocument: changed.event, onDidSaveTextDocument: saved.event },
     commands: { registerCommand: (id, fn) => commands.set(id, fn), executeCommand: (...args) => executed.push(args) },
   }
-  const core = { repos: [repo], onRepoChange: repoChanged, repoOf: () => repo, rel: () => 'a.txt', v: { lineHistoryLoading: 'loading' }, t: { errors: { PR_LINE_HISTORY_CHANGED: 'changed' } }, errorText: String,
+  const core = { repos: [repo], onRepoChange: repoChanged, onPrefsChange: new Event(), repoOf: () => repo, rel: () => 'a.txt', v: { lineHistoryLoading: 'loading' }, t: { errors: { PR_LINE_HISTORY_CHANGED: 'changed' } }, errorText: String,
     engine: { call: (cmd, args) => { const job = deferred(); calls.push({ cmd, args, job }); return job.promise } },
   }
   const context = { subscriptions: [] }

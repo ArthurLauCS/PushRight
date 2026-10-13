@@ -310,21 +310,21 @@ fn patch_bisect_submodules_and_lfs() {
 }
 
 #[test]
-fn stats_count_commits_authors_months_and_files() {
+fn stats_count_commits_authors_times_and_files() {
     let dir = init("tools-stats");
     let at = |date: &str, author: &str, path: &str, text: &str| {
         fs::write(dir.join(path), text).unwrap();
         git(&dir, 0, &["add", "."]);
-        git(&dir, 0, &["commit", "-q", "-m", "c", &format!("--date={date}T12:00:00"), &format!("--author={author} <a@example.invalid>")]);
+        git(&dir, 0, &["commit", "-q", "-m", "c", &format!("--date={date}T00:15:00+08:00"), &format!("--author={author} <a@example.invalid>")]);
     };
     at("2026-01-10", "Ann", "中文 名.txt", "1\n");
     at("2026-01-20", "Bob", "b.txt", "1\n");
     at("2026-04-02", "Ann", "中文 名.txt", "2\n");
     let stats = tools::stats(&Repo::open(&dir).unwrap()).unwrap();
     let pairs = |list: &[tools::Count]| list.iter().map(|c| (c.name.clone(), c.count)).collect::<Vec<_>>();
-    assert_eq!((stats.commits, stats.first.as_str(), stats.last.as_str()), (3, "2026-01-10", "2026-04-02"));
+    assert_eq!(stats.commits, 3);
+    assert_eq!(stats.times, [1_775_060_100, 1_768_839_300, 1_767_975_300]);
     assert_eq!(pairs(&stats.authors), [("Ann".to_owned(), 2), ("Bob".to_owned(), 1)]);
-    assert_eq!(pairs(&stats.months), [("2026-01".to_owned(), 2), ("2026-02".to_owned(), 0), ("2026-03".to_owned(), 0), ("2026-04".to_owned(), 1)]);
     assert_eq!(pairs(&stats.files), [("中文 名.txt".to_owned(), 2), ("b.txt".to_owned(), 1)]);
     fs::remove_dir_all(&dir).unwrap();
 }

@@ -11,7 +11,9 @@
   import DiffColorSettings from './lib/DiffColorSettings.svelte'
   import { setDiffColors } from './lib/diff-colors.svelte'
   import { theme, toggleTheme } from './lib/theme.svelte'
-  import { t, locale, setLocale, errorText, type Locale } from './lib/i18n.svelte'
+  import { t, locale, setLocale, timeZone, setTimeZone, errorText, type Locale } from './lib/i18n.svelte'
+
+  const timeZones = [...new Set(['UTC', Intl.DateTimeFormat().resolvedOptions().timeZone, ...Intl.supportedValuesOf('timeZone')])]
 
   interface Tab {
     id: number
@@ -153,6 +155,10 @@
       setDiffColors(colors)
     }} />
     {#if desktop}<button class="btn quiet icon" title={t.autoSyncSettings} onclick={autoSyncSettings}><Icon name="sync" /></button>{/if}
+    <select class="field language timezone" aria-label={t.timeZone} title={t.timeZoneHint} value={timeZone.current} onchange={(e) => setTimeZone(e.currentTarget.value)}>
+      <option value="">{t.systemTimeZone}</option>
+      {#each timeZones as zone}<option value={zone}>{zone.replaceAll('_', ' ')}</option>{/each}
+    </select>
     <select class="field language" aria-label={t.language} title={t.language} value={locale.current} onchange={(e) => setLocale(e.currentTarget.value as Locale)}>
       <option value="en">English</option>
       <option value="zh-CN">简体中文</option>
@@ -218,6 +224,9 @@
   }
   .spacer {
     flex: 1;
+  }
+  .timezone {
+    max-width: 190px;
   }
   .body {
     flex: 1;

@@ -6,11 +6,11 @@
 
 PushRight brings Git source control, blame, history and a commit graph into VS Code. It makes push destinations explicit and defaults every Pull to **Rebase instead of merge**. English and Simplified Chinese are included; the extension follows VS Code's display language.
 
-**1.1.10** unifies the full graph interface: the toolbar stays on one line, and the conflict view and dialogs no longer get squeezed in narrow windows. Fetch, pull and push in the sidebar graph use the same icons as the desktop app.
+**1.1.11** adds a global time-zone selector, a Worktrees view, commit templates and checks, graph filtering and repository statistics. The full graph also includes external diff/merge tools, editable conflict resolution, bisect, submodules, Git LFS and patch application.
 
 PushRight adds native Git commands to Chinese action labels across menus, dialogs and the command palette. Open **Repository settings** in Source Control to disable revert for the local repository. The setting is shared with the desktop app and linked worktrees; it blocks starting and continuing revert while allowing abort. Revert is allowed by default. Terminal Git and other tools are unaffected.
 
-**[Download VSIX · Windows x64 · 1.1.10](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10)
+**[Download VSIX · Windows x64 · 1.1.11](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.11/pushright-win32-x64-1.1.11.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11)
 
 ## Preview
 
@@ -19,6 +19,10 @@ PushRight adds native Git commands to Chinese action labels across menus, dialog
 The full graph interface is shared with the desktop app, shown here in 1.1.10 with a local demo repository and fictional identities.
 
 ![PushRight 1.1.10: Pull defaults to Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
+
+## Time zone
+
+Run **PushRight: Open Commit Graph** and use the time-zone dropdown at the top right. Choose **System time zone**, **UTC** or a region such as **Asia/Shanghai**. The preference is saved globally in the editor and applies immediately to all repositories: the full and sidebar graphs, commit details, file and line history, search, blame, worktrees and repository statistics. Daylight saving follows the commit's date. The desktop app and each editor keep separate preferences.
 
 ## Diff colors
 
@@ -103,11 +107,11 @@ Ignore rules do not hide changes to tracked files. Stop-tracking refuses to disc
 
 ## Install from VSIX
 
-Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
+Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
 
 ```sh
-code --install-extension pushright-win32-x64-1.1.10.vsix
-cursor --install-extension pushright-win32-x64-1.1.10.vsix
+code --install-extension pushright-win32-x64-1.1.11.vsix
+cursor --install-extension pushright-win32-x64-1.1.11.vsix
 ```
 
 Report problems in [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues), including the version and reproduction steps. Remove credentials and private repository information from logs before sharing.

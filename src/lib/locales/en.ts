@@ -1,6 +1,9 @@
 import type { messages as zh, explanations as zhHelp } from './zh'
 
 export const messages = {
+  timeZone: 'Time zone',
+  systemTimeZone: 'System time zone',
+  timeZoneHint: 'Time zone for all repositories, history and blame. Saved for this app; daylight saving time is applied automatically.',
   diffColors: {
     title: 'Diff colors', preset: 'Color preset', default: 'Restore original colors', custom: 'Custom',
     blueOrange: 'Blue / orange', purpleGold: 'Purple / gold', cyanRose: 'Cyan / rose',

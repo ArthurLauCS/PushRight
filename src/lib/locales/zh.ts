@@ -1,5 +1,8 @@
 // 全部界面文案集中在此
 export const messages = {
+  timeZone: '时区',
+  systemTimeZone: '跟随系统时区',
+  timeZoneHint: '所有仓库、历史和 Blame 的显示时区。保存在当前应用中，自动适用夏令时。',
   diffColors: {
     title: '差异配色', preset: '配色预设', default: '恢复原配色', custom: '自定义',
     blueOrange: '蓝 / 橙', purpleGold: '紫 / 金', cyanRose: '青 / 玫红',

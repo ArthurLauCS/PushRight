@@ -6,6 +6,7 @@ import { explanations as enHelp, messages as en } from '../../src/lib/locales/en
 import { explanations as zhHelp, messages as zh } from '../../src/lib/locales/zh'
 import type { AuthorStyle } from '../../src/lib/prefs.svelte'
 import { startEngine, type Engine } from './engine'
+import { formatTime, readTimeZone } from '../../src/lib/time'
 
 const chinese = vscode.env.language.toLowerCase().startsWith('zh')
 export const locale = chinese ? 'zh-CN' : 'en'
@@ -247,7 +248,18 @@ export function ago(sec: number): string {
   }
   return format.format(0, 'minute')
 }
-export const date = (sec: number) => new Date(sec * 1000).toLocaleString(locale)
+let savedTimeZone: string | undefined
+let timeZone = ''
+let dateFormatter: Intl.DateTimeFormat
+export function date(sec: number, dateOnly = false): string {
+  const saved = stored().timeZone ?? ''
+  if (saved !== savedTimeZone) {
+    savedTimeZone = saved
+    timeZone = readTimeZone(saved)
+    dateFormatter = new Intl.DateTimeFormat(locale, { timeZone: timeZone || undefined, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+  }
+  return dateOnly ? formatTime(sec, timeZone).slice(0, 10) : dateFormatter.format(new Date(sec * 1000))
+}
 
 // 界面偏好与提交图面板共用一份，存在 globalState 的 webview 键下（键和值就是面板的 localStorage）
 
@@ -258,7 +270,7 @@ export async function store(key: string, value: string | null) {
   if (value === null) delete all[key]
   else all[key] = value
   await context.globalState.update('webview', all)
-  if (key === 'prefs' || key === 'diffColors') onPrefsChange.fire()
+  if (key === 'prefs' || key === 'diffColors' || key === 'timeZone') onPrefsChange.fire()
 }
 
 export function authorStyles(): Record<string, AuthorStyle> {

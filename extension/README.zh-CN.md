@@ -6,11 +6,11 @@
 
 PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图。推送前明确目标，每次 Pull 默认勾选 **Rebase instead of merge**。包含中英文界面，扩展语言跟随 VS Code。
 
-**1.1.10 正式版**统一了完整提交图的界面：工具栏保持一行，冲突视图和弹窗在窄窗口下不再被挤压；侧栏提交图的获取、拉取、推送改用与桌面版一致的图标。
+**1.1.11 正式版**新增全局时区选择、工作树视图、提交模板与检查、提交图筛选和仓库统计。完整提交图还提供外部对比／合并工具、冲突手动编辑、二分查找、子模块、Git LFS 和补丁应用。
 
 中文菜单、弹窗选项和命令面板附加对应 Git 命令。源代码管理中的“仓库设置”可禁用当前仓库的 revert，与桌面版及关联工作树共享；禁用后阻止发起和继续 revert，仍允许中止。默认允许 revert，此设置不限制终端或其他 Git 工具。
 
-**[下载 VSIX · Windows x64 · 1.1.10](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10)
+**[下载 VSIX · Windows x64 · 1.1.11](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.11/pushright-win32-x64-1.1.11.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11)
 
 ## 界面预览
 
@@ -19,6 +19,10 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 扩展与桌面版共用完整提交图界面；上图来自 1.1.10 桌面程序，使用本地示例仓库和虚构作者。
 
 ![PushRight 1.1.10：拉取默认使用 Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
+
+## 时区
+
+运行 **PushRight: Open Commit Graph（打开提交图）**，使用右上角时区下拉框，选择“跟随系统时区”、`UTC` 或 `Asia/Shanghai` 等地区。偏好全局保存在当前编辑器中，对所有仓库立即生效：完整与侧栏提交图、提交详情、文件与行历史、搜索、Blame、工作树及仓库统计均使用所选时区，按提交日期自动处理夏令时。桌面版和各编辑器分别保存偏好。
 
 ## 差异配色
 
@@ -102,11 +106,11 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 
 ## VSIX 安装
 
-在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
+在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
 
 ```sh
-code --install-extension pushright-win32-x64-1.1.10.vsix
-cursor --install-extension pushright-win32-x64-1.1.10.vsix
+code --install-extension pushright-win32-x64-1.1.11.vsix
+cursor --install-extension pushright-win32-x64-1.1.11.vsix
 ```
 
 反馈问题请提交到 [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues)，附版本和复现步骤；分享日志前移除凭据和私有仓库信息。
