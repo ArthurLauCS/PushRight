@@ -28,6 +28,7 @@
     discard,
     discardLines,
     onfilemenu,
+    onexternal,
     check,
     beforeCommit,
     showLog,
@@ -50,6 +51,8 @@
     discardLines: (path: string, hunk: number, header: string, lines: number[]) => void
     /** 文件行的右键菜单 */
     onfilemenu: (e: MouseEvent, entry: api.Entry, staged: boolean) => void
+    /** 用外部合并工具打开冲突文件；没配置外部工具时不传 */
+    onexternal?: (path: string) => void
     /** 提交前检查：仓库设置里的命令、是否自动、是否正在跑、上一次的结果 */
     check: { command: string; auto: boolean; running: boolean; result: api.Log | null; run: () => Promise<boolean> }
     /** 提交前调用；返回 false 就不提交 */
@@ -275,6 +278,7 @@
       {rebasing}
       onresolve={(choices) => sel && run(() => api.conflictResolve(tab, sel!.path, choices))}
       ontake={(theirs) => sel && run(() => api.conflictTake(tab, sel!.path, theirs))}
+      onexternal={onexternal && (() => sel && onexternal(sel.path))}
     />
   {:else}
     <DiffView
