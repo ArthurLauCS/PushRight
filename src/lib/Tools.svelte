@@ -17,7 +17,7 @@
     exec: (op: api.Op) => Promise<boolean>; run: (op: api.Op) => Promise<api.Log | undefined>; onopen: (path: string) => void; rebase: (plan: api.RebasePlan, updateRefs: boolean) => Promise<api.Log | undefined>
     ask: (spec: Spec) => Promise<Values | null>
   } = $props()
-  let section = $state<'compare' | 'remotes' | 'rebase' | 'reflog' | 'bisect' | 'submodules' | 'lfs' | 'patch'>('compare')
+  let section = $state<'compare' | 'remotes' | 'rebase' | 'reflog' | 'bisect' | 'submodules' | 'lfs' | 'patch' | 'stats'>('compare')
   let left = $state(untrack(() => initialLeft))
   let right = $state(untrack(() => initialRight))
   let commonBase = $state(untrack(() => auto))
@@ -122,7 +122,7 @@
 
 <div class="toolbox">
   <nav aria-label={t.tools.nav}>
-    {#each [['groupHistory', 'compare', 'rebase', 'reflog', 'bisect'], ['groupRepo', 'remotes', 'submodules', 'lfs', 'patch']] as [group, ...keys]}
+    {#each [['groupHistory', 'compare', 'rebase', 'reflog', 'bisect'], ['groupRepo', 'remotes', 'submodules', 'lfs', 'patch', 'stats']] as [group, ...keys]}
       <div class="actions"><small>{t.tools[group as 'groupHistory']}</small>
         {#each keys as key}
           <button class="btn" class:on={section === key} disabled={disabled} onclick={() => choose(key as typeof section)}><Label text={t.tools[key as typeof section]} /></button>
