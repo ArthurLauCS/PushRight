@@ -69,6 +69,7 @@ The branch picker lists local branches before remote branches in a fixed order a
 - Change the commit name and email for the current repository.
 - The commit box is pre-filled with the repository's commit message template. **PushRight: Recent Commit Messages…** reuses an earlier message; **PushRight: Run Pre-Commit Check** runs the repository's check command. Set the template and the check command under **Repository settings** in the full graph view.
 - The sidebar graph has **Tags** and **First parent only** toggles.
+- The **Worktrees** view on the PushRight page lists the repository's worktrees. Click one to open it in a new window (the current window stays), use **+** to create one from an existing or a new branch, and the trash button to remove one. Removing deletes only the folder; the branch and its commits remain.
 - In the full **Open Commit Graph** view, choose **Repository tools** to compare revisions, mark reviewed files, manage remote URLs, edit rebase actions/order, and recover reflog entries into new branches. Clone and initialize are available on the welcome page.
 - File history, line history and search load 200 entries per page with **Load more**. Unchanged selections in modified or unsaved buffers are mapped back to HEAD for line history.
 - Preview image changes side by side and large patches in read-only pages of 1,000 lines.
