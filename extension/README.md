@@ -6,11 +6,11 @@
 
 PushRight brings Git source control, blame, history and a commit graph into VS Code. It makes push destinations explicit and defaults every Pull to **Rebase instead of merge**. English and Simplified Chinese are included; the extension follows VS Code's display language.
 
-**1.1.10** unifies the full graph interface: the toolbar stays on one line, and the conflict view and dialogs no longer get squeezed in narrow windows. Fetch, pull and push in the sidebar graph use the same icons as the desktop app.
+**1.1.11** adds a global time-zone selector, a Worktrees view, commit templates and checks, graph filtering and repository statistics. The full graph also includes external diff/merge tools, editable conflict resolution, bisect, submodules, Git LFS and patch application.
 
 PushRight adds native Git commands to Chinese action labels across menus, dialogs and the command palette. Open **Repository settings** in Source Control to disable revert for the local repository. The setting is shared with the desktop app and linked worktrees; it blocks starting and continuing revert while allowing abort. Revert is allowed by default. Terminal Git and other tools are unaffected.
 
-**[Download VSIX · Windows x64 · 1.1.10](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.10/pushright-win32-x64-1.1.10.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10)
+**[Download VSIX · Windows x64 · 1.1.11](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.11/pushright-win32-x64-1.1.11.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11)
 
 ## Preview
 
@@ -20,9 +20,27 @@ The full graph interface is shared with the desktop app, shown here in 1.1.10 wi
 
 ![PushRight 1.1.10: Pull defaults to Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
 
+## Time zone
+
+Run **PushRight: Open Commit Graph** and use the time-zone dropdown at the top right. Choose **System time zone**, **UTC** or a region such as **Asia/Shanghai**. The preference is saved globally in the editor and applies immediately to all repositories: the full and sidebar graphs, commit details, file and line history, search, blame, worktrees and repository statistics. Daylight saving follows the commit's date. The desktop app and each editor keep separate preferences.
+
 ## Diff colors
 
 Run **PushRight: Diff Colors…** from the command palette or Source Control menu, or open **Diff Colors** in the full graph toolbar. Choose Blue / Orange, Purple / Gold, Cyan / Rose, or custom added/deleted HEX colors; the full graph dialog also provides color pickers and a live preview. Applies to PushRight and native VS Code / Cursor diff editors, including Review Branch. This updates user-level `workbench.colorCustomizations`; workspace overrides may take precedence. **Restore original colors** restores the previous values while preserving unrelated settings and later manual edits.
+
+## Diff tools and file tree
+
+Diffs in the full graph have seven tools above them: ignore whitespace, show hidden symbols, word wrap, fewer / more context lines, show entire file, and side by side. Changed files can be shown as a folder tree, filtered, and staged a folder at a time. Native diff editors do not repeat these buttons; use the settings VS Code / Cursor already provide:
+
+| Tool | Native diff setting |
+| - | - |
+| Ignore whitespace | `diffEditor.ignoreTrimWhitespace` (the whitespace icon at the top right of the editor) |
+| Show hidden symbols | `editor.renderWhitespace` |
+| Word wrap | `diffEditor.wordWrap` |
+| Context lines, entire file | `diffEditor.hideUnchangedRegions.enabled` and `contextLineCount` |
+| Side by side | `diffEditor.renderSideBySide` |
+
+The Source Control panel switches between tree and list with its own **View as Tree**. Files under an expanded commit in the sidebar graph are indented by folder.
 
 ## Requirements
 
@@ -53,6 +71,9 @@ The branch picker lists local branches before remote branches in a fixed order a
 - New folders list their untracked files individually, so you can inspect and stage each file before committing. Ignored files stay excluded.
 - Run **PushRight: Open Commit Graph**, or use the sidebar graph's title button, to browse branches, commits and file differences in an editor tab. If the sidebar graph was hidden, enable **PushRight Graph** in Source Control's **Views** menu.
 - Change the commit name and email for the current repository.
+- The commit box is pre-filled with the repository's commit message template. **PushRight: Recent Commit Messages…** reuses an earlier message; **PushRight: Run Pre-Commit Check** runs the repository's check command. Set the template and the check command under **Repository settings** in the full graph view.
+- The sidebar graph has **Tags** and **First parent only** toggles.
+- The **Worktrees** view on the PushRight page lists the repository's worktrees. Click one to open it in a new window (the current window stays), use **+** to create one from an existing or a new branch, and the trash button to remove one. Removing deletes only the folder; the branch and its commits remain.
 - In the full **Open Commit Graph** view, choose **Repository tools** to compare revisions, mark reviewed files, manage remote URLs, edit rebase actions/order, and recover reflog entries into new branches. Clone and initialize are available on the welcome page.
 - File history, line history and search load 200 entries per page with **Load more**. Unchanged selections in modified or unsaved buffers are mapped back to HEAD for line history.
 - Preview image changes side by side and large patches in read-only pages of 1,000 lines.
@@ -86,11 +107,11 @@ Ignore rules do not hide changes to tracked files. Stop-tracking refuses to disc
 
 ## Install from VSIX
 
-Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.10), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
+Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.11), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
 
 ```sh
-code --install-extension pushright-win32-x64-1.1.10.vsix
-cursor --install-extension pushright-win32-x64-1.1.10.vsix
+code --install-extension pushright-win32-x64-1.1.11.vsix
+cursor --install-extension pushright-win32-x64-1.1.11.vsix
 ```
 
 Report problems in [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues), including the version and reproduction steps. Remove credentials and private repository information from logs before sharing.

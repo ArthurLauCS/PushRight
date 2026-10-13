@@ -99,15 +99,22 @@ pub(crate) fn tips(gix: &gix::Repository) -> Result<Vec<ObjectId>> {
 }
 
 /// Auto 包含 HEAD、上游和基准远程分支；筛选改变遍历起点，不改变检出的分支。
-pub(crate) fn graph_tips(repo: &Repo, scope: &str) -> Result<Vec<ObjectId>> {
-    if scope == "all" { return tips(&repo.gix()); }
+/// 其余取值是引用全名，多个以换行分隔（引用名里不会有换行），提交取并集。
+/// 以 `^` 开头的一行是「相比」的基准：它和它的祖先都不显示（同 `git log ^基准 分支`）。
+/// 返回 (起点, 不显示的起点)。
+pub(crate) fn graph_tips(repo: &Repo, scope: &str) -> Result<(Vec<ObjectId>, Vec<ObjectId>)> {
+    if scope == "all" { return Ok((tips(&repo.gix())?, Vec::new())); }
     if scope != "auto" {
         let refs = list_with(repo, false)?;
-        let r = refs.refs.iter().find(|r| r.name == scope).ok_or("PR_GRAPH_REF_GONE")?;
-        return Ok(vec![ObjectId::from_hex(r.id.as_bytes()).map_err(err)?]);
+        let ids = |hidden: bool| refs.refs.iter().filter(|r| scope.split('\n').any(|name| name.strip_prefix('^').map_or(!hidden && name == r.name, |name| hidden && name == r.name)))
+            .map(|r| ObjectId::from_hex(r.id.as_bytes()).map_err(err)).collect::<Result<Vec<_>>>();
+        // 已经删掉的引用跳过；一个都不在才报错
+        let shown = ids(false)?;
+        if shown.is_empty() { return Err("PR_GRAPH_REF_GONE".into()); }
+        return Ok((shown, ids(true)?));
     }
     let head = repo.gix().head_name().map_err(err)?.map(|n| n.as_bstr().to_string());
-    let Some(head) = head.as_deref() else { return Ok(repo.gix().head_id().ok().map(|id| id.detach()).into_iter().collect()) };
+    let Some(head) = head.as_deref() else { return Ok((repo.gix().head_id().ok().map(|id| id.detach()).into_iter().collect(), Vec::new())) };
     let branch = head.trim_start_matches("refs/heads/");
     // 引用、配置、远程、reflog 各是一个 git 进程，并行跑
     let (refs, configured, remotes, from_reflog) = std::thread::scope(|s| {
@@ -145,7 +152,7 @@ pub(crate) fn graph_tips(repo: &Repo, scope: &str) -> Result<Vec<ObjectId>> {
     }
     ids.sort();
     ids.dedup();
-    ids.iter().map(|id| ObjectId::from_hex(id.as_bytes()).map_err(err)).collect()
+    Ok((ids.iter().map(|id| ObjectId::from_hex(id.as_bytes()).map_err(err)).collect::<Result<_>>()?, Vec::new()))
 }
 
 pub fn list(repo: &Repo) -> Result<Refs> {
@@ -223,6 +230,15 @@ pub fn worktrees(repo: &Repo) -> Result<Vec<Worktree>> {
             _ => {}
         }
     }
+    // 子模块的主工作树在 git 的清单里是它的 git 目录（父仓库的 .git/modules/…），真正的文件夹记在 core.worktree 里
+    if let Some(main) = list.first_mut() {
+        if let Ok(dir) = git_at(Path::new(&main.path), &["config", "--get", "core.worktree"], &[]) {
+            if let Ok(real) = std::fs::canonicalize(Path::new(&main.path).join(String::from_utf8_lossy(&dir).trim())) {
+                // canonicalize 在 Windows 上带 \\?\ 前缀；和 git 给的其他路径一样用正斜杠
+                main.path = real.to_string_lossy().trim_start_matches(r"\\?\").replace('\\', "/");
+            }
+        }
+    }
     // 每个工作树要跑三条 git 命令，各开一个线程并行
     let here = std::fs::canonicalize(&repo.path).ok();
     std::thread::scope(|s| {
@@ -275,4 +291,36 @@ pub fn tracking(repo: &Repo) -> Result<Vec<Track>> {
             Some(Track { name: name.to_owned(), ahead: count("ahead"), behind: count("behind"), gone: track == "gone" })
         })
         .collect())
+}
+
+/// 已经完全合入 `base` 的本地分支（完整引用名），「清理分支」用。
+/// 不算在内：`base` 自己、任何工作树里检出着的分支（含当前分支）、和 `base` 指向同一个提交的分支（多半是刚建还没提交的）。
+pub fn merged_branches(repo: &Repo, base: &str) -> Result<Vec<String>> {
+    let tip = crate::tools::revision(repo, base)?;
+    let out = repo.git(&["branch", "--merged", &tip, "--format=%(refname)%00%(objectname)%00%(worktreepath)"])?;
+    Ok(String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split('\0');
+            let (name, id, worktree) = (f.next()?, f.next()?, f.next()?);
+            (name.starts_with("refs/heads/") && id != tip && worktree.is_empty() && name != base && name.strip_prefix("refs/heads/") != Some(base)).then(|| name.to_owned())
+        })
+        .collect())
+}
+
+/// 上游改了、本地也改着（未提交或已提交未推送）的二进制文件。
+/// 二进制文件没法合并，两边都改就必有一方白做，所以拉取之前就要提示。没有上游时返回空。
+pub fn binary_overlap(repo: &Repo) -> Result<Vec<String>> {
+    // numstat 里二进制文件的增删行数都是 "-"；三个点表示「上游相对共同祖先的改动」
+    let Ok(theirs) = repo.git(&["diff", "--numstat", "--no-renames", "-z", "HEAD...@{upstream}"]) else { return Ok(Vec::new()) };
+    let theirs = String::from_utf8_lossy(&theirs);
+    let binary: Vec<&str> = theirs.split('\0').filter_map(|rec| rec.strip_prefix("-\t-\t")).collect();
+    if binary.is_empty() {
+        return Ok(Vec::new());
+    }
+    let committed = repo.git(&["diff", "--name-only", "--no-renames", "-z", "@{upstream}...HEAD"])?;
+    let committed = String::from_utf8_lossy(&committed);
+    let working = crate::status::status(repo)?;
+    let mine: std::collections::HashSet<&str> = committed.split('\0').chain(working.iter().map(|e| e.path.as_str())).collect();
+    Ok(binary.into_iter().filter(|path| mine.contains(path)).map(str::to_owned).collect())
 }

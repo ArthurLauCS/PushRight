@@ -3,8 +3,10 @@
   import { startAutoSync, type AutoSync } from './auto-sync'
   import * as api from './api'
   import { BRANCH_NAME } from './branch-name'
+  import CommitSearch from './CommitSearch.svelte'
   import ContextMenu, { type Item } from './ContextMenu.svelte'
   import Detail from './Detail.svelte'
+  import { diffOptions } from './diff-prefs.svelte'
   import Dialog from './Dialog.svelte'
   import type { ExplainKey } from './explain'
   import { explain } from './i18n.svelte'
@@ -39,7 +41,52 @@
     autoSync?: AutoSync
   } = $props()
 
-  let count = $state(untrack(() => initialCount))
+  /** 按仓库路径记住的引用名单，存 localStorage 的 `key` */
+  const savedLists = (key: string): Record<string, string[]> => {
+    try { return JSON.parse(localStorage.getItem(key) ?? '{}') ?? {} } catch { return {} }
+  }
+  function saveList(key: string, list: string[]) {
+    const all = savedLists(key)
+    if (list.length) all[path] = list
+    else delete all[path]
+    localStorage.setItem(key, JSON.stringify(all))
+  }
+  /** 提交图只显示这些引用可达的提交，空表示全部；按仓库路径记住 */
+  let scope = $state.raw<string[]>(untrack(() => savedLists('graphScopes')[path] ?? []))
+  /** 自动获取之后要快进的本地分支（引用全名）；按仓库路径记住 */
+  let autoFf = $state.raw<string[]>(untrack(() => savedLists('autoFastForward')[path] ?? []))
+  /** 上一轮自动快进里没能快进的分支和原因 */
+  let autoFfSkipped = $state.raw<string[]>([])
+  /** 固定在侧栏前列的分支（引用全名）；按仓库路径记住 */
+  let pinned = $state.raw<string[]>(untrack(() => savedLists('pinnedBranches')[path] ?? []))
+  function togglePin(name: string) {
+    pinned = pinned.includes(name) ? pinned.filter((n) => n !== name) : [...pinned, name]
+    saveList('pinnedBranches', pinned)
+  }
+
+  /** 列出可以清理的本地分支让用户勾选：已经合入主干的默认勾上，上游已删除但没合并的默认不勾 */
+  async function cleanBranches() {
+    const base = compareBases('')[0]
+    if (!base) return void (error = t.branchList.noBase)
+    const merged = new Set((await guard(api.mergedBranches(tab, short(base)))) ?? [])
+    const gone = [...tracks.values()].filter((x) => x.gone && x.name !== refs.head && !merged.has(x.name)).map((x) => x.name)
+    if (!merged.size && !gone.length) return void ask({ title: t.branchList.clean, message: t.branchList.nothing(short(base)) })
+    const v = await ask({
+      title: t.branchList.clean,
+      message: t.branchList.cleanHint(short(base)),
+      danger: true,
+      confirm: t.branchList.cleanConfirm,
+      fields: [
+        ...[...merged].map((name) => ({ key: name, label: t.branchList.merged(short(name), short(base)), type: 'checkbox' as const, value: true })),
+        ...gone.map((name) => ({ key: name, label: t.branchList.gone(short(name)), type: 'checkbox' as const })),
+      ],
+    })
+    if (!v) return
+    // 没合并的要强制删除才删得掉；每个删除都进撤销列表
+    for (const name of [...merged, ...gone]) if (v[name] && !(await exec({ op: 'delete_branch', name: short(name), force: !merged.has(name) }))) break
+  }
+  // 有筛选时首屏不先画打开仓库时加载的全量图
+  let count = $state(untrack(() => (scope.length ? 0 : initialCount)))
   let version = $state(0)
   let loadingAll = $state(false)
   let busy = $state(false)
@@ -54,26 +101,40 @@
   let worktrees = $state.raw<api.Worktree[]>([])
   let entries = $state.raw<api.Entry[]>([])
   let identity = $state.raw<api.Identity | null>(null)
+  /** 进行中的操作在 Git 里记下的信息；没有进行中的操作时为 null */
+  let operation = $state.raw<api.Operation | null>(null)
+  /** 这次操作冲突过的全部文件：Git 记下的清单加上现在还没解决的 */
+  const conflicts = $derived.by(() => {
+    const open = new Set(entries.filter((e) => e.conflicted).map((e) => e.path))
+    return [...new Set([...(operation?.conflicts ?? []), ...open])].map((path) => ({ path, resolved: !open.has(path) }))
+  })
+  /** 提交信息模板和提交前检查，存在仓库的本地 git 配置里 */
+  let workflow = $state.raw<api.WorkflowSettings>({ template: '', check_command: '', check_before_commit: false })
+  let externalTools = $state.raw<api.ExternalTools>({ diff: '', merge: '' })
+  /** 上游改了、本地也改着的二进制文件；拉取前提示 */
+  let overlap = $state.raw<string[]>([])
   let logs = $state.raw<api.Log[]>([])
   let showLog = $state(false)
   let view = $state<'history' | 'changes' | 'worktrees' | 'tools'>('history')
   let compareLeft = $state('HEAD~1')
   let compareRight = $state('HEAD')
   let compareVersion = $state(0)
+  /** 打开比较页时直接从共同祖先开始比较 */
+  let compareAuto = $state(false)
 
-  async function rebase(plan: api.RebasePlan) {
-    if (busy || workingBusy) return false
+  async function rebase(plan: api.RebasePlan, updateRefs: boolean) {
+    if (busy || workingBusy) return
     busy = true
     error = ''
-    const log = await guard(api.rebaseRun(tab, plan))
+    const log = await guard(api.rebaseRun(tab, plan, updateRefs))
     if (log) { logs = [...logs, log]; showLog = true }
     busy = false
     await refresh()
     if (refs.in_progress) view = 'changes'
-    return log?.ok ?? false
+    return log
   }
 
-  function compareWith(id: string) { compareRight = id; ++compareVersion; view = 'tools' }
+  function compareWith(id: string) { compareRight = id; compareAuto = false; ++compareVersion; view = 'tools' }
   let tracks = $state.raw(new Map<string, api.Track>())
   let selectedRow = $state<number | null>(null)
   let selectedId: string | null = null
@@ -84,15 +145,24 @@
   let dialog = $state<Dialog>()
   let menu = $state<ContextMenu>()
   let help = $state<Help>()
+  let search = $state<CommitSearch>()
   let pendingJump: string | null = null
   /** 可撤销的操作，最近的在最后。每项是把仓库退回去要执行的操作 */
   let undos = $state.raw<{ title: string; ops: api.Op[] }[]>([])
 
   const badges = $derived.by(() => {
     const map = new Map<string, api.Ref[]>()
-    for (const r of refs.refs) map.set(r.id, [...(map.get(r.id) ?? []), r])
+    for (const r of refs.refs) if (!graphView.hideTags || !r.name.startsWith('refs/tags/')) map.set(r.id, [...(map.get(r.id) ?? []), r])
     return map
   })
+  /** 提交图的显示开关，所有仓库共用：隐藏标签只影响标记；只看主线要重新加载图 */
+  const graphView = $state<{ hideTags: boolean; firstParent: boolean }>({ hideTags: false, firstParent: false, ...untrack(() => { try { return JSON.parse(localStorage.getItem('graphView') ?? '{}') } catch { return {} } }) })
+  async function setGraphView(key: 'hideTags' | 'firstParent') {
+    if (loadingAll) return
+    graphView[key] = !graphView[key]
+    localStorage.setItem('graphView', JSON.stringify(graphView))
+    if (key === 'firstParent') await setScope(scope)
+  }
   /** 当前分支的短名；游离 HEAD 时为 null */
   const head = $derived(refs.head?.startsWith('refs/heads/') ? refs.head.slice(11) : null)
   const short = (name: string) => name.replace(/^refs\/(heads|tags|remotes)\//, '')
@@ -110,8 +180,11 @@
   }
 
   async function loadSidebar() {
-    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab)]))
-    if (r) [refs, stashes, worktrees, , identity] = r
+    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab), api.workflowSettings(tab), api.externalTools(tab)]))
+    if (r) [refs, stashes, worktrees, , identity, workflow, externalTools] = r
+    operation = refs.in_progress ? ((await guard(api.operation(tab))) ?? null) : null
+    // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
+    overlap = refs.ahead_behind?.[1] ? ((await guard(api.binaryOverlap(tab))) ?? []) : []
     // 各分支的同步状态在分支多时要算一两秒，不等它
     api.tracking(tab).then(
       (list) => (tracks = new Map(list.map((x) => [x.name, x]))),
@@ -121,13 +194,103 @@
 
   async function loadAll() {
     loadingAll = true
-    const n = await guard(api.loadGraph(tab, true))
+    const n = await guard(api.loadGraph(tab, true, scope.join('\n') || undefined, graphView.firstParent))
     loadingAll = false
     if (n === undefined) return
     count = n
     version++
     if (pendingJump) jump(pendingJump)
     pendingJump = null
+  }
+
+  function saveScope(next: string[]) {
+    scope = next
+    saveList('graphScopes', next)
+  }
+
+  function toggleAutoFf(name: string) {
+    autoFf = autoFf.includes(name) ? autoFf.filter((n) => n !== name) : [...autoFf, name]
+    saveList('autoFastForward', autoFf)
+  }
+
+  /** 自动获取之后，把勾选过的分支快进到上游。只做不丢提交、不碰未提交改动的那一种，其余的说明原因 */
+  async function autoFastForward() {
+    const alive = autoFf.filter((name) => refs.refs.some((r) => r.name === name))
+    if (alive.length !== autoFf.length) saveList('autoFastForward', (autoFf = alive))
+    if (!alive.length) return void (autoFfSkipped = [])
+    const tracking = await api.tracking(tab)
+    const skipped: string[] = []
+    for (const name of alive) {
+      const track = tracking.find((x) => x.name === name)
+      const branch = short(name)
+      if (!track || track.gone) skipped.push(t.autoFf.noUpstream(branch))
+      else if (!track.behind) continue
+      else if (track.ahead) skipped.push(t.autoFf.diverged(branch))
+      else if (worktrees.some((w) => !w.current && w.branch === name)) skipped.push(t.autoFf.elsewhere(branch))
+      else if (name === refs.head && (await api.status(tab)).length) skipped.push(t.autoFf.dirty(branch))
+      else {
+        const log = await api.op(tab, { op: 'fast_forward', branch })
+        logs = [...logs.slice(-99), log]
+        if (!log.ok) skipped.push(t.autoFf.failed(branch))
+      }
+    }
+    autoFfSkipped = skipped
+  }
+
+  /** 被删掉的引用从筛选里拿掉；返回筛选有没有变 */
+  function pruneScope() {
+    let alive = scope.filter((name) => refs.refs.some((r) => r.name === name.replace(/^\^/, '')))
+    // 只剩对比基准、没有要看的分支时，整个筛选作废
+    if (alive.every((name) => name.startsWith('^'))) alive = []
+    if (alive.length !== scope.length) saveScope(alive)
+    return alive.length !== scope.length
+  }
+
+  /** 换一组引用重画提交图；正在看的提交留着，只重新找它在第几行 */
+  async function setScope(next: string[]) {
+    if (loadingAll) return
+    if (next.every((name) => name.startsWith('^'))) next = []
+    saveScope(next)
+    await loadAll()
+    const id = selectedId
+    const row = id ? await guard(api.rowOf(tab, id)) : null
+    if (selectedId === id) selectedRow = row ?? null
+  }
+  const toggleScope = (name: string) => setScope(scope.includes(name) ? scope.filter((n) => n !== name) : [...scope, name])
+  /** 筛选里要显示的引用，和「相比」的基准（以 ^ 开头存在同一个列表里） */
+  const scopeRefs = $derived(scope.filter((name) => !name.startsWith('^')))
+  const scopeBase = $derived(scope.find((name) => name.startsWith('^'))?.slice(1))
+
+  /** 只看 `name` 上有、`base` 上没有的提交 */
+  function compareBranch(name: string, base: string) {
+    view = 'history'
+    return setScope([name, `^${base}`])
+  }
+  /** 右键菜单里直接列出来的对比基准：常用主干分支（本地优先）和当前分支 */
+  function compareBases(name: string) {
+    const has = (ref: string) => refs.refs.some((r) => r.name === ref)
+    const common = ['develop', 'dev', 'main', 'master'].map((b) => [`refs/heads/${b}`, `refs/remotes/origin/${b}`].find(has))
+    return [...new Set([...common, refs.head])].filter((base): base is string => !!base && base !== name)
+  }
+  async function pickCompareBase(name: string) {
+    const options = refs.refs.filter((r) => /^refs\/(heads|remotes)\//.test(r.name) && !r.name.endsWith('/HEAD') && r.name !== name).map((r) => ({ value: r.name, label: short(r.name) }))
+    if (!options.length) return
+    const v = await ask({ title: `${short(name)} · ${t.compareBranch.other}`, message: t.compareBranch.hint, fields: [{ key: 'base', label: t.compareBranch.base, type: 'select', value: options[0].value, options }] })
+    if (v) compareBranch(name, v.base as string)
+  }
+  /** 从「相比某分支」的提交图跳到文件改动：基准和分支从共同祖先开始比较 */
+  function compareFiles() {
+    compareLeft = short(scopeBase!)
+    compareRight = short(scopeRefs[0])
+    compareAuto = true
+    ++compareVersion
+    view = 'tools'
+  }
+
+  /** 搜索结果里的提交可能不在当前筛选范围内：找不到就先清掉筛选 */
+  async function reveal(id: string) {
+    if (scope.length && (await guard(api.rowOf(tab, id))) == null) await setScope([])
+    jump(id)
   }
 
   async function select(row: number, id: string) {
@@ -192,7 +355,8 @@
     const beforeHead = refs.head_id
     await loadSidebar()
     if (!started) return
-    if (graphKey(refs) === before) {
+    const pruned = pruneScope()
+    if (graphKey(refs) === before && !pruned) {
       if (!background && refs.head_id && refs.head_id !== beforeHead && view === 'history') jump(refs.head_id)
       return
     }
@@ -236,6 +400,9 @@
       case 'revert':
       case 'pull':
         return before.head_id ? [{ op: 'reset', target: before.head_id, mode: 'keep' }] : null
+      case 'fast_forward':
+        // 只有当前分支能用重置退回；其他分支的旧位置在 reflog 里
+        return before.head === `refs/heads/${op.branch}` && before.head_id ? [{ op: 'reset', target: before.head_id, mode: 'keep' }] : null
       case 'reset':
         // 软/混合重置后改动还在工作区，用同样的方式移回去正好还原；硬重置后工作区是干净的，用 keep
         return before.head_id ? [{ op: 'reset', target: before.head_id, mode: op.mode === 'hard' ? 'keep' : op.mode }] : null
@@ -252,6 +419,7 @@
     if (busy || workingBusy) return false
     busy = true
     error = ''
+    autoFfSkipped = []
     const before = refs
     const log = await guard(api.op(tab, op))
     busy = false
@@ -265,6 +433,13 @@
     if (ops) undos = [...undos, { title: op.op, ops }]
     await refresh()
     return ok
+  }
+
+  /** 同 exec，但交回这次的命令日志：仓库工具要把输出显示在页面上 */
+  async function execLog(op: api.Op) {
+    const last = logs.at(-1)
+    await exec(op)
+    return logs.at(-1) === last ? undefined : logs.at(-1)
   }
 
   async function undo() {
@@ -290,7 +465,7 @@
     if (busy || workingBusy) return
     if (!(await ask({ title: t.discardLinesTitle, explain: explain.discard, danger: true, confirm: t.discardLinesConfirm }))) return
     busy = true
-    await guard(api.discardLines(tab, file, hunk, header, lines))
+    await guard(api.discardLines(tab, file, hunk, header, lines, diffOptions().context))
     await refresh()
     busy = false
   }
@@ -301,12 +476,47 @@
     const current = await guard(api.refs(tab))
     if (!current) return
     refs = current
+    workflow = (await guard(api.workflowSettings(tab))) ?? workflow
     const values = await ask({
       title: `${t.repositorySettings} · ${path}`,
       message: t.revertScope,
-      fields: [{ key: 'disabled', label: t.disableRevert, type: 'checkbox', value: refs.revert_disabled }],
+      fields: [
+        { key: 'disabled', label: t.disableRevert, type: 'checkbox', value: refs.revert_disabled },
+        { key: 'check', label: t.check.command, type: 'text', optional: true, value: workflow.check_command },
+        { key: 'auto', label: t.check.auto, type: 'checkbox', value: workflow.check_before_commit },
+        { key: 'template', label: t.commitTemplate, type: 'textarea', optional: true, value: workflow.template },
+        { key: 'diffTool', label: t.externalTools.diffSetting, type: 'text', optional: true, value: externalTools.diff },
+        { key: 'mergeTool', label: t.externalTools.mergeSetting, type: 'text', optional: true, value: externalTools.merge },
+      ],
     })
-    if (values) await exec({ op: 'set_revert_disabled', disabled: !!values.disabled })
+    if (!values) return
+    await guard(api.setExternalTools(tab, { diff: values.diffTool as string, merge: values.mergeTool as string }))
+    await guard(api.setWorkflowSettings(tab, { template: values.template as string, check_command: values.check as string, check_before_commit: !!values.auto }))
+    // 只有这一项会进命令日志和撤销列表，没改就不执行
+    if (!!values.disabled !== refs.revert_disabled) await exec({ op: 'set_revert_disabled', disabled: !!values.disabled })
+    else await refresh()
+  }
+
+  /** 最近一次检查的结果；null 表示还没跑过或设置变了 */
+  let checkResult = $state.raw<api.Log | null>(null)
+  let checking = $state(false)
+  /** 跑提交前检查，输出进命令日志；没通过时把日志展开。返回是否通过 */
+  async function runCheck() {
+    if (checking) return false
+    checking = true
+    checkResult = null
+    const log = await guard(api.runCheck(tab))
+    checking = false
+    if (!log) return false
+    checkResult = log
+    logs = [...logs.slice(-99), log]
+    if (!log.ok) showLog = true
+    return log.ok
+  }
+  /** 提交之前：设置了自动检查就先跑，没通过时由用户决定要不要照样提交 */
+  async function beforeCommit() {
+    if (!workflow.check_before_commit || !workflow.check_command) return true
+    return (await runCheck()) || !!(await ask({ title: t.check.failedTitle, message: workflow.check_command, warning: t.check.failedWarning, danger: true, confirm: t.check.commitAnyway }))
   }
 
   async function editIdentity() {
@@ -378,6 +588,7 @@
     const upstream = refs.refs.find((r) => r.name === `refs/heads/${branch}`)?.upstream
     const { remote, branch: upBranch } = splitUpstream(upstream, remotes) ?? { remote: undefined, branch: undefined }
     const force = { key: 'force', label: t.forcePush, type: 'checkbox' as const }
+    const tags = { key: 'tags', label: t.pushTags, type: 'checkbox' as const }
 
     if (remote && upBranch === branch) {
       const v = await ask({
@@ -385,9 +596,9 @@
         explain: explain.push,
         message: t.pushTo(`${remote}/${branch}`),
         confirm: t.push,
-        fields: [force],
+        fields: [force, tags],
       })
-      if (v) exec({ op: 'push', remote, branch, remote_branch: branch, force: v.force as boolean, set_upstream: false })
+      if (v) exec({ op: 'push', remote, branch, remote_branch: branch, force: v.force as boolean, set_upstream: false, tags: v.tags as boolean })
     } else if (remote && upBranch) {
       // 上游与本地分支不同名：先推荐同名分支，仍需明确选一个目标
       const v = await ask({
@@ -404,12 +615,12 @@
               { value: 'upstream', label: t.pushToUpstream(`${remote}/${upBranch}`) },
             ],
           },
-          force,
+          force, tags,
         ],
       })
       if (!v) return
       const same = v.target === 'same'
-      exec({ op: 'push', remote, branch, remote_branch: same ? branch : upBranch, force: v.force as boolean, set_upstream: same })
+      exec({ op: 'push', remote, branch, remote_branch: same ? branch : upBranch, force: v.force as boolean, set_upstream: same, tags: v.tags as boolean })
     } else {
       const v = await ask({
         title: t.pushTitle(branch),
@@ -420,10 +631,10 @@
           ...(remotes.length > 1
             ? [{ key: 'remote', label: t.remote, type: 'radio' as const, value: remotes[0], options: remotes.map((r) => ({ value: r, label: r })) }]
             : []),
-          force,
+          force, tags,
         ],
       })
-      if (v) exec({ op: 'push', remote: (v.remote as string) ?? remotes[0], branch, remote_branch: branch, force: v.force as boolean, set_upstream: true })
+      if (v) exec({ op: 'push', remote: (v.remote as string) ?? remotes[0], branch, remote_branch: branch, force: v.force as boolean, set_upstream: true, tags: v.tags as boolean })
     }
   }
 
@@ -433,10 +644,14 @@
       title: t.pull,
       explain: explain.pull,
       message: t.pullFrom(upstream ? short(upstream) : t.noUpstream),
+      warning: overlap.length ? t.binaryOverlap(overlap.join('、')) : undefined,
       confirm: t.pull,
-      fields: [{ key: 'rebase', label: t.pullRebase, type: 'checkbox', value: true }],
+      fields: [
+        { key: 'rebase', label: t.pullRebase, type: 'checkbox', value: true },
+        { key: 'autostash', label: t.pullAutostash, type: 'checkbox' },
+      ],
     })
-    if (v) exec({ op: 'pull', rebase: v.rebase as boolean })
+    if (v) exec({ op: 'pull', rebase: v.rebase as boolean, autostash: v.autostash as boolean })
   }
 
   async function reset(target: string) {
@@ -537,9 +752,8 @@
     const s = short(name)
     const current = name === refs.head
     const onto = head ?? 'HEAD'
-    const items: Item[] = []
     if (kind === 'stash') {
-      items.push(
+      return menu!.show(e, [
         { label: t.stashApply, hint: t.stashApplyHint, action: () => exec({ op: 'stash_apply', name, pop: false }) },
         { label: t.stashPop, hint: t.stashPopHint, action: () => exec({ op: 'stash_apply', name, pop: true }) },
         null,
@@ -551,58 +765,118 @@
             if (await ask({ title: t.dropStashTitle, warning: t.dropStashWarning, danger: true })) exec({ op: 'stash_drop', name })
           },
         },
+      ])
+    }
+    // 一级只放天天用的操作，其余按「对比」「提交图」「管理」收进子菜单
+    const items: Item[] = []
+    if (!current) {
+      items.push(
+        {
+          label: kind === 'remote' ? t.checkoutRemote : kind === 'tag' ? t.checkoutCommit : t.checkout,
+          hint: explain[kind === 'remote' ? 'track' : kind === 'tag' ? 'checkout_commit' : 'checkout'].short,
+          action: () => activate(kind, name),
+        },
+        { label: t.mergeInto(onto), hint: explain.merge.short, action: () => explained('merge', t.mergeInto(onto), { op: 'merge', target: s }) },
+        { label: t.rebaseOnto(onto), hint: explain.rebase.short, action: () => explained('rebase', t.rebaseOnto(onto), { op: 'rebase', onto: s }) },
       )
-    } else {
-      if (!current) {
-        items.push(
-          {
-            label: kind === 'remote' ? t.checkoutRemote : kind === 'tag' ? t.checkoutCommit : t.checkout,
-            hint: explain[kind === 'remote' ? 'track' : kind === 'tag' ? 'checkout_commit' : 'checkout'].short,
-            action: () => activate(kind, name),
-          },
-          { label: t.mergeInto(onto), hint: explain.merge.short, action: () => explained('merge', t.mergeInto(onto), { op: 'merge', target: s }) },
-          { label: t.rebaseOnto(onto), hint: explain.rebase.short, action: () => explained('rebase', t.rebaseOnto(onto), { op: 'rebase', onto: s }) },
-          null,
-        )
+    }
+    const manage: Item[] = []
+    if (kind === 'branch') {
+      const upstream = refs.refs.find((r) => r.name === name)?.upstream
+      if (upstream) {
+        const title = t.fastForwardTo(short(upstream))
+        items.push({ label: title, hint: explain.fast_forward.short, action: () => explained('fast_forward', title, { op: 'fast_forward', branch: s }) })
+        if (desktopSync) manage.push({ label: autoFf.includes(name) ? t.autoFf.off : t.autoFf.on, hint: t.autoFf.hint, action: () => toggleAutoFf(name) })
       }
-      if (kind === 'branch') {
-        items.push(
-          { label: t.pushBranch, hint: explain.push.short, action: () => push(s) },
-          ...(current ? [] : [{ label: t.openInWorktree, hint: explain.worktree.short, action: () => addWorktree(s, true) }]),
-          {
-            label: t.rename,
-            hint: t.renameHint,
-            action: async () => {
-              const v = await ask({ title: t.rename, fields: [{ key: 'name', label: t.newName, type: 'text', value: s }] })
-              if (v) exec({ op: 'rename_branch', old: s, new: v.name as string })
-            },
-          },
-        )
-        if (!current) {
-          items.push(null, {
-            label: t.delete,
-            hint: explain.delete_branch.short,
-            danger: true,
-            action: async () => {
-              const v = await ask({ title: t.deleteBranchTitle(s), explain: explain.delete_branch, danger: true, fields: [{ key: 'force', label: t.forceDelete, type: 'checkbox' }] })
-              if (v) exec({ op: 'delete_branch', name: s, force: v.force as boolean })
-            },
-          })
-        }
-      } else if (kind === 'tag') {
-        items.push({
-          label: t.deleteTag,
-          danger: true,
-          action: async () => {
-            if (await ask({ title: t.deleteTagTitle(s), danger: true })) exec({ op: 'delete_tag', name: s })
-          },
-        })
-      } else {
-        items.pop()
+      items.push({ label: t.pushBranch, hint: explain.push.short, action: () => push(s) })
+      if (!current) manage.push({ label: t.openInWorktree, hint: explain.worktree.short, action: () => addWorktree(s, true) })
+      manage.push({
+        label: t.rename,
+        hint: t.renameHint,
+        action: async () => {
+          const v = await ask({ title: t.rename, fields: [{ key: 'name', label: t.newName, type: 'text', value: s }] })
+          if (v) exec({ op: 'rename_branch', old: s, new: v.name as string })
+        },
+      })
+    }
+    if (kind !== 'tag') manage.push({ label: pinned.includes(name) ? t.branchList.unpin : t.branchList.pin, action: () => togglePin(name) })
+    manage.push({ label: t.copyName, action: () => navigator.clipboard.writeText(s) })
+    if (kind === 'branch' && !current) {
+      manage.push(null, {
+        label: t.delete,
+        hint: explain.delete_branch.short,
+        danger: true,
+        action: async () => {
+          const v = await ask({ title: t.deleteBranchTitle(s), explain: explain.delete_branch, danger: true, fields: [{ key: 'force', label: t.forceDelete, type: 'checkbox' }] })
+          if (v) exec({ op: 'delete_branch', name: s, force: v.force as boolean })
+        },
+      })
+    } else if (kind === 'tag') {
+      manage.push(null, {
+        label: t.deleteTag,
+        danger: true,
+        action: async () => {
+          if (await ask({ title: t.deleteTagTitle(s), danger: true })) exec({ op: 'delete_tag', name: s })
+        },
+      })
+    }
+    items.push(
+      null,
+      {
+        label: t.menuGroups.compare,
+        hint: t.compareBranch.hint,
+        items: [
+          ...compareBases(name).map((base) => ({ label: t.compareBranch.with(short(base)), action: () => void compareBranch(name, base) })),
+          { label: t.compareBranch.other, action: () => pickCompareBase(name) },
+          null,
+          { label: t.tools.compareFrom, action: () => { compareLeft = name } },
+          { label: t.tools.compareTo, action: () => compareWith(name) },
+        ],
+      },
+      {
+        label: t.menuGroups.graph,
+        items: [
+          { label: t.graphFilter.only, action: () => setScope([name]) },
+          { label: scope.includes(name) ? t.graphFilter.remove : t.graphFilter.add, action: () => toggleScope(name) },
+        ],
+      },
+      { label: t.menuGroups.manage, items: manage },
+    )
+    menu!.show(e, items)
+  }
+
+  /** 文件右键菜单里工作区和提交详情共用的部分。`mode` 决定补丁从哪里取，commit 时 `id` 是提交 */
+  function fileItems(file: string, mode: 'unstaged' | 'staged' | 'commit', id: string, gone: boolean, untracked: boolean): Item[] {
+    const full = `${path}/${file}`.replace(/[\\/]+/g, path.includes('\\') ? '\\' : '/')
+    return [
+      ...(gone ? [] : [{ label: t.fileMenu.open, action: () => void guard(api.reveal(tab, file, true)) }]),
+      { label: t.fileMenu.reveal, action: () => void guard(api.reveal(tab, file, false)) },
+      null,
+      { label: t.fileMenu.copyPath, action: () => navigator.clipboard.writeText(file) },
+      { label: t.fileMenu.copyFullPath, action: () => navigator.clipboard.writeText(full) },
+      ...(untracked ? [] : [{ label: t.fileMenu.copyPatch, action: async () => { const text = await guard(api.patch(tab, mode, id, file)); if (text) navigator.clipboard.writeText(text) } }]),
+      ...(untracked || !externalTools.diff ? [] : [{ label: t.externalTools.diff, action: () => void guard(api.externalOpen(tab, 'diff', mode, id, file)) }]),
+      ...(untracked ? [] : [null, { label: t.fileMenu.history, action: () => { view = 'history'; search!.fileHistory(file) } }]),
+    ]
+  }
+
+  function workFileMenu(e: MouseEvent, entry: api.Entry, staged: boolean) {
+    const untracked = entry.unstaged === '?'
+    const file = entry.path
+    const items = fileItems(file, staged ? 'staged' : 'unstaged', '', (staged ? entry.staged : entry.unstaged) === 'D', untracked)
+    if (!staged && !entry.conflicted) {
+      items.push(null, { label: t.fileMenu.stash, hint: explain.stash.short, action: () => exec({ op: 'stash_push', message: '', include_untracked: untracked, paths: [file] }) })
+      if (untracked) {
+        const ignore = (shared: boolean) => async () => { await guard(api.ignoreFile(tab, file, shared)); refresh() }
+        items.push({ label: t.vscode.ignoreLocal, hint: t.vscode.ignoreLocalHint, action: ignore(false) }, { label: t.vscode.ignoreShared, hint: t.vscode.ignoreSharedHint, action: ignore(true) })
       }
     }
-    if (kind !== 'stash') items.push(null, { label: t.tools.compareFrom, action: () => { compareLeft = name } }, { label: t.tools.compareTo, action: () => compareWith(name) })
     menu!.show(e, items)
+  }
+
+  function commitFileMenu(e: MouseEvent, id: string, file: string) {
+    // 贮藏详情和提交详情共用这个入口；补丁统一按提交取
+    menu!.show(e, fileItems(file, 'commit', id, detail?.files.find((f) => f.path === file)?.status === 'D', false))
   }
 
   function commitMenu(e: MouseEvent, id: string) {
@@ -655,6 +929,7 @@
           const log = await api.op(tab, { op: 'fetch', background: true })
           logs = [...logs.slice(-99), log]
           autoFetchError = !log.ok
+          if (log.ok) await autoFastForward().catch((e) => (autoFfSkipped = [String(e)]))
         } finally { busy = false }
       },
       error: (e) => {
@@ -681,8 +956,11 @@
     initializing = true
     untrack(async () => {
       await loadSidebar()
-      if (refs.head_id) jump(refs.head_id)
+      pruneScope()
+      // 有筛选时行号要等筛选后的图加载完再找，打开仓库时那份全量图里的行号对不上
+      if (refs.head_id && !scope.length) jump(refs.head_id)
       await loadAll()
+      if (refs.head_id && scope.length) jump(refs.head_id)
       initializing = false
       autoTimer?.tick()
     })
@@ -733,11 +1011,22 @@
   </header>
   {#if error}<p class="error">{errorText(error)}</p>{/if}
   {#if autoFetchError}<p class="error">{t.autoFetchFailed}</p>{/if}
+  {#if autoFfSkipped.length}<p class="error">{t.autoFf.skipped}{autoFfSkipped.join(' · ')}</p>{/if}
+  {#if overlap.length}<p class="notice">{t.binaryOverlap(overlap.join('、'))}</p>{/if}
   {#if refs.in_progress}
     {@const what = refs.in_progress}
     <p class="progress">
       <strong>{t.inProgress[what]}</strong>
-      <span>{t.inProgressHint}</span>
+      <span>
+        {#if operation?.id}
+          <b>{[
+            t.operationCommit(operation.id.slice(0, 8), operation.message.split('\n')[0]),
+            ...(operation.step ? [t.operationStep(...operation.step)] : []),
+            ...(conflicts.length ? [t.conflictProgress(conflicts.filter((c) => c.resolved).length, conflicts.length)] : []),
+          ].join(' · ')}</b>
+        {/if}
+        {t.inProgressHint}
+      </span>
       <button class="btn small primary" disabled={busy || (what === 'revert' && refs.revert_disabled)} onclick={() => exec({ op: 'continue', what })}><Label text={t.continueOperation(what)} /></button>
       <button class="btn small" disabled={busy} onclick={() => exec({ op: 'abort', what })}><Label text={t.abortOperation(what)} /></button>
     </p>
@@ -755,11 +1044,36 @@
       onactivate={activate}
       onstash={viewStash}
       onmenu={(e, kind, name) => refMenu(e, kind, name)}
+      {scope}
+      onscope={toggleScope}
+      {autoFf}
+      {pinned}
+      onpin={togglePin}
+      onclean={cleanBranches}
       onworktree={onopen}
     />
     <Splitter key="sidebar" min={180} max={520} />
     <div class="content">
       <div class="pane" class:hidden={view !== 'history'}>
+        <CommitSearch bind:this={search} {tab} onjump={reveal}>
+          <button type="button" class="btn small quiet" class:on={!graphView.hideTags} aria-pressed={!graphView.hideTags} title={t.graphView.tagsHint} onclick={() => setGraphView('hideTags')}>{t.graphView.tags}</button>
+          <button type="button" class="btn small quiet" class:on={graphView.firstParent} aria-pressed={graphView.firstParent} disabled={loadingAll} title={t.graphView.firstParentHint} onclick={() => setGraphView('firstParent')}>{t.graphView.firstParent}</button>
+        </CommitSearch>
+        {#if scope.length}
+          <div class="scope">
+            <span>{t.graphFilter.showing}</span>
+            {#each scopeRefs as name (name)}
+              <button class="chip" title={t.graphFilter.remove} disabled={loadingAll} onclick={() => toggleScope(name)}>{short(name)} ×</button>
+            {/each}
+            {#if scopeBase}
+              <button class="chip" title={t.compareBranch.remove} disabled={loadingAll} onclick={() => setScope(scopeRefs)}>{t.compareBranch.against(short(scopeBase))} ×</button>
+              {#if scopeRefs.length === 1}<button class="btn small" onclick={compareFiles}><Label text={t.compareBranch.files} /></button>{/if}
+            {:else if scopeRefs.length === 1}
+              <button class="btn small quiet" disabled={loadingAll} onclick={() => pickCompareBase(scopeRefs[0])}>{t.compareBranch.other}</button>
+            {/if}
+            <button class="btn small quiet" disabled={loadingAll} onclick={() => setScope([])}>{t.graphFilter.clear}</button>
+          </div>
+        {/if}
         {#if count}
           <Graph
             bind:this={graph}
@@ -773,15 +1087,15 @@
             onmenu={commitMenu}
           />
         {:else}
-          <p class="none">{t.noCommits}</p>
+          <p class="none">{loadingAll ? t.loadingHistory : scopeBase ? t.compareBranch.none(short(scopeBase)) : t.noCommits}</p>
         {/if}
         <Splitter key="detail" dir="y" min={120} max={640} invert />
-        <Detail {detail} onjump={jump} reviewKey={`review:${JSON.stringify([path, detailMode, detail?.id])}`}
-          fetchDiff={(id, path) => detailMode === 'stash' ? api.stashDiff(tab, id, path) : api.diffCommit(tab, id, path)}
-          fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip)} />
+        <Detail {detail} onjump={jump} onfilemenu={commitFileMenu} reviewKey={`review:${JSON.stringify([path, detailMode, detail?.id])}`}
+          fetchDiff={(id, path) => detailMode === 'stash' ? api.stashDiff(tab, id, path, diffOptions()) : api.diffCommit(tab, id, path, diffOptions())}
+          fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip, null, diffOptions())} />
       </div>
       <div class="pane" class:hidden={view !== 'changes'}>
-        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} reload={refresh} oncommitted={committed} {discard} {discardLines} />
+        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} {conflicts} prefill={(refs.in_progress && refs.in_progress !== 'rebase' && operation?.message) || workflow.template} check={{ command: workflow.check_command, auto: workflow.check_before_commit, running: checking, result: checkResult, run: runCheck }} {beforeCommit} showLog={() => (showLog = true)} reload={refresh} oncommitted={committed} {discard} {discardLines} onfilemenu={workFileMenu} onexternal={externalTools.merge ? (file) => void guard(api.externalOpen(tab, 'merge', '', '', file)) : undefined} />
       </div>
       {#if view === 'worktrees'}
         <div class="pane">
@@ -789,7 +1103,7 @@
         </div>
       {/if}
       {#if view === 'tools'}
-        {#key compareVersion}<Tools {tab} {path} {refs} {busy} left={compareLeft} right={compareRight} {exec} {rebase} {ask} />{/key}
+        {#key compareVersion}<Tools {tab} {path} {refs} {busy} left={compareLeft} right={compareRight} auto={compareAuto} {exec} run={execLog} {onopen} {rebase} {ask} />{/key}
       {/if}
     </div>
   </main>
@@ -924,6 +1238,21 @@
     display: flex;
     flex-direction: column;
   }
+  .scope {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  .scope .chip {
+    margin-left: 0;
+    color: var(--accent);
+  }
   .none {
     font-family: var(--prose);
     font-size: var(--fs-lg);
@@ -938,6 +1267,14 @@
     padding: 8px 16px;
     color: var(--red);
     background: color-mix(in srgb, var(--red) 12%, transparent);
+    font-size: var(--fs-sm);
+    user-select: text;
+  }
+  .notice {
+    margin: 0;
+    padding: 8px 16px;
+    color: var(--yellow);
+    background: color-mix(in srgb, var(--yellow) 12%, transparent);
     font-size: var(--fs-sm);
     user-select: text;
   }
@@ -956,8 +1293,17 @@
   }
   .progress span {
     flex: 1;
+    min-width: 0;
     font-family: var(--prose);
     font-size: var(--fs-md);
+  }
+  /* 正在处理哪个提交、进度如何，单独一行放在说明上面 */
+  .progress b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
   }
   .log {
     flex: none;

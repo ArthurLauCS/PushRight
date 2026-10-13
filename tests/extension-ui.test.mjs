@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import ts from 'typescript'
+import * as time from '../src/lib/time.ts'
 
 // Exercise host handlers without launching VS Code; the smoke test covers the actual host.
 const require = createRequire(import.meta.url)
@@ -11,7 +12,7 @@ function load(name, deps) {
   const source = readFileSync(new URL(`../extension/src/${name}.ts`, import.meta.url), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText
   const exports = {}
-  new Function('require', 'exports', js)((id) => deps[id] ?? require(id), exports)
+  new Function('require', 'exports', js)((id) => deps[id] ?? (id === '../../src/lib/time' ? time : require(id)), exports)
   return exports
 }
 class Event {
@@ -106,6 +107,37 @@ test('diff editors show current-line blame on both sides and reload inactive ind
   assert.equal(annotation(blank), undefined)
   closed.fire(index.document)
   assert.equal(requests.at(-1).cancelled, true)
+
+  show(right)
+  core.cfg = (key) => key === 'blame.line.format' ? '${date}' : true
+  core.date = () => '2025-12-31 16:15'
+  prefs.fire()
+  assert.equal(annotation(right), '2025-12-31 16:15', 'time zone changes redraw cached blame without requesting Git again')
+})
+
+test('extension time zones persist globally, notify views and keep native dates and gutter dates consistent', async () => {
+  const saved = { webview: { prefs: '{"authorStyles":{}}' } }
+  const vscode = { EventEmitter: Event, env: { language: 'en' },
+    window: { createOutputChannel: () => ({}) }, workspace: {}, commands: { executeCommand() {} } }
+  const locale = { messages: { vscode: {} }, explanations: {} }
+  const deps = { vscode, './engine': { startEngine: () => ({}) }, '../../src/lib/locales/en': locale, '../../src/lib/locales/zh': locale }
+  const context = { workspaceState: { get: (_, fallback) => fallback },
+    globalState: { get: (key, fallback) => saved[key] ?? fallback, update: async (key, value) => { saved[key] = value } } }
+  const core = load('core', deps)
+  await core.openRepos(context, '')
+  let changes = 0
+  core.onPrefsChange.event(() => changes++)
+  const instant = Date.parse('2026-01-01T00:15:00Z') / 1000
+  for (const [zone, day] of [['Asia/Shanghai', '2026-01-01'], ['America/Los_Angeles', '2025-12-31'], ['', undefined]]) {
+    await core.store('timeZone', zone)
+    assert.equal(core.date(instant), new Date(instant * 1000).toLocaleString('en', { timeZone: zone || undefined }))
+    assert.equal(core.date(instant, true), day ?? time.formatTime(instant, '').slice(0, 10))
+    const reloaded = load('core', deps)
+    await reloaded.openRepos(context, '')
+    assert.equal(reloaded.date(instant), core.date(instant), 'a fresh extension host uses the saved global preference')
+  }
+  assert.equal(changes, 3)
+  assert.equal(core.stored().prefs, '{"authorStyles":{}}')
 })
 
 test('file-only refreshes read status alone and stay quiet until it changes', async () => {
@@ -130,7 +162,7 @@ test('file-only refreshes read status alone and stay quiet until it changes', as
   assert.equal(fired, 2, 'created and deleted files are announced even when status is unchanged')
   calls.length = 0
   await core.refresh(repo)
-  assert.deepEqual([calls.sort(), fired], [['commit_identity', 'refs', 'remotes', 'status'], 3], 'a .git change rereads everything and always notifies')
+  assert.deepEqual([calls.sort(), fired], [['commit_identity', 'refs', 'remotes', 'status', 'workflow_settings'], 3], 'a .git change rereads everything and always notifies')
   const reading = deferred(), resume = deferred(), call = engine.call
   let paused = false
   engine.call = async (cmd) => {
@@ -144,7 +176,7 @@ test('file-only refreshes read status alone and stay quiet until it changes', as
   await core.refresh(repo, false)
   resume.resolve()
   await pending
-  assert.deepEqual(calls.sort(), ['commit_identity', 'refs', 'remotes', 'status', 'status'], 'a queued full refresh survives later file-only events')
+  assert.deepEqual(calls.sort(), ['commit_identity', 'refs', 'remotes', 'status', 'status', 'workflow_settings'], 'a queued full refresh survives later file-only events')
   assert.equal(fired, 4, 'the queued full refresh notifies even when status is unchanged')
 })
 
@@ -217,9 +249,10 @@ test('SCM graph routes only bounded reads to workspace repositories and disposes
   let picked = 'all'
   load('graph-view', { vscode, './core': core, './sync': { pickScope: async () => picked, fetch: (r) => syncs.push(['fetch', r.tab]), pull: (r) => syncs.push(['pull', r.tab]), push: (r, same) => syncs.push(['push', r.tab, same]) }, './webview': { setupWebview: () => ({ dispose() {} }) } }).registerGraphView({ subscriptions: [], workspaceState: { get: (_, fallback) => fallback, update: (key, value) => saved[key] = value } })
   provider.resolveWebviewView(view)
-  core.stored = () => ({ diffColors: '{"added":"#0072b2","deleted":"#e69f00"}' })
+  core.stored = () => ({ diffColors: '{"added":"#0072b2","deleted":"#e69f00"}', timeZone: 'Asia/Shanghai' })
   prefs.fire()
-  assert.deepEqual(posted.at(-1), { store: 'diffColors', value: core.stored().diffColors }, 'an open sidebar receives color changes')
+  assert.deepEqual(posted.at(-2), { store: 'diffColors', value: core.stored().diffColors }, 'an open sidebar receives color changes')
+  assert.deepEqual(posted.at(-1), { store: 'timeZone', value: 'Asia/Shanghai' }, 'an open sidebar receives time zone changes')
   const send = async (cmd, args = {}) => { await Promise.all(messages.fire({ id: 1, cmd, args })); return posted.at(-1) }
   assert.deepEqual((await send('graph_repos')).value, repos.map((r) => ({ ...r, scope: 'auto' })))
   await send('rows', { tab: 1, start: 0, count: 128 })
@@ -248,7 +281,9 @@ test('SCM graph routes only bounded reads to workspace repositories and disposes
   assert.equal(diffs.length, 4, 'paths absent from the commit cannot open')
   await send('graph_scope', { tab: 1, scope: '--all' })
   await send('load_graph', { tab: 1, full: false })
-  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: false, scope: 'all' }])
+  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: false, scope: 'all', firstParent: false }])
+  await send('load_graph', { tab: 1, full: true, firstParent: true })
+  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: true, scope: 'all', firstParent: true }], 'the sidebar graph can collapse merges')
   assert.equal(saved.graphScopes['/repo1'], 'all')
   picked = undefined
   await send('graph_scope', { tab: 1 })
@@ -312,11 +347,16 @@ test('history context menus resolve their list and stale file requests cannot re
     commands: { registerCommand: (id, fn) => commands.set(id, fn), executeCommand: (...args) => diffs.push(args) },
   }
   const core = {
-    repos: [repo], onRepoChange: repoChanged, repoOf: () => repo, rel: (_, u) => u.fsPath, v: {}, attempt: (p) => p,
+    repos: [repo], onRepoChange: repoChanged, onPrefsChange: new Event(), repoOf: () => repo, rel: (_, u) => u.fsPath, v: {}, attempt: (p) => p,
     revUri: (_, path, rev) => ({ path, rev }),
     engine: { call: (_, { path }) => { const d = deferred(); pending.set(path, d); return d.promise } },
   }
   load('history', { vscode, './core': core }).registerHistory({ subscriptions: [] })
+  const refreshed = []
+  for (const [id, view] of views) view.provider.onDidChangeTreeData(() => refreshed.push(id))
+  core.onPrefsChange.fire()
+  assert.deepEqual(refreshed, [...views.keys()], 'file, line and search histories redraw when time zone changes')
+  assert.equal(pending.size, 0, 'a display preference does not reload history from Git')
   const follow = async (path) => { vscode.window.activeTextEditor = { document: { uri: uri(path) } }; editorChanged.fire(); await Promise.resolve() }
   const a = [{ id: 'a', path: 'a.txt', subject: 'a' }]
   await follow('a.txt'); pending.get('a.txt').resolve(a); await new Promise(setImmediate)
@@ -372,7 +412,7 @@ test('line history follows selection without focus, coalesces reads and rejects 
     workspace: { onDidChangeTextDocument: changed.event, onDidSaveTextDocument: saved.event },
     commands: { registerCommand: (id, fn) => commands.set(id, fn), executeCommand: (...args) => executed.push(args) },
   }
-  const core = { repos: [repo], onRepoChange: repoChanged, repoOf: () => repo, rel: () => 'a.txt', v: { lineHistoryLoading: 'loading' }, t: { errors: { PR_LINE_HISTORY_CHANGED: 'changed' } }, errorText: String,
+  const core = { repos: [repo], onRepoChange: repoChanged, onPrefsChange: new Event(), repoOf: () => repo, rel: () => 'a.txt', v: { lineHistoryLoading: 'loading' }, t: { errors: { PR_LINE_HISTORY_CHANGED: 'changed' } }, errorText: String,
     engine: { call: (cmd, args) => { const job = deferred(); calls.push({ cmd, args, job }); return job.promise } },
   }
   const context = { subscriptions: [] }
@@ -444,7 +484,7 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   let choose = 2, typed
   const vscode = { window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed } } }
   const core = {
-    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
+    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
     stored: () => saved, store: async (key, value) => { saved[key] = value }, run: (_, op) => sent.push(op), headBranch: () => 'main', ago: (time) => `at ${time}`,
     engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest' }] } },
   }
@@ -466,18 +506,31 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   assert.equal(shown.at(-1)[3].description, '$(check) at 5')
   assert.equal(shown.at(-1)[4].description, '')
   assert.deepEqual(saved, {}, 'clicking a branch must not persist recent-use ordering')
+  // 最后一项进入多选：预勾当前范围，结果以换行分隔
+  let many
+  vscode.window.showQuickPick = async (items, options) => options.canPickMany ? (many = items, items.filter((item) => item.picked || item.ref === 'refs/heads/old')) : items.at(-1)
+  assert.equal(await pickScope(repo, 'refs/heads/main'), 'refs/heads/old\nrefs/heads/main')
+  assert.deepEqual(many.filter((item) => item.picked).map((item) => item.ref), ['refs/heads/main'])
+  // 倒数第二项是「与某个分支相比」：先选分支再选基准，基准列表里没有刚选的分支
+  const lists = []
+  vscode.window.showQuickPick = async (items) => { lists.push(items); return lists.length === 1 ? items.at(-2) : items[0] }
+  assert.equal(await pickScope(repo), 'refs/heads/old\n^refs/heads/recent')
+  assert.ok(!lists[2].some((item) => item.ref === 'refs/heads/old'))
 })
 
 test('SCM separates repositories, stops on failed saves and uses selections after formatting', async () => {
   const commands = new Map(), providers = new Map(), calls = [], writes = [], controls = []
-  const repos = [{ tab: 0, root: '/one', name: 'one', status: [] }, { tab: 1, root: '/two', name: 'two', status: [] }]
+  const repos = [
+    { tab: 0, root: '/one', name: 'one', status: [], refs: {} },
+    { tab: 1, root: '/two', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
+  ]
   const selection = (line) => ({ start: { line, character: 0 }, end: { line, character: 1 } })
   const editor = { document: { uri: uri('/one/file'), isDirty: true, lineCount: 2, save: async () => false }, selections: [selection(0)] }
   const event = () => ({ dispose() {} })
   const vscode = {
     EventEmitter: Event, Uri: { file: uri },
     FileType: { File: 1 }, FileChangeType: { Changed: 1 }, FileSystemError: { NoPermissions: () => new Error('readonly') },
-    scm: { createSourceControl: (id, label, rootUri) => { const control = { id, label, rootUri, createResourceGroup: () => ({}), inputBox: {}, dispose() { this.disposed = true } }; controls.push(control); return control } },
+    scm: { createSourceControl: (id, label, rootUri) => { const control = { id, label, rootUri, groups: [], createResourceGroup(id) { const group = { id }; this.groups.push(group); return group }, inputBox: { value: '' }, dispose() { this.disposed = true } }; controls.push(control); return control } },
     commands: { registerCommand: (id, fn) => commands.set(id, fn) },
     window: { activeTextEditor: editor, onDidChangeWindowState: event },
     workspace: {
@@ -490,13 +543,36 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
   vscode.window.registerFileDecorationProvider = event
   const diff = { hunks: [{ header: '@@ -1,0 +1,2 @@', lines: [1, 2].map((n) => ({ kind: '+', new_no: n })) }] }
   const core = {
-    repos, onRepoChange: new Event(), REV: 'rev', v: {}, t: { identityMissing: '' }, help: {},
+    repos, onRepoChange: new Event(), REV: 'rev', v: { conflicts: 'Conflicts' }, t: { identityMissing: '', conflictProgress: (done, total) => `${done}/${total}` }, help: {},
     repoOf: () => repos[0], rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
     revUri: () => uri('/one/file').with({ scheme: 'rev', query: '{"rev":""}' }),
     engine: { call: async (cmd) => { calls.push(cmd); return diff } },
     write: async (repo, cmd, args) => { writes.push([repo.tab, cmd, args]); return null },
   }
-  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [] } }).registerScm({ subscriptions: [] })
+  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [], conflictFiles: (repo) => repo.files ?? [] } }).registerScm({ subscriptions: [] })
+  // 合并进行中：输入框预填 Git 的信息（含冲突清单），冲突分组带进度；用户写过的内容和操作结束后的空框都不被覆盖
+  assert.deepEqual(controls.map((c) => [c.inputBox.value, c.groups[0].label]), [['', 'Conflicts'], ["Merge branch 'x'\n\n# Conflicts:\n#\ta.txt", 'Conflicts · 1/2']])
+  controls[1].inputBox.value = 'my own message'
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, 'my own message')
+  controls[1].inputBox.value = ''
+  repos[1].refs = {}
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, '')
+  // 平时预填仓库的提交信息模板；「最近的提交信息」选中的那条填进输入框
+  repos[1].workflow = { template: 'feat: ' }
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, 'feat: ')
+  const call = core.engine.call
+  core.engine.call = async () => ['fix: a\n\nbody', 'feat: b']
+  vscode.window.showQuickPick = async (items) => { assert.deepEqual(items.map((i) => [i.label, i.detail]), [['fix: a', 'body'], ['feat: b', undefined]]); return items[0] }
+  await commands.get('pushright.recentMessages')(controls[1])
+  assert.equal(controls[1].inputBox.value, 'fix: a\n\nbody')
+  core.engine.call = call
+  repos[1].workflow = null
+  controls[1].inputBox.value = ''
+  core.onRepoChange.fire(repos[1])
+  repos[1].files = []
   assert.deepEqual(controls.map(({ id, label, rootUri }) => [id, label, rootUri.fsPath]), [['pushright', 'PushRight', '/one'], ['pushright', 'PushRight', '/two']], 'shared provider IDs use one quick-diff menu label while roots distinguish repositories')
   await commands.get('pushright.stage')({ repo: repos[0], entry: { path: 'a' } }, { repo: repos[1], entry: { path: 'b' } })
   assert.deepEqual(writes.splice(0), [[0, 'stage', { paths: ['a'] }], [1, 'stage', { paths: ['b'] }]])
@@ -564,6 +640,14 @@ test('disabled revert offers abort only, while other operations retain continue'
   await sync.inProgress(repo)
   assert.deepEqual(shown[1], ['git rebase --continue', 'git rebase --abort'])
   assert.deepEqual(calls[1], { op: 'continue', what: 'rebase' })
+
+  // 冲突信息：正在处理的提交、变基步数、进度和逐个文件的状态；已解决的文件仍在清单里
+  Object.assign(t, { inProgressHint: 'hint', rebaseConflictHint: 'sides', operationCommit: (id, subject) => `${id} ${subject}`, operationStep: (n, total) => `step ${n}/${total}`, conflictProgress: (done, total) => `${done}/${total}` })
+  Object.assign(repo, { status: [{ path: 'b.txt', conflicted: true }, { path: 'c.txt' }], operation: { id: '0123456789abcdef', message: 'subject\n\n# Conflicts:', conflicts: ['a.txt', 'b.txt'], step: [2, 5] } })
+  assert.deepEqual(sync.conflictFiles(repo), [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }])
+  vscode.window.showWarningMessage = async (_, options) => void shown.push(options.detail)
+  await sync.inProgress(repo)
+  assert.equal(shown[2], '01234567 subject · step 2/5 · 1/2\n\n✓ a.txt\n! b.txt\n\nhint\n\nsides')
 })
 
 test('local files expand lazily and tracking commands distinguish local rules, shared rules and deletion', async () => {
@@ -617,4 +701,58 @@ test('local files expand lazily and tracking commands distinguish local rules, s
     ['ignore_file', { path: 'skills/deep/b.md', shared: false }],
   ])
   assert.deepEqual(new Set(discoveries), new Set([file.fsPath, second.fsPath]))
+})
+
+test('worktree view opens other worktrees in a new window, hides taken branches and forces removal only with changes', async () => {
+  let provider
+  const commands = new Map(), executed = [], ops = [], asked = []
+  const worktrees = [
+    { path: '/repo', head: 'aaaaaaaaaa', branch: 'refs/heads/main', current: true, changes: 0, ahead_behind: [0, 0], subject: 'one' },
+    { path: '/repo-feat', head: 'bbbbbbbbbb', branch: 'refs/heads/feat', current: false, changes: 2, ahead_behind: [1, 0], subject: 'two' },
+  ]
+  const repo = { tab: 3, root: '/repo', name: 'repo', refs: { refs: ['main', 'feat', 'free'].map((n) => ({ name: `refs/heads/${n}` })) } }
+  let pick, inputs = []
+  const vscode = {
+    EventEmitter: Event, Uri: { file: uri }, TreeItemCollapsibleState: { Expanded: 2 },
+    TreeItem: class { constructor(label, state) { Object.assign(this, { label, state }) } }, ThemeIcon: class { constructor(id) { this.id = id } },
+    window: {
+      createTreeView: (id, options) => { assert.equal(id, 'pushright.worktrees'); provider = options.treeDataProvider; return { visible: true, onDidChangeVisibility: new Event().event, dispose() {} } },
+      showQuickPick: async (items) => { asked.push(items.map((i) => i.label)); return pick(items) },
+      showInputBox: async (options) => { asked.push(options.value); return inputs.shift() },
+      showWarningMessage: async (title, options, confirm) => { asked.push(options.detail); return confirm },
+    },
+    commands: { registerCommand: (id, fn) => { commands.set(id, fn); return { dispose() {} } }, executeCommand: async (...args) => executed.push(args) },
+  }
+  const core = {
+    repos: [repo], onRepoChange: new Event(), attempt: (p) => p, activeRepo: () => repo, short: (n) => n.replace('refs/heads/', ''),
+    engine: { call: async (cmd, args) => { assert.deepEqual([cmd, args], ['worktrees', { tab: 3 }]); return worktrees } },
+    run: async (r, op) => { ops.push(op); return true },
+    help: { worktree: { short: 's', what: 'w', undo: 'kept' } },
+    t: { detached: 'detached', wtCurrent: 'current', wtDirty: (n) => `${n} files`, toPush: (n) => `push ${n}`, toPull: (n) => `pull ${n}`, newWorktree: 'New worktree', worktreePath: 'Folder', branchRule: 'rule', wtRemove: 'Remove', wtRemoveTitle: (n) => `Remove ${n}`, wtRemoveWarning: (n) => `${n} lost` },
+    v: { worktreeNewBranch: 'New branch', worktreeRemoveOpen: 'close it first' },
+  }
+  load('worktrees', { vscode, './core': core, '../../src/lib/branch-name': { BRANCH_NAME: /^feat_/ } }).registerWorktrees({ subscriptions: [] })
+  const items = await provider.getChildren()
+  const [here, other] = items.map((i) => provider.getTreeItem(i))
+  assert.deepEqual([here.label, here.description, here.command, here.contextValue], ['repo', 'main · current', undefined, undefined], 'the current worktree cannot open or remove itself')
+  assert.deepEqual([other.label, other.description, other.contextValue], ['repo-feat', 'feat · 2 files · push 1', 'worktree'])
+  await commands.get(other.command.command)(...other.command.arguments)
+  const opened = executed.pop()
+  assert.deepEqual([opened[0], opened[1].fsPath, opened[2]], ['vscode.openFolder', '/repo-feat', { forceNewWindow: true }], 'the original window stays')
+  pick = (list) => list.find((i) => i.label === 'free')
+  inputs = ['/repo-free']
+  await commands.get('pushright.worktree.add')()
+  assert.deepEqual(asked.splice(0), [['$(plus) New branch', 'free'], '/repo-free'], 'branches already open in a worktree are not offered; the folder defaults next to the repository')
+  assert.deepEqual(ops.pop(), { op: 'worktree_add', path: '/repo-free', start: 'free', new_branch: null })
+  assert.equal(executed.pop()[2].forceNewWindow, true, 'a new worktree opens in its own window')
+  pick = (list) => list[0]
+  inputs = ['feat_x', '/elsewhere']
+  await commands.get('pushright.worktree.add')()
+  assert.deepEqual(ops.pop(), { op: 'worktree_add', path: '/elsewhere', start: 'HEAD', new_branch: 'feat_x' })
+  asked.length = 0
+  await commands.get('pushright.worktree.remove')(items[1])
+  assert.match(asked[0], /2 lost[\s\S]*kept[\s\S]*close it first/, 'removal warns about lost changes and other windows')
+  assert.deepEqual(ops.pop(), { op: 'worktree_remove', path: '/repo-feat', force: true })
+  await commands.get('pushright.worktree.remove')()
+  assert.equal(ops.length, 0, 'the palette cannot remove without a target')
 })

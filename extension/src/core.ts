@@ -1,11 +1,12 @@
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
 import * as vscode from 'vscode'
-import type { Entry, Identity, Log, Op, Refs } from '../../src/lib/api'
+import type { Entry, Identity, Log, Op, Operation, Refs, WorkflowSettings } from '../../src/lib/api'
 import { explanations as enHelp, messages as en } from '../../src/lib/locales/en'
 import { explanations as zhHelp, messages as zh } from '../../src/lib/locales/zh'
 import type { AuthorStyle } from '../../src/lib/prefs.svelte'
 import { startEngine, type Engine } from './engine'
+import { formatTime, readTimeZone } from '../../src/lib/time'
 
 const chinese = vscode.env.language.toLowerCase().startsWith('zh')
 export const locale = chinese ? 'zh-CN' : 'en'
@@ -27,9 +28,13 @@ export interface Repo {
   root: string
   name: string
   refs: Refs
+  /** 进行中的合并 / 变基 / 摘取 / 撤销在 Git 里记下的信息；没有时为 null */
+  operation: Operation | null
   status: Entry[]
   identity: Identity | null
   remotes: string[]
+  /** 提交信息模板和提交前检查（仓库设置里的） */
+  workflow: WorkflowSettings | null
 }
 
 export const repos: Repo[] = []
@@ -75,7 +80,7 @@ async function discover(extra: string[]) {
         else {
           const parent = repos.filter((r) => fold(root).startsWith(fold(r.root) + sep)).sort((a, b) => b.root.length - a.root.length)[0]
           repo = {
-            tab, root, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [],
+            tab, root, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [], operation: null, workflow: null,
             refs: { head: null, head_id: null, ahead_behind: null, in_progress: null, revert_disabled: false, refs: [] },
           }
           repos.push(repo)
@@ -149,12 +154,14 @@ export async function refresh(repo: Repo, git = true, notify = git) {
     const before = notify || JSON.stringify(repo.status)
     try {
       if (git) {
-        ;[repo.refs, repo.status, repo.identity, repo.remotes] = await Promise.all([
+        ;[repo.refs, repo.status, repo.identity, repo.remotes, repo.workflow] = await Promise.all([
           engine.call<Refs>('refs', a),
           engine.call<Entry[]>('status', a),
           engine.call<Identity>('commit_identity', a).catch(() => null),
           engine.call<string[]>('remotes', a),
+          engine.call<WorkflowSettings>('workflow_settings', a).catch(() => null),
         ])
+        repo.operation = repo.refs.in_progress ? await engine.call<Operation | null>('operation', a) : null
       } else repo.status = await engine.call<Entry[]>('status', a)
     } catch (e) {
       log.appendLine(errorText(e))
@@ -241,7 +248,18 @@ export function ago(sec: number): string {
   }
   return format.format(0, 'minute')
 }
-export const date = (sec: number) => new Date(sec * 1000).toLocaleString(locale)
+let savedTimeZone: string | undefined
+let timeZone = ''
+let dateFormatter: Intl.DateTimeFormat
+export function date(sec: number, dateOnly = false): string {
+  const saved = stored().timeZone ?? ''
+  if (saved !== savedTimeZone) {
+    savedTimeZone = saved
+    timeZone = readTimeZone(saved)
+    dateFormatter = new Intl.DateTimeFormat(locale, { timeZone: timeZone || undefined, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+  }
+  return dateOnly ? formatTime(sec, timeZone).slice(0, 10) : dateFormatter.format(new Date(sec * 1000))
+}
 
 // 界面偏好与提交图面板共用一份，存在 globalState 的 webview 键下（键和值就是面板的 localStorage）
 
@@ -252,7 +270,7 @@ export async function store(key: string, value: string | null) {
   if (value === null) delete all[key]
   else all[key] = value
   await context.globalState.update('webview', all)
-  if (key === 'prefs' || key === 'diffColors') onPrefsChange.fire()
+  if (key === 'prefs' || key === 'diffColors' || key === 'timeZone') onPrefsChange.fire()
 }
 
 export function authorStyles(): Record<string, AuthorStyle> {

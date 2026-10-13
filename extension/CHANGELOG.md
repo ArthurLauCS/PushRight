@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.11
+
+- Add a global time-zone dropdown to the shared full graph. Persist the selection across restarts and apply it to all repository views, native history and blame, including daylight-saving transitions and monthly statistics.
+- Expand graph filtering and branch management; add diff tools, a changed-file tree and folder staging, hand-edited conflict resolution, external diff/merge tools and a warning for overlapping binary changes before pull.
+
+新增全局时区下拉框，覆盖各仓库视图、原生历史与 Blame、统计日期和月份，重启后保留，并自动处理夏令时。完善分支管理、提交图筛选、差异工具、目录暂存、冲突手动编辑和外部工具，并在拉取前提示二进制文件的双端改动。
+
+- Add a **Worktrees** view to the PushRight page: list worktrees, open one in a new window, create and remove them. A submodule's own folder is now reported as its main worktree.
+- Chinese labels for the commit identity prompts show the `git config` command they run.
+- Sidebar graph: add **Tags** and **First parent only** toggles, shared with the full graph.
+- Source Control: pre-fill the repository's commit message template; add **Recent Commit Messages…** and **Run Pre-Commit Check** commands.
+- Full graph, Repository tools: find the commit that broke something (bisect), submodules, Git LFS, apply a pasted patch, and repository statistics. External diff / merge tools, hand-edited conflict resolution with previous / next navigation, commit template, recent messages and a pre-commit check.
+
+PushRight 页面新增“工作树”视图：列出工作树、在新窗口打开、新建和删除。修改提交身份的输入框写出对应的 `git config` 指令。侧栏提交图新增“标签”“只看主线”开关。源代码管理面板预填提交信息模板，新增“最近的提交信息…”“运行提交前检查”命令。完整提交图的仓库工具新增二分查找、子模块、LFS、应用补丁和仓库统计，并带上外部对比／合并工具、冲突手动编辑与跳转、提交模板和提交前检查。
+
 ## 1.1.10
 
 - Keep the full graph toolbar on one line at every width. Chinese labels show the action name first and the Git command in smaller monospace text; where space is tight the command moves to the tooltip.

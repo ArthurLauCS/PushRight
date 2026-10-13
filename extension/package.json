@@ -2,7 +2,7 @@
   "name": "pushright",
   "displayName": "PushRight",
   "description": "%description%",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "publisher": "AthurLau",
   "private": true,
   "icon": "icon.png",
@@ -63,6 +63,12 @@
         "icon": "$(sync)"
       },
       {
+        "command": "pushright.fastForward",
+        "title": "%command.fastForward%",
+        "category": "PushRight",
+        "enablement": "pushright.hasRepo"
+      },
+      {
         "command": "pushright.checkout",
         "title": "%command.checkout%",
         "category": "PushRight"
@@ -94,6 +100,11 @@
         "title": "%command.commitAmend%",
         "category": "PushRight"
       },
+      { "command": "pushright.worktree.add", "title": "%command.worktree.add%", "category": "PushRight", "icon": "$(add)", "enablement": "pushright.hasRepo" },
+      { "command": "pushright.worktree.open", "title": "%command.worktree.open%", "category": "PushRight", "icon": "$(empty-window)" },
+      { "command": "pushright.worktree.remove", "title": "%command.worktree.remove%", "category": "PushRight", "icon": "$(trash)" },
+      { "command": "pushright.recentMessages", "title": "%command.recentMessages%", "category": "PushRight", "enablement": "pushright.hasRepo" },
+      { "command": "pushright.runCheck", "title": "%command.runCheck%", "category": "PushRight", "enablement": "pushright.hasRepo" },
       {
         "command": "pushright.editIdentity",
         "title": "%command.editIdentity%",
@@ -279,6 +290,8 @@
         { "command": "pushright.untrackFile", "when": "pushright.hasRepo && resourceScheme == file && !explorerResourceIsFolder", "group": "pushright@4" }
       ],
       "commandPalette": [
+        { "command": "pushright.worktree.open", "when": "false" },
+        { "command": "pushright.worktree.remove", "when": "false" },
         {
           "command": "pushright.stage",
           "when": "false"
@@ -365,6 +378,11 @@
           "group": "1_sync@1"
         },
         {
+          "command": "pushright.fastForward",
+          "when": "scmProvider == pushright",
+          "group": "1_sync@2"
+        },
+        {
           "command": "pushright.checkout",
           "when": "scmProvider == pushright",
           "group": "1_sync@2"
@@ -380,14 +398,24 @@
           "group": "2_commit@1"
         },
         {
-          "command": "pushright.editIdentity",
+          "command": "pushright.recentMessages",
           "when": "scmProvider == pushright",
           "group": "2_commit@2"
         },
         {
-          "command": "pushright.repositorySettings",
+          "command": "pushright.runCheck",
           "when": "scmProvider == pushright",
           "group": "2_commit@3"
+        },
+        {
+          "command": "pushright.editIdentity",
+          "when": "scmProvider == pushright",
+          "group": "2_commit@4"
+        },
+        {
+          "command": "pushright.repositorySettings",
+          "when": "scmProvider == pushright",
+          "group": "2_commit@5"
         },
         {
           "command": "pushright.diffColors",
@@ -548,6 +576,8 @@
       ],
       "view/title": [
         { "command": "pushright.refresh", "when": "view == pushright.localFiles", "group": "navigation" },
+        { "command": "pushright.worktree.add", "when": "view == pushright.worktrees", "group": "navigation@1" },
+        { "command": "pushright.refresh", "when": "view == pushright.worktrees", "group": "navigation@2" },
         {
           "command": "pushright.searchCommits",
           "when": "view == pushright.search",
@@ -560,6 +590,11 @@
         }
       ],
       "view/item/context": [
+        { "command": "pushright.worktree.add", "when": "viewItem == worktreeRepo", "group": "inline" },
+        { "command": "pushright.worktree.open", "when": "viewItem == worktree", "group": "inline@1" },
+        { "command": "pushright.worktree.remove", "when": "viewItem == worktree", "group": "inline@2" },
+        { "command": "pushright.worktree.open", "when": "viewItem == worktree", "group": "1@1" },
+        { "command": "pushright.worktree.remove", "when": "viewItem == worktree", "group": "1@2" },
         { "command": "pushright.ignoreLocal", "when": "viewItem =~ /^local/", "group": "1@1" },
         { "command": "pushright.ignoreShared", "when": "viewItem =~ /^local/", "group": "1@2" },
         { "command": "pushright.trackFile", "when": "viewItem == localFile", "group": "1@3" },
@@ -634,6 +669,11 @@
         {
           "id": "pushright.search",
           "name": "%view.search%"
+        },
+        {
+          "id": "pushright.worktrees",
+          "name": "%view.worktrees%",
+          "when": "pushright.hasRepo"
         }
       ]
     },

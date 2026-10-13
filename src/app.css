@@ -21,9 +21,20 @@
   /* 陶土色：全应用唯一的强调色 */
   --accent: #e08363;
   --accent-soft: rgba(224, 131, 99, 0.16);
+  /* 提交图里本地分支标签的底色，比选中行的 --accent-soft 重一档 */
+  --ref-bg: rgba(224, 131, 99, 0.3);
   --on-accent: #1f1e1d;
   --green: #91b876;
   --yellow: #e0b35a;
+  /* diff 里的语法高亮，取 VS Code 默认深色主题的配色 */
+  --syn-keyword: #569cd6;
+  --syn-string: #ce9178;
+  --syn-comment: #6a9955;
+  --syn-number: #b5cea8;
+  --syn-function: #dcdcaa;
+  --syn-type: #4ec9b0;
+  --syn-variable: #9cdcfe;
+  --syn-meta: #c586c0;
   --red: #ef7b88;
   --on-danger: #1f1e1d;
   --diff-added: var(--green);
@@ -85,20 +96,29 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #faf9f5;
-  --panel: #f0eee6;
-  --raised: #e6e3d8;
-  --border: #dbd8cc;
-  --border-strong: #b4b0a2;
-  --text: #141413;
+  --bg: #f4f2ea;
+  --panel: #ebe8de;
+  --raised: #e0dccf;
+  --border: #d4d0c2;
+  --border-strong: #ada999;
+  --text: #1f1e1c;
   --muted: #5e5d57;
   --hover: rgba(20, 20, 19, 0.05);
 
   --accent: #a04423;
   --accent-soft: rgba(160, 68, 35, 0.12);
+  --ref-bg: var(--accent-soft);
   --on-accent: #faf9f5;
   --green: #3f6b2f;
   --yellow: #7a5607;
+  --syn-keyword: #0000ff;
+  --syn-string: #a31515;
+  --syn-comment: #008000;
+  --syn-number: #098658;
+  --syn-function: #795e26;
+  --syn-type: #267f99;
+  --syn-variable: #001080;
+  --syn-meta: #af00db;
   --red: #a82835;
   --on-danger: #faf9f5;
 
@@ -256,6 +276,29 @@ button:disabled {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* 语法高亮的记号类名由 highlight.js 生成，diff 里用 {@html} 插入，只能写成全局规则 */
+.hljs-keyword, .hljs-literal, .hljs-tag, .hljs-name, .hljs-selector-tag { color: var(--syn-keyword); }
+.hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-template-variable { color: var(--syn-string); }
+.hljs-comment, .hljs-quote { color: var(--syn-comment); font-style: italic; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: var(--syn-number); }
+.hljs-title, .hljs-section, .hljs-selector-id, .hljs-selector-class { color: var(--syn-function); }
+.hljs-type, .hljs-built_in, .hljs-title.class_, .hljs-selector-pseudo { color: var(--syn-type); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-property, .hljs-params { color: var(--syn-variable); }
+.hljs-meta, .hljs-doctag, .hljs-subst .hljs-keyword { color: var(--syn-meta); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+/* 可点掉的筛选条件：提交图的作者聚焦、分支筛选 */
+.chip {
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--r-lg);
+  background: none;
+  font-size: var(--fs-sm);
+  cursor: pointer;
 }
 
 .field {

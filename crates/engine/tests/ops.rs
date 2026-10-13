@@ -105,7 +105,7 @@ fn branches_tags_stash_reset() {
     // 贮藏：含未跟踪文件，弹出后恢复
     std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
     std::fs::write(dir.join("new.txt"), "n\n").unwrap();
-    ok(&repo, Op::StashPush { message: "半成品".into(), include_untracked: true });
+    ok(&repo, Op::StashPush { message: "半成品".into(), include_untracked: true, paths: vec![] });
     assert!(status::status(&repo).unwrap().is_empty());
     let stashes = refs::stashes(&repo).unwrap();
     assert!(stashes[0].subject.contains("半成品"));
@@ -182,7 +182,7 @@ fn background_fetch_preserves_local_work_and_force_push_rejects_unintegrated_upd
     assert_eq!(std::fs::read_to_string(dir.join("untracked.txt")).unwrap(), "untracked\n");
     assert_eq!(std::fs::read_to_string(dir.join(".git/FETCH_HEAD")).unwrap(), "manual-fetch-sentinel\n");
 
-    let push = || Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: true, set_upstream: false };
+    let push = || Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: true, set_upstream: false, tags: false };
     let log = ops::run(&repo, push()).unwrap();
     assert!(!log.ok, "auto-fetch must not make an unseen remote commit safe to overwrite");
     assert_eq!(refs::list(&remote).unwrap().head_id, remote_head);
@@ -191,7 +191,7 @@ fn background_fetch_preserves_local_work_and_force_push_rejects_unintegrated_upd
     git(&dir, now(), &["add", "."]);
     git(&dir, now(), &["commit", "-q", "-m", "local work"]);
     git(&dir, now(), &["rebase", "origin/main"]);
-    ok(&repo, Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: false, set_upstream: false });
+    ok(&repo, Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: false, set_upstream: false, tags: false });
     git(&dir, now(), &["commit", "-q", "--amend", "-m", "rewritten local work"]);
     ok(&repo, push());
     assert_eq!(refs::list(&remote).unwrap().head_id, refs::list(&repo).unwrap().head_id);
@@ -221,7 +221,7 @@ fn remote_fetch_push_pull_and_upstream() {
     ok(&repo, Op::CreateBranch { name: "feat".into(), start: "main".into(), checkout: true });
     assert_eq!(upstream_of("refs/heads/feat"), None);
     commit_file(&dir, 2, "b.txt", "b\n");
-    ok(&repo, Op::Push { remote: "origin".into(), branch: "feat".into(), remote_branch: "feat".into(), force: false, set_upstream: true });
+    ok(&repo, Op::Push { remote: "origin".into(), branch: "feat".into(), remote_branch: "feat".into(), force: false, set_upstream: true, tags: false });
     assert_eq!(upstream_of("refs/heads/feat").as_deref(), Some("refs/remotes/origin/feat"));
     assert!(id_of(&Repo::open(&origin).unwrap(), "refs/heads/feat").is_some());
 
@@ -242,7 +242,7 @@ fn remote_fetch_push_pull_and_upstream() {
     commit_file(&origin, 4, "d.txt", "d\n");
     ok(&repo, Op::Fetch { background: false });
     assert_eq!(refs::list(&repo).unwrap().ahead_behind, Some((0, 1)));
-    ok(&repo, Op::Pull { rebase: true });
+    ok(&repo, Op::Pull { rebase: true, autostash: false });
     assert_eq!(refs::list(&repo).unwrap().ahead_behind, Some((0, 0)));
 
     // 检出远程分支：建立跟踪它的本地分支
@@ -273,7 +273,7 @@ fn pull_explicit_mode_and_conflict_recovery() {
     git(&dir, 0, &["config", "branch.main.rebase", "false"]);
     git(&dir, 0, &["config", "rebase.updateRefs", "true"]);
     git(&dir, 0, &["config", "pull.ff", "only"]);
-    let log = ops::run(&repo, Op::Pull { rebase: true }).unwrap();
+    let log = ops::run(&repo, Op::Pull { rebase: true, autostash: false }).unwrap();
     assert!(log.ok, "{}", log.output);
     assert!(log.command.contains("pull --rebase"));
     assert_ne!(id_of(&repo, "refs/heads/main"), Some(before.clone()));
@@ -288,7 +288,7 @@ fn pull_explicit_mode_and_conflict_recovery() {
     git(&dir, 0, &["config", "branch.main.rebase", "true"]);
     git(&dir, 0, &["config", "pull.ff", "true"]);
     commit_file(&origin, 4, "remote2.txt", "remote2\n");
-    ok(&repo, Op::Pull { rebase: false });
+    ok(&repo, Op::Pull { rebase: false, autostash: false });
     let parents = std::process::Command::new("git").current_dir(&dir)
         .args(["rev-list", "--parents", "-1", "HEAD"]).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&parents.stdout).split_whitespace().count(), 3);
@@ -297,11 +297,11 @@ fn pull_explicit_mode_and_conflict_recovery() {
     commit_file(&dir, 5, "a.txt", "local\n");
     let before_conflict = id_of(&repo, "refs/heads/main").unwrap();
     commit_file(&origin, 6, "a.txt", "remote\n");
-    assert!(!ops::run(&repo, Op::Pull { rebase: true }).unwrap().ok);
+    assert!(!ops::run(&repo, Op::Pull { rebase: true, autostash: false }).unwrap().ok);
     assert_eq!(refs::list(&repo).unwrap().in_progress, Some("rebase"));
     ok(&repo, Op::Abort { what: InProgress::Rebase });
     assert_eq!(id_of(&repo, "refs/heads/main"), Some(before_conflict));
-    assert!(!ops::run(&repo, Op::Pull { rebase: true }).unwrap().ok);
+    assert!(!ops::run(&repo, Op::Pull { rebase: true, autostash: false }).unwrap().ok);
     std::fs::write(dir.join("a.txt"), "resolved\n").unwrap();
     status::stage(&repo, &["a.txt".into()]).unwrap();
     ok(&repo, Op::Continue { what: InProgress::Rebase });
@@ -341,4 +341,208 @@ fn worktree_add_overview_remove() {
     assert_eq!(refs::worktrees(&repo).unwrap().len(), 1);
 
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn operation_reports_git_message_commit_and_original_conflicts() {
+    let dir = init("ops-operation");
+    commit_file(&dir, 1, "中文 名.txt", "base\n");
+    commit_file(&dir, 1, "b.txt", "base\n");
+    let repo = Repo::open(&dir).unwrap();
+    assert_eq!(engine::conflict::operation(&repo).unwrap(), None);
+    ok(&repo, Op::CreateBranch { name: "other".into(), start: "main".into(), checkout: true });
+    commit_file(&dir, 2, "中文 名.txt", "other\n");
+    commit_file(&dir, 2, "b.txt", "other\n");
+    let other = id_of(&repo, "refs/heads/other");
+    ok(&repo, Op::Checkout { target: "main".into() });
+    commit_file(&dir, 3, "中文 名.txt", "main\n");
+    commit_file(&dir, 3, "b.txt", "main\n");
+
+    assert!(!ops::run(&repo, Op::Merge { target: "other".into() }).unwrap().ok);
+    let info = engine::conflict::operation(&repo).unwrap().unwrap();
+    // 信息保留 Git 的原文：主题在第一行，冲突清单是后面的注释行
+    assert!(info.message.starts_with("Merge branch 'other'\n\n# Conflicts:\n#\tb.txt\n"), "{}", info.message);
+    assert_eq!(info.id, other);
+    assert_eq!(info.conflicts, ["b.txt", "中文 名.txt"]);
+    assert_eq!(info.step, None);
+    // 解决一个之后，清单仍是开始时的全部冲突，界面据此算进度
+    engine::conflict::take(&repo, "b.txt", true).unwrap();
+    assert_eq!(engine::conflict::operation(&repo).unwrap().unwrap().conflicts.len(), 2);
+    assert_eq!(status::status(&repo).unwrap().iter().filter(|e| e.conflicted).count(), 1);
+    ok(&repo, Op::Abort { what: InProgress::Merge });
+    assert_eq!(engine::conflict::operation(&repo).unwrap(), None);
+
+    // 变基：正在重放的提交和它的说明，外加步数
+    assert!(!ops::run(&repo, Op::Rebase { onto: "other".into() }).unwrap().ok);
+    let info = engine::conflict::operation(&repo).unwrap().unwrap();
+    assert_eq!(info.message.lines().next(), Some("中文 名.txt"));
+    assert_eq!(info.step, Some((1, 2)));
+    assert_eq!(info.conflicts, ["中文 名.txt"]);
+    ok(&repo, Op::Abort { what: InProgress::Rebase });
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn fast_forward_moves_only_when_no_commit_is_lost() {
+    let origin = init("ff-origin");
+    commit_file(&origin, 1, "a.txt", "a\n");
+    git(&origin, 0, &["branch", "side"]);
+    git(&origin, 0, &["branch", "busy"]);
+    let dir = std::env::temp_dir().join(format!("gitgod-test-ff-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    git(&origin, 0, &["clone", "-q", ".", dir.to_str().unwrap()]);
+    for kv in [["user.name", "t"], ["user.email", "t@t"]] {
+        git(&dir, 0, &["config", kv[0], kv[1]]);
+    }
+    let repo = Repo::open(&dir).unwrap();
+    ok(&repo, Op::Track { remote_branch: "origin/side".into() });
+    ok(&repo, Op::Checkout { target: "main".into() });
+    let busy = std::env::temp_dir().join(format!("gitgod-test-ff-busy-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&busy);
+    git(&dir, 0, &["worktree", "add", "-q", "--track", "-b", "busy", busy.to_str().unwrap(), "origin/busy"]);
+    ok(&repo, Op::CreateBranch { name: "local-only".into(), start: "main".into(), checkout: false });
+    assert_eq!(ops::run(&repo, Op::FastForward { branch: "local-only".into() }).unwrap_err(), "PR_NO_UPSTREAM");
+
+    // 远程三个分支都前进
+    commit_file(&origin, 2, "b.txt", "b\n");
+    for branch in ["side", "busy"] {
+        git(&origin, 0, &["checkout", "-q", branch]);
+        commit_file(&origin, 3, &format!("{branch}.txt"), "x\n");
+    }
+    git(&origin, 0, &["checkout", "-q", "main"]);
+    ok(&repo, Op::Fetch { background: false });
+    let remote = |name: &str| id_of(&repo, &format!("refs/remotes/origin/{name}"));
+
+    // 没检出的分支：只挪引用，FETCH_HEAD 不动
+    let fetch_head = std::fs::read(dir.join(".git/FETCH_HEAD")).unwrap();
+    ok(&repo, Op::FastForward { branch: "side".into() });
+    assert_eq!(id_of(&repo, "refs/heads/side"), remote("side"));
+    assert_eq!(std::fs::read(dir.join(".git/FETCH_HEAD")).unwrap(), fetch_head);
+    assert_eq!(refs::list(&repo).unwrap().head.as_deref(), Some("refs/heads/main"));
+
+    // 当前分支：工作区文件跟着更新，不相干的未提交改动保留
+    std::fs::write(dir.join("a.txt"), "local edit\n").unwrap();
+    ok(&repo, Op::FastForward { branch: "main".into() });
+    assert_eq!(id_of(&repo, "refs/heads/main"), remote("main"));
+    assert!(dir.join("b.txt").exists());
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "local edit\n");
+    git(&dir, 0, &["checkout", "-q", "--", "a.txt"]);
+
+    // 被别的工作树检出的分支：拒绝，不动它
+    let before = id_of(&repo, "refs/heads/busy");
+    assert!(!ops::run(&repo, Op::FastForward { branch: "busy".into() }).unwrap().ok);
+    assert_eq!(id_of(&repo, "refs/heads/busy"), before);
+
+    // 分叉：当前分支和非当前分支都拒绝，不合并、不变基
+    commit_file(&dir, 4, "local.txt", "local\n");
+    git(&dir, 0, &["branch", "-f", "side", "HEAD"]);
+    commit_file(&origin, 5, "c.txt", "c\n");
+    git(&origin, 0, &["checkout", "-q", "side"]);
+    commit_file(&origin, 6, "side2.txt", "x\n");
+    git(&origin, 0, &["checkout", "-q", "main"]);
+    ok(&repo, Op::Fetch { background: false });
+    for branch in ["main", "side"] {
+        let before = id_of(&repo, &format!("refs/heads/{branch}"));
+        assert!(!ops::run(&repo, Op::FastForward { branch: branch.into() }).unwrap().ok);
+        assert_eq!(id_of(&repo, &format!("refs/heads/{branch}")), before);
+    }
+    assert_eq!(refs::list(&repo).unwrap().in_progress, None);
+
+    std::fs::remove_dir_all(&busy).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&origin).unwrap();
+}
+
+#[test]
+fn pull_autostash_single_file_stash_push_tags_and_patch_text() {
+    let origin = init("extras-origin");
+    commit_file(&origin, 1, "a.txt", "a\n");
+    git(&origin, 0, &["config", "receive.denyCurrentBranch", "ignore"]);
+    let dir = std::env::temp_dir().join(format!("gitgod-test-extras-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    git(&origin, 0, &["clone", "-q", ".", dir.to_str().unwrap()]);
+    for kv in [["user.name", "t"], ["user.email", "t@t"], ["core.autocrlf", "false"]] {
+        git(&dir, 0, &["config", kv[0], kv[1]]);
+    }
+    let repo = Repo::open(&dir).unwrap();
+
+    // 有未提交改动时：不勾选自动贮藏的变基拉取被拒绝，勾选后拉取成功且改动放回
+    commit_file(&origin, 2, "b.txt", "b\n");
+    std::fs::write(dir.join("a.txt"), "local edit\n").unwrap();
+    assert!(!ops::run(&repo, Op::Pull { rebase: true, autostash: false }).unwrap().ok);
+    ok(&repo, Op::Pull { rebase: true, autostash: true });
+    assert!(dir.join("b.txt").exists());
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "local edit\n");
+
+    // 补丁文本：未暂存、已暂存、提交三种来源
+    let unstaged = engine::local_files::patch(&repo, "unstaged", "", "a.txt").unwrap();
+    assert!(unstaged.contains("+local edit") && unstaged.starts_with("diff --git a/a.txt b/a.txt"));
+    assert_eq!(engine::local_files::patch(&repo, "staged", "", "a.txt").unwrap(), "");
+    let head = refs::list(&repo).unwrap().head_id.unwrap();
+    assert!(engine::local_files::patch(&repo, "commit", &head, "b.txt").unwrap().contains("+b"));
+    assert!(engine::local_files::patch(&repo, "commit", "--output=x", "b.txt").is_err());
+
+    // 只贮藏一个文件：另一个文件的改动留在工作区
+    std::fs::write(dir.join("b.txt"), "other edit\n").unwrap();
+    ok(&repo, Op::StashPush { message: "one file".into(), include_untracked: false, paths: vec!["a.txt".into()] });
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "a\n");
+    assert_eq!(std::fs::read_to_string(dir.join("b.txt")).unwrap(), "other edit\n");
+    git(&dir, 0, &["checkout", "-q", "--", "b.txt"]);
+
+    // 推送时带上所有标签
+    ok(&repo, Op::CreateTag { name: "v1".into(), target: "HEAD".into(), message: String::new() });
+    ok(&repo, Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: false, set_upstream: false, tags: false });
+    assert!(id_of(&Repo::open(&origin).unwrap(), "refs/tags/v1").is_none());
+    ok(&repo, Op::Push { remote: "origin".into(), branch: "main".into(), remote_branch: "main".into(), force: false, set_upstream: false, tags: true });
+    assert!(id_of(&Repo::open(&origin).unwrap(), "refs/tags/v1").is_some());
+
+    // 定位文件只接受仓库内的路径
+    assert_eq!(engine::local_files::reveal(&repo, "../outside.txt", false).unwrap_err(), "PR_INVALID_PATH");
+    assert_eq!(engine::local_files::reveal(&repo, "missing.txt", true).unwrap_err(), "PR_INVALID_PATH");
+
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&origin).unwrap();
+}
+
+#[test]
+fn binary_overlap_reports_binary_files_changed_on_both_sides_before_pulling() {
+    let origin = init("overlap-origin");
+    let bin = |tag: u8| [&[0u8, 1, 2, tag][..], b"binary"].concat();
+    for name in ["place.rbxl", "icon.png", "untouched.bin"] {
+        std::fs::write(origin.join(name), bin(0)).unwrap();
+    }
+    commit_file(&origin, 1, "notes.txt", "text\n");
+    let dir = std::env::temp_dir().join(format!("gitgod-test-overlap-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    git(&origin, 0, &["clone", "-q", ".", dir.to_str().unwrap()]);
+    for kv in [["user.name", "t"], ["user.email", "t@t"]] {
+        git(&dir, 0, &["config", kv[0], kv[1]]);
+    }
+    let repo = Repo::open(&dir).unwrap();
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty());
+
+    // 远程改了两个二进制文件和一个文本文件
+    for name in ["place.rbxl", "icon.png"] {
+        std::fs::write(origin.join(name), bin(9)).unwrap();
+    }
+    commit_file(&origin, 2, "notes.txt", "remote text\n");
+    // 本地：一个二进制文件未提交、一个已提交未推送，文本文件也改了
+    std::fs::write(dir.join("icon.png"), bin(7)).unwrap();
+    git(&dir, 3, &["commit", "-q", "-am", "local icon"]);
+    std::fs::write(dir.join("place.rbxl"), bin(8)).unwrap();
+    std::fs::write(dir.join("notes.txt"), "local text\n").unwrap();
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty(), "nothing is known before fetching");
+    ok(&repo, Op::Fetch { background: false });
+    let mut overlap = refs::binary_overlap(&repo).unwrap();
+    overlap.sort();
+    assert_eq!(overlap, ["icon.png", "place.rbxl"], "text files can be merged and are not reported");
+
+    // 没有上游的分支不报错
+    ok(&repo, Op::Discard { paths: vec![] });
+    ok(&repo, Op::CreateBranch { name: "solo".into(), start: "HEAD".into(), checkout: true });
+    assert!(refs::binary_overlap(&repo).unwrap().is_empty());
+
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&origin).unwrap();
 }

@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import * as vscode from 'vscode'
-import { activeRepo, ago, attempt, date, engine, errorText, fileUri, onRepoChange, rel, repoOf, repos, REV, revOf, revUri, short, t, v, type Repo } from './core'
+import { activeRepo, ago, attempt, date, engine, errorText, fileUri, onPrefsChange, onRepoChange, rel, repoOf, repos, REV, revOf, revUri, short, t, v, type Repo } from './core'
 
 /** 与 crates/engine/src/history.rs 的 Commit 对应 */
 interface Commit {
@@ -44,6 +44,7 @@ class CommitList implements vscode.TreeDataProvider<Commit> {
   }
 
   getChildren = () => this.more ? [...this.items, MORE] : this.items
+  refresh = () => this.changed.fire()
 
   async loadMore() {
     if (!this.more || !this.loader || this.loading) return
@@ -248,6 +249,7 @@ export function registerHistory(context: vscode.ExtensionContext) {
   const command = (id: string, fn: (...args: any[]) => unknown) => vscode.commands.registerCommand(`pushright.${id}`, fn)
   context.subscriptions.push(
     files.view, lines.view, found.view,
+    onPrefsChange.event(() => { for (const list of [files, lines, found]) list.refresh() }),
     vscode.window.onDidChangeActiveTextEditor(follow),
     vscode.window.onDidChangeActiveTextEditor(followLines),
     vscode.window.onDidChangeTextEditorSelection((e) => { if (e.textEditor === vscode.window.activeTextEditor) followLines() }),

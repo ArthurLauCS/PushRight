@@ -10,7 +10,11 @@ export function registerGraphView(context: vscode.ExtensionContext) {
   const scopes = { ...context.workspaceState.get<Record<string, string>>('graphScopes', {}) }
   const scopeOf = (root: string, refs: { name: string }[]) => {
     const scope = scopes[root] ?? 'auto'
-    return scope === 'auto' || scope === 'all' || refs.some((r) => r.name === scope) ? scope : 'auto'
+    if (scope === 'auto' || scope === 'all') return scope
+    // 多选时是换行分隔的引用名；已删除的拿掉，一个不剩就回到 Auto
+    // 以 ^ 开头的是「相比」的基准；要看的分支一个不剩时基准也没有意义
+    const alive = scope.split('\n').filter((name) => refs.some((r) => r.name === name.replace(/^\^/, '')))
+    return alive.some((name) => !name.startsWith('^')) ? alive.join('\n') : 'auto'
   }
   const openFile = async (args: { tab: number; id: string; path: string; preview?: boolean }) => {
     const repo = repos.find((r) => r.tab === args?.tab)
@@ -35,9 +39,10 @@ export function registerGraphView(context: vscode.ExtensionContext) {
         onPrefsChange.event(() => {
           webview.postMessage({ store: 'prefs', value: stored().prefs ?? '{}' })
           webview.postMessage({ store: 'diffColors', value: stored().diffColors ?? 'null' })
+          webview.postMessage({ store: 'timeZone', value: stored().timeZone ?? '' })
         }),
         webview.onDidReceiveMessage(async (m) => {
-          if (m.store === 'prefs') return void await store(m.store, m.value)
+          if (m.store === 'prefs' || m.store === 'graphView') return void await store(m.store, m.value)
           if (!m.cmd) return
           try {
             let value: unknown
@@ -48,7 +53,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
               if (!repo) throw new Error('PR_TAB_CLOSED')
               if (m.cmd === 'graph_scope') {
                 // 范围在主机的选择框里选，Webview 不能指定任意引用。
-                const scope = await pickScope(repo)
+                const scope = await pickScope(repo, scopeOf(repo.root, repo.refs.refs))
                 if (scope) {
                   scopes[repo.root] = scope
                   await context.workspaceState.update('graphScopes', scopes)
@@ -61,7 +66,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
               } else if (m.cmd === 'open_commit_file') {
                 await openFile(m.args)
               } else if (m.cmd === 'load_graph' && typeof m.args.full === 'boolean') {
-                value = await engine.call(m.cmd, { tab: repo.tab, full: m.args.full, scope: scopeOf(repo.root, repo.refs.refs) })
+                value = await engine.call(m.cmd, { tab: repo.tab, full: m.args.full, scope: scopeOf(repo.root, repo.refs.refs), firstParent: m.args.firstParent === true })
               } else if (m.cmd === 'rows' && Number.isInteger(m.args.start) && m.args.start >= 0 && Number.isInteger(m.args.count) && m.args.count > 0 && m.args.count <= 128) {
                 value = await engine.call(m.cmd, { tab: repo.tab, start: m.args.start, count: m.args.count })
               } else throw new Error('Unsupported graph request')

@@ -25,6 +25,21 @@
     tools: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z',
     up: 'm6 15 6-6 6 6',
     down: 'm6 9 6 6 6-6',
+    right: 'm9 6 6 6-6 6',
+    left: 'm15 6-6 6 6 6',
+    pin: 'M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z',
+    broom: 'M19 4 12 11M10 9l5 5-4 6H4l1-6zM7 14l5 5',
+    filter: 'M3 5h18l-7 8v6l-4 2v-8z',
+    space: 'M4 10v4h16v-4',
+    pilcrow: 'M13 4v16M17 4v16M19 4H9.5a4.5 4.5 0 0 0 0 9H13',
+    wrap: 'M3 6h18M3 12h15a3 3 0 1 1 0 6h-4m2-2-2 2 2 2M3 18h7',
+    contextLess: 'M3 5h18M3 19h18M8 12h8',
+    contextMore: 'M3 5h18M3 19h18M8 12h8M12 8v8',
+    wholeFile: 'M3 4h18M3 20h18M12 8v8M9 11l3-3 3 3M9 13l3 3 3-3',
+    split: 'M3 4h18v16H3zM12 4v16',
+    tree: 'M21 12h-8M21 6H8M21 18h-8M3 6v4a2 2 0 0 0 2 2h3M3 10v6a2 2 0 0 0 2 2h3',
+    expand: 'm7 15 5 5 5-5M7 9l5-5 5 5',
+    collapse: 'm7 20 5-5 5 5M7 4l5 5 5-5',
   }
   export type IconName = keyof typeof PATHS
 </script>

@@ -120,3 +120,46 @@ fn binary_conflict_takes_one_side() {
     assert!(!status::status(&repo).unwrap().iter().any(|e| e.conflicted));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn hand_edited_resolution_keeps_the_file_encoding_and_line_endings() {
+    // GBK 编码、CRLF 换行的文件：「中」是 D6 D0，「文」是 CE C4
+    let file = |top: &[u8]| [top, b"\r\n2\r\n3\r\n"].concat();
+    let (dir, repo) = conflicted("safety-custom", &file(b"\xd6\xd0 main"), &file(b"\xce\xc4 other"), &file(b"base"), "a.txt");
+    let c = conflict::read(&repo, "a.txt").unwrap();
+    assert!(matches!(&c.blocks[0], Block::Conflict { ours, theirs, .. } if ours.starts_with("中 main") && theirs.starts_with("文 other")));
+
+    // 界面给的是 UTF-8、\n 换行、结尾没有换行；一个选择对应一个冲突块，其余仍可以选一边
+    conflict::resolve(&repo, "a.txt", &[Side::Custom("中文 merged\nsecond line".into())]).unwrap();
+    assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"\xd6\xd0\xce\xc4 merged\r\nsecond line\r\n2\r\n3\r\n");
+    assert!(!status::status(&repo).unwrap()[0].conflicted);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // 清空内容等于把这一块删掉
+    let (dir, repo) = conflicted("safety-custom-empty", b"main\nkeep\n", b"other\nkeep\n", b"base\nkeep\n", "a.txt");
+    conflict::resolve(&repo, "a.txt", &[Side::Custom(String::new())]).unwrap();
+    assert_eq!(read(&dir, "a.txt"), "keep\n");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn external_tools_get_the_right_files_and_resolve_conflicts() {
+    use engine::workflow::launch;
+    let (dir, repo) = conflicted("safety-external", b"main\n", b"other\n", b"base\n", "a.txt");
+    assert_eq!(launch(&repo, "merge", "", "", "", "a.txt").unwrap_err(), "PR_NO_EXTERNAL_TOOL");
+    assert!(launch(&repo, "merge", "no-such-tool", "", "", "a.txt").is_err(), "a mistyped tool name is reported");
+    // 自定义命令：把对方的版本当作合并结果；正常退出后 git 把文件标记为已解决
+    // 不等工具关闭就返回，这里轮询到它做完
+    let wait = |done: &dyn Fn() -> bool| (0..100).any(|_| done() || { std::thread::sleep(std::time::Duration::from_millis(100)); false });
+    launch(&repo, "merge", "cp \"$REMOTE\" \"$MERGED\"", "", "", "a.txt").unwrap();
+    assert!(wait(&|| !status::status(&repo).unwrap().iter().any(|e| e.conflicted)));
+    assert_eq!(read(&dir, "a.txt"), "other\n");
+    assert!(!status::status(&repo).unwrap().iter().any(|e| e.conflicted));
+    assert!(!dir.join("a.txt.orig").exists(), "no backup file is left in the working tree");
+
+    // 对比：暂存区里的版本对 HEAD
+    launch(&repo, "diff", "cat \"$LOCAL\" \"$REMOTE\" > seen.txt", "staged", "", "a.txt").unwrap();
+    assert!(wait(&|| std::fs::read_to_string(dir.join("seen.txt")).is_ok_and(|s| s.ends_with("other\n"))));
+    assert_eq!(read(&dir, "seen.txt"), "main\nother\n");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

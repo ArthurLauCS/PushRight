@@ -45,7 +45,8 @@ pub enum Op {
     Revert { id: String },
     SetRevertDisabled { disabled: bool },
     Reset { target: String, mode: ResetMode },
-    StashPush { message: String, include_untracked: bool },
+    /// `paths` 非空时只贮藏这些文件
+    StashPush { message: String, include_untracked: bool, #[serde(default)] paths: Vec<String> },
     /// 丢弃这些路径的改动（空列表表示全部）。改动进贮藏列表而不是直接删除，后悔了可以取回
     Discard { paths: Vec<String> },
     StashApply { name: String, pop: bool },
@@ -54,8 +55,12 @@ pub enum Op {
     WorktreeAdd { path: String, start: String, new_branch: Option<String> },
     WorktreeRemove { path: String, force: bool },
     Fetch { #[serde(default)] background: bool },
-    Pull { rebase: bool },
-    Push { remote: String, branch: String, remote_branch: String, force: bool, set_upstream: bool },
+    /// `autostash`：先收起未提交的改动，拉取完再放回
+    Pull { rebase: bool, #[serde(default)] autostash: bool },
+    /// 把本地分支快进到它的上游；分叉时拒绝，不合并也不变基
+    FastForward { branch: String },
+    /// `tags`：同时推送所有本地标签
+    Push { remote: String, branch: String, remote_branch: String, force: bool, set_upstream: bool, #[serde(default)] tags: bool },
     CreateTag { name: String, target: String, message: String },
     DeleteTag { name: String },
     RemoteAdd { name: String, url: String },
@@ -64,6 +69,50 @@ pub enum Op {
     RemoteRename { old: String, new: String },
     Continue { what: InProgress },
     Abort { what: InProgress },
+    /// 把补丁文本应用到工作区；`index` 为 true 时同时加入暂存区
+    ApplyPatch { text: String, index: bool },
+    /// 二分查找：已知 `bad` 有问题、`good` 没问题，在两者之间找第一个出问题的提交
+    BisectStart { bad: String, good: String },
+    /// 给当前检出的提交下结论
+    BisectMark { verdict: Verdict },
+    /// 结束二分查找，回到开始前的位置
+    BisectReset,
+    SubmoduleUpdate,
+    SubmoduleSync,
+    /// 给这个仓库装上 LFS 的过滤器和钩子
+    LfsInstall,
+    LfsTrack { pattern: String },
+    LfsUntrack { pattern: String },
+    LfsPull,
+    LfsLock { path: String },
+    LfsUnlock { path: String },
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+pub enum Verdict {
+    Good,
+    Bad,
+    Skip,
+}
+
+/// `git apply` 是整体生效的：有一处对不上就什么都不改。
+// ponytail: 补丁是界面粘贴进来的文本（换行是 \n）；仓库里按 CRLF 存的文件对不上，要支持时改成选补丁文件
+fn apply_patch(repo: &Repo, text: &str, index: bool) -> Result<Log> {
+    let file = repo.gix().git_dir().join("pushright-patch.diff");
+    let mut text = text.replace("\r\n", "\n");
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    std::fs::write(&file, text).map_err(crate::err)?;
+    let mut args = vec!["apply".to_owned(), "--whitespace=nowarn".into()];
+    if index {
+        args.push("--index".into());
+    }
+    args.push(file.to_string_lossy().into_owned());
+    let log = repo.git_log(&args);
+    let _ = std::fs::remove_file(&file);
+    Ok(log)
 }
 
 /// 名字来自界面输入，以 `-` 开头会被 git 当成选项
@@ -77,6 +126,24 @@ pub(crate) fn safe(s: &str) -> Result<&str> {
 pub fn revert_disabled(repo: &Repo) -> Result<bool> {
     let out = repo.git(&["config", "--local", "--type=bool", "--default=false", "--get", "pushright.disableRevert"])?;
     Ok(out == b"true\n")
+}
+
+/// 当前分支用 `merge --ff-only`（工作区文件跟着更新）；其他分支用本地 fetch 只挪引用。
+/// 两条命令在分叉时都会拒绝，后者在分支被别的工作树检出时也拒绝。
+fn fast_forward(repo: &Repo, branch: &str) -> Result<Log> {
+    let name = format!("refs/heads/{}", safe(branch)?);
+    let upstream = String::from_utf8_lossy(&repo.git(&["for-each-ref", "--format=%(upstream)", &name])?).trim().to_owned();
+    if upstream.is_empty() {
+        return Err("PR_NO_UPSTREAM".into());
+    }
+    let current = repo.gix().head_name().map_err(crate::err)?.is_some_and(|head| head.as_bstr() == name.as_str());
+    let args = if current {
+        vec!["merge".to_owned(), "--ff-only".into(), upstream]
+    } else {
+        // 不写 FETCH_HEAD：那是用户上一次真正 fetch / pull 的记录。fetch.prune 也不能作用到本地分支上
+        vec!["fetch".to_owned(), "--no-write-fetch-head".into(), "--no-prune".into(), ".".into(), format!("{upstream}:{name}")]
+    };
+    Ok(repo.git_log(&args))
 }
 
 pub fn run(repo: &Repo, op: Op) -> Result<Log> {
@@ -109,13 +176,17 @@ pub fn run(repo: &Repo, op: Op) -> Result<Log> {
             };
             args.extend(["reset", mode, safe(target)?]);
         }
-        Op::StashPush { message, include_untracked } => {
+        Op::StashPush { message, include_untracked, paths } => {
             args.extend(["stash", "push"]);
             if *include_untracked {
                 args.push("--include-untracked");
             }
             if !message.is_empty() {
                 args.extend(["-m", message]);
+            }
+            if !paths.is_empty() {
+                args.push("--");
+                args.extend(paths.iter().map(String::as_str));
             }
         }
         Op::Discard { paths } => {
@@ -145,12 +216,16 @@ pub fn run(repo: &Repo, op: Op) -> Result<Log> {
             // 后台获取不能覆盖用户手动 fetch/pull 留下的 FETCH_HEAD。
             if *background { args.push("--no-write-fetch-head"); }
         }
-        Op::Pull { rebase } => {
-            // A pull must not rewrite other local branches or hide uncommitted work.
-            args.extend(["-c", "rebase.updateRefs=false", "pull", if *rebase { "--rebase" } else { "--no-rebase" }, "--no-autostash", "--no-edit"]);
+        Op::Pull { rebase, autostash } => {
+            // A pull must not rewrite other local branches; uncommitted work is only stashed when asked.
+            args.extend(["-c", "rebase.updateRefs=false", "pull", if *rebase { "--rebase" } else { "--no-rebase" }, if *autostash { "--autostash" } else { "--no-autostash" }, "--no-edit"]);
         }
-        Op::Push { remote, branch, remote_branch, force, set_upstream } => {
+        Op::FastForward { branch } => return fast_forward(repo, branch),
+        Op::Push { remote, branch, remote_branch, force, set_upstream, tags } => {
             args.push("push");
+            if *tags {
+                args.push("--tags");
+            }
             if *force {
                 // 后台 fetch 更新远程引用后，也不能覆盖尚未在本地整合过的提交。
                 args.extend(["--force-with-lease", "--force-if-includes"]);
@@ -189,6 +264,18 @@ pub fn run(repo: &Repo, op: Op) -> Result<Log> {
             let flag = if matches!(op, Op::Abort { .. }) { "--abort" } else { "--continue" };
             args.extend(["-c", "core.editor=true", cmd, flag]);
         }
+        Op::ApplyPatch { text, index } => return apply_patch(repo, text, *index),
+        Op::BisectStart { bad, good } => args.extend(["bisect", "start", safe(bad)?, safe(good)?, "--"]),
+        Op::BisectMark { verdict } => args.extend(["bisect", match verdict { Verdict::Good => "good", Verdict::Bad => "bad", Verdict::Skip => "skip" }]),
+        Op::BisectReset => args.extend(["bisect", "reset"]),
+        Op::SubmoduleUpdate => args.extend(["submodule", "update", "--init", "--recursive"]),
+        Op::SubmoduleSync => args.extend(["submodule", "sync", "--recursive"]),
+        Op::LfsInstall => args.extend(["lfs", "install", "--local"]),
+        Op::LfsTrack { pattern } => args.extend(["lfs", "track", safe(pattern)?]),
+        Op::LfsUntrack { pattern } => args.extend(["lfs", "untrack", safe(pattern)?]),
+        Op::LfsPull => args.extend(["lfs", "pull"]),
+        Op::LfsLock { path } => args.extend(["lfs", "lock", safe(path)?]),
+        Op::LfsUnlock { path } => args.extend(["lfs", "unlock", safe(path)?]),
     }
     if matches!(op, Op::Reset { mode: ResetMode::Keep, .. }) {
         // 文件被改过又改回原样时，索引里的时间戳是旧的，reset --keep 会误判为有改动而拒绝

@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { Detail, Diff } from './api'
   import DiffView from './DiffView.svelte'
+  import FileIcon from './FileIcon.svelte'
+  import FileListBar from './FileListBar.svelte'
+  import FileTree from './FileTree.svelte'
+  import { indent } from './file-tree'
   import { authorColor } from './author'
   import { layout } from './layout.svelte'
   import Splitter from './Splitter.svelte'
@@ -13,7 +17,12 @@
     fetchPage,
     reviewKey = '',
     comparison = false,
-  }: { detail: Detail | null; onjump: (id: string) => void; fetchDiff: (id: string, path: string) => Promise<Diff>; fetchPage?: (id: string, path: string, skip: number) => Promise<Diff>; reviewKey?: string; comparison?: boolean } = $props()
+    onfilemenu,
+  }: {
+    detail: Detail | null; onjump: (id: string) => void; fetchDiff: (id: string, path: string) => Promise<Diff>; fetchPage?: (id: string, path: string, skip: number) => Promise<Diff>; reviewKey?: string; comparison?: boolean
+    /** 文件行的右键菜单；参数是提交 id 和文件路径 */
+    onfilemenu?: (e: MouseEvent, id: string, path: string) => void
+  } = $props()
 
   // 提交信息第一行是标题，其余是正文
   const subject = $derived(detail?.message.split('\n')[0] ?? '')
@@ -23,6 +32,13 @@
   let file = $state<string | null>(null)
   let diff = $state.raw<Diff | null>(null)
   let error = $state('')
+  let filter = $state('')
+  let tree = $state<{ setAll(open: boolean): void }>()
+  const files = $derived.by(() => {
+    const query = filter.trim().toLowerCase()
+    return (detail?.files ?? []).filter((f) => !query || f.path.toLowerCase().includes(query))
+  })
+  const base = (p: string) => p.slice(p.lastIndexOf('/') + 1)
   let reviewed = $state<string[]>([])
   $effect(() => { reviewed = JSON.parse(localStorage.getItem(reviewKey) ?? '[]') })
   function review(path: string) {
@@ -34,9 +50,13 @@
     detail
     file = null
   })
+  /** 已经显示着的文件；只换 diff 选项时留着旧内容等新结果，不先清空 */
+  let shown = ''
   $effect(() => {
     const f = file
-    diff = null
+    const key = `${detail?.id}\n${f}`
+    if (key !== shown) diff = null
+    shown = key
     error = ''
     if (!f || !detail) return
     let stale = false
@@ -52,19 +72,23 @@
   {#if detail}
     <div class="files" style:width="min({layout.files}px, 45%)">
       <h3>{t.files(detail.files.length)}</h3>
-      {#each detail.files as f (f.path)}
-        <div class="file-row">
-        <input type="checkbox" aria-label={`${t.tools.reviewed}: ${f.path}`} title={t.tools.reviewed} checked={reviewed.includes(f.path)} onchange={() => review(f.path)} />
-        <button class="file" class:selected={file === f.path} title={f.path} onclick={() => (file = file === f.path ? null : f.path)}>
-          <span class="status s{f.status}" title={t.status[f.status] ?? f.status}>{f.status}</span>
-          <span class="path">{#if f.old_path}<span class="muted">{f.old_path} → </span>{/if}{f.path}</span>
-        </button>
-        </div>
-      {/each}
+      <FileListBar bind:filter onfold={(open) => tree?.setAll(open)} />
+      <FileTree items={files} compact bind:this={tree}>
+        {#snippet row(f, depth)}
+          <div class="file-row" style:padding-left={indent(depth)}>
+          <input type="checkbox" aria-label={`${t.tools.reviewed}: ${f.path}`} title={t.tools.reviewed} checked={reviewed.includes(f.path)} onchange={() => review(f.path)} />
+          <button class="file" class:selected={file === f.path} title={f.old_path ? `${f.old_path} → ${f.path}` : f.path} onclick={() => (file = file === f.path ? null : f.path)} oncontextmenu={(e) => onfilemenu?.(e, detail!.id, f.path)}>
+            <span class="status s{f.status}" title={t.status[f.status] ?? f.status}>{f.status}</span>
+            <FileIcon path={f.path} />
+            <span class="path">{#if f.old_path}<span class="muted">{depth < 0 ? f.old_path : base(f.old_path)} → </span>{/if}{depth < 0 ? f.path : base(f.path)}</span>
+          </button>
+          </div>
+        {/snippet}
+      </FileTree>
     </div>
     <Splitter key="files" min={200} max={640} />
     {#if file}
-      {#if error}<p class="empty">{error}</p>{:else}<DiffView {diff} fetchPage={fetchPage ? (skip) => fetchPage!(detail!.id, file!, skip) : undefined} />{/if}
+      {#if error}<p class="empty">{error}</p>{:else}<DiffView {diff} path={file} fetchPage={fetchPage ? (skip) => fetchPage!(detail!.id, file!, skip) : undefined} />{/if}
     {:else}
       <div class="info">
         <h2>{subject}</h2>

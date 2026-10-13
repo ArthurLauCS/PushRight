@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { FileChange, Ref, Row } from './api'
   import { expansionRanges, graphIndex, graphPosition } from './graph-rows'
+  import { treeRows, type TreeRow } from './file-tree'
+  import FileIcon from './FileIcon.svelte'
   import { authorColor, authorKey } from './author'
   import Dialog from './Dialog.svelte'
   import { layout } from './layout.svelte'
@@ -80,7 +82,8 @@
   const pending = new Set<number>()
   let gen = 0
   let seenVersion = -1
-  type Expansion = { id: string; files: FileChange[] | null; error: string }
+  /** 展开后的文件按目录缩进显示；每个文件夹和文件各占一行 */
+  type Expansion = { id: string; files: TreeRow<FileChange>[] | null; error: string }
   let expanded = $state.raw(new Map<number, Expansion>())
   let selectedFile = $state<{ row: number; child: number } | null>(null)
   const ranges = $derived(expansionRanges(Array.from(expanded, ([row, e]) => [row, Math.max(1, e.files?.length ?? 0)])))
@@ -206,7 +209,7 @@
     expanded = new Map(expanded).set(index, entry)
     try {
       const files = await fetchFiles(id)
-      if (expanded.get(index) === entry) expanded = new Map(expanded).set(index, { ...entry, files })
+      if (expanded.get(index) === entry) expanded = new Map(expanded).set(index, { ...entry, files: treeRows(files) })
     } catch (e) {
       if (expanded.get(index) === entry) expanded = new Map(expanded).set(index, { ...entry, error: String(e) })
     }
@@ -222,7 +225,7 @@
     if (child < 0) void expand(index, row.id)
     else {
       const entry = expanded.get(index)
-      const file = entry?.files?.[child]
+      const file = entry?.files?.[child]?.item
       if (file) onfile?.(row.id, file, preview)
       else if (entry?.error) void expand(index, row.id, true)
     }
@@ -283,7 +286,8 @@
       <canvas bind:this={canvas} style:width="{graphW}px" style:height="{windowRows.length * ROW_H}px"></canvas>
       {#each windowRows as { row, commit, child }, i (first + i)}
         {@const entry = expanded.get(commit)}
-        {@const file = child >= 0 ? entry?.files?.[child] : undefined}
+        {@const node = child >= 0 ? entry?.files?.[child] : undefined}
+        {@const file = node?.item}
         {@const selected = commit === selectedRow && child === (selectedFile?.child ?? -1)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
@@ -296,21 +300,24 @@
           role="row"
           id="graph-{commit}-{child}"
           aria-rowindex={first + i + 1}
-          aria-level={fetchFiles ? (child < 0 ? 1 : 2) : undefined}
+          aria-level={fetchFiles ? (child < 0 ? 1 : 2 + (node?.depth ?? 0)) : undefined}
           aria-expanded={fetchFiles && child < 0 ? !!entry : undefined}
           aria-selected={selected}
           tabindex="-1"
-          title={file ? `${file.old_path ? `${file.old_path} → ` : ''}${file.path}\n${t.status[file.status] ?? file.status}` : compact && row ? `${row.subject}\n${row.author} · ${fmtTime(row.time)} · ${row.id.slice(0, 7)}` : undefined}
+          title={file ? `${file.old_path ? `${file.old_path} → ` : ''}${file.path}\n${t.status[file.status] ?? file.status}` : node ? node.key : compact && row ? `${row.subject}\n${row.author} · ${fmtTime(row.time)} · ${row.id.slice(0, 7)}` : undefined}
           onclick={() => select(commit, child)}
           ondblclick={() => child >= 0 && select(commit, child, true, false)}
           oncontextmenu={(e) => row && (select(commit, child, false), onmenu(e, row.id))}
         >
           {#if child >= 0}
-            <span class="file-content" role="gridcell">
+            <span class="file-content" role="gridcell" style:padding-left="{14 + (node?.depth ?? 0) * 10}px">
               {#if file}
                 <span class="file-status" class:added={file.status === 'A'} class:deleted={file.status === 'D'} aria-hidden="true">{file.status}</span>
-                <span class="file-name">{file.path.split('/').at(-1)}</span>
-                <span class="file-path">{file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''}</span>
+                <FileIcon path={file.path} size={13} />
+                <span class="file-name">{node!.name}</span>
+              {:else if node}
+                <FileIcon folder size={13} />
+                <span class="file-path">{node.name}/</span>
               {:else if entry?.error}
                 <span role="alert">{entry.error}</span><button onclick={(e) => { e.stopPropagation(); if (row) void expand(commit, row.id, true) }}>{t.vscode.graphRetryFiles}</button>
               {:else}
@@ -387,15 +394,6 @@
     top: 0;
     bottom: 0;
     display: flex;
-  }
-  .chip {
-    margin-left: 8px;
-    padding: 0 8px;
-    border: 1px solid currentColor;
-    border-radius: var(--r-lg);
-    background: none;
-    font-size: var(--fs-sm);
-    cursor: pointer;
   }
   .viewport {
     flex: 1;
@@ -503,8 +501,8 @@
   }
   .badge.branch {
     color: var(--text);
-    background: var(--accent-soft);
-    border-color: var(--border-strong);
+    background: var(--ref-bg, var(--accent-soft));
+    border-color: color-mix(in srgb, var(--ref-branch, var(--accent)) 55%, var(--border-strong));
     border-left: 3px solid var(--ref-branch, var(--accent));
   }
   .badge.remote {

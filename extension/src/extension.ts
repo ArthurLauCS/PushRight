@@ -7,9 +7,10 @@ import { registerHistory } from './history'
 import { registerGraphView } from './graph-view'
 import { openPanel } from './panel'
 import { offerTakeover, registerScm, repoArg } from './scm'
-import { checkout, fetch, inProgress, pull, push } from './sync'
+import { checkout, fastForward, fetch, inProgress, pull, push } from './sync'
 import { registerLocalFiles } from './local-files'
 import { registerDiffColors } from './diff-colors'
+import { registerWorktrees } from './worktrees'
 
 export async function activate(context: vscode.ExtensionContext) {
   const exe = join(context.extensionPath, 'bin', process.platform === 'win32' ? 'pushright-engine.exe' : 'pushright-engine')
@@ -32,6 +33,7 @@ export async function activate(context: vscode.ExtensionContext) {
     command('pull', onRepo(pull)),
     command('push', onRepo(push)),
     command('fetch', onRepo(fetch)),
+    command('fastForward', onRepo(fastForward)),
     command('checkout', onRepo(checkout)),
     command('inProgress', onRepo(inProgress)),
     command('showLog', () => log.show()),
@@ -42,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerHistory(context)
   registerLocalFiles(context)
   registerDiffColors(context)
+  registerWorktrees(context)
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => discoverRepositories()),
     vscode.window.onDidChangeActiveTextEditor((editor) => editor && discoverForFile(editor.document.uri)),

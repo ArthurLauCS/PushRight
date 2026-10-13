@@ -103,6 +103,22 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("refs/remotes/origin/feat"), ["B", "A"]);
     assert_eq!(subjects("auto"), ["M", "C", "B", "A"]);
     assert_eq!(subjects("all"), ["unrelated", "M", "C", "B", "A"]);
+    // 多个引用取并集：共同祖先 A 保留，main 独有的 C、M 不出现；已删除的引用跳过
+    assert_eq!(subjects("refs/heads/feat\nrefs/heads/unrelated"), ["unrelated", "B", "A"]);
+    assert_eq!(subjects("refs/heads/gone\nrefs/heads/feat"), ["B", "A"]);
+    assert!(Graph::load_scope(&repo, 10, "refs/heads/gone\nrefs/heads/also-gone").is_err());
+    // 相比某个基准：只剩基准上没有的提交；基准已经包含全部提交时是空图，基准被删掉时等于没有基准
+    assert_eq!(subjects("refs/heads/main\n^refs/heads/feat"), ["M", "C"]);
+    assert_eq!(subjects("refs/heads/unrelated\nrefs/heads/main\n^refs/heads/feat"), ["unrelated", "M", "C"]);
+    assert_eq!(subjects("refs/heads/feat\n^refs/heads/main"), [] as [&str; 0]);
+    assert_eq!(subjects("refs/heads/feat\n^refs/heads/gone"), ["B", "A"]);
+    // 只看主线：合并提交 M 留着，被合并进来的 B 不展开，M 只剩一条向下的线
+    let mainline = Graph::load_view(&repo, usize::MAX, "refs/heads/main", true).unwrap().rows(&repo, 0, 100).unwrap();
+    assert_eq!(mainline.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["M", "C", "A"]);
+    assert_eq!(mainline[0].out.len(), 1);
+    // 多个起点时仍按时间排：较新的 unrelated 在 M 前面，feat 自己的 B 夹在 C 和 A 之间
+    let all = Graph::load_view(&repo, usize::MAX, "all", true).unwrap().rows(&repo, 0, 100).unwrap();
+    assert_eq!(all.iter().map(|r| r.subject.as_str()).collect::<Vec<_>>(), ["unrelated", "M", "C", "B", "A"]);
     assert!(Graph::load_scope(&repo, 10, "--all").is_err());
     assert_eq!(refs::list(&repo).unwrap().head.as_deref(), Some("refs/heads/feat"));
     git(&dir, 0, &["checkout", "-q", "--detach", "feat"]);
@@ -111,5 +127,27 @@ fn graph_scopes_follow_ancestry_and_auto_includes_remote_base() {
     assert_eq!(subjects("auto"), ["B", "A"], "creation source takes precedence over the remote default");
     git(&dir, 0, &["config", "branch.from-remote.vscode-merge-base", "origin/main"]);
     assert_eq!(subjects("auto"), ["M", "C", "B", "A"], "honor the existing VS Code base setting");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn merged_branches_lists_only_safe_cleanup_candidates() {
+    let dir = fixture("merged");
+    // fixture：main 合并了 feat。再加一个没合并的、一个刚建的、一个在别的工作树里检出的
+    git(&dir, 0, &["branch", "fresh", "main"]);
+    git(&dir, 0, &["checkout", "-q", "-b", "unmerged", "main"]);
+    git(&dir, 6, &["commit", "-q", "--allow-empty", "-m", "unmerged"]);
+    git(&dir, 0, &["checkout", "-q", "main"]);
+    git(&dir, 0, &["branch", "old", "feat"]);
+    let busy = dir.with_extension("wt");
+    let _ = std::fs::remove_dir_all(&busy);
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "busy", busy.to_str().unwrap(), "feat"]);
+    let repo = Repo::open(&dir).unwrap();
+    let mut merged = refs::merged_branches(&repo, "main").unwrap();
+    merged.sort();
+    assert_eq!(merged, ["refs/heads/feat", "refs/heads/old"]);
+    assert_eq!(refs::merged_branches(&repo, "refs/heads/main").unwrap().len(), 2);
+    assert!(refs::merged_branches(&repo, "--all").is_err());
+    std::fs::remove_dir_all(busy).unwrap();
     std::fs::remove_dir_all(dir).unwrap();
 }

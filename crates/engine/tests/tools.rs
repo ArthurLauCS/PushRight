@@ -72,7 +72,7 @@ fn native_rebase_reorder_reword_squash_and_edit() {
     plan.steps[0].message = "new message ' $() ` ;\n\nbody".into();
     plan.steps[2].action = "squash".into();
     plan.steps[2].message = "combined".into();
-    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps).unwrap();
+    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap();
     assert!(result.ok, "{}", result.output);
     let history = history::file(&repo, "b", 10).unwrap();
     assert_eq!(history[0].subject, "new message ' $() ` ;");
@@ -80,10 +80,10 @@ fn native_rebase_reorder_reword_squash_and_edit() {
     for p in ["a", "b", "c"] { assert!(dir.join(p).exists()); }
     let backup = result.output.lines().next().unwrap();
     assert_eq!(tools::revision(&repo, backup).unwrap(), old_head);
-    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps).is_err(), "stale plan must be rejected");
+    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).is_err(), "stale plan must be rejected");
     let mut plan = rebase::plan(&repo, "HEAD~1").unwrap();
     plan.steps[0].action = "edit".into();
-    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps).unwrap().ok);
+    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap().ok);
     assert!(engine::refs::list(&repo).unwrap().in_progress.is_some());
     assert!(rebase::continue_rebase(&repo).unwrap().ok);
     assert!(engine::refs::list(&repo).unwrap().in_progress.is_none());
@@ -96,17 +96,17 @@ fn rebase_conflicts_abort_and_invalid_plan_preserve_data() {
     let repo = Repo::open(&dir).unwrap();
     let mut plan = rebase::plan(&repo, "HEAD~2").unwrap();
     fs::write(dir.join("private"), "keep").unwrap();
-    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps).is_err());
+    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).is_err());
     fs::remove_file(dir.join("private")).unwrap();
     plan.steps[0].action = "exec".into();
-    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps).is_err());
+    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).is_err());
     plan.steps[0].action = "pick".into(); plan.steps.swap(0, 1);
-    let log = rebase::run(&repo, &plan.base, &plan.head, &plan.steps).unwrap();
+    let log = rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap();
     assert!(!log.ok); assert!(engine::refs::list(&repo).unwrap().in_progress.is_some());
     run(&repo, Op::Abort { what: engine::ops::InProgress::Rebase });
     assert_eq!(tools::revision(&repo, "HEAD").unwrap(), plan.head);
     assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "third\n");
-    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps).unwrap();
+    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap();
     assert!(!result.ok);
     fs::write(dir.join("a"), "resolved third\n").unwrap();
     git(&dir, 0, &["add", "a"]);
@@ -167,13 +167,13 @@ fn rebase_fixup_drop_and_drop_all() {
     let repo = Repo::open(&dir).unwrap();
     let mut plan = rebase::plan(&repo, "HEAD~3").unwrap();
     plan.steps[1].action = "fixup".into(); plan.steps[2].action = "drop".into();
-    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps).unwrap();
+    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap();
     assert!(result.ok, "{}", result.output);
     assert!(dir.join("a").exists() && dir.join("b").exists() && !dir.join("c").exists());
     assert_eq!(rebase::plan(&repo, &plan.base).unwrap().steps.len(), 1);
     let mut next = rebase::plan(&repo, &plan.base).unwrap();
     next.steps[0].action = "drop".into();
-    let result = rebase::run(&repo, &next.base, &next.head, &next.steps).unwrap();
+    let result = rebase::run(&repo, &next.base, &next.head, &next.steps, false).unwrap();
     assert!(result.ok, "{}", result.output);
     assert_eq!(tools::revision(&repo, "HEAD").unwrap(), plan.base);
 }
@@ -208,4 +208,123 @@ fn images_and_large_diff_pages() {
     assert!(preview.clipped);
     assert!(preview.hunks[0].lines[0].text.len() <= 65536);
     assert!(diff::page(&repo, "untracked", "", "", "../outside", None, 0).is_err());
+}
+
+#[test]
+fn rebase_can_carry_dependent_branches_and_reports_their_old_positions() {
+    let dir = init("rebase-update-refs");
+    commit(&dir, 1, "base", "base\n"); commit(&dir, 2, "a", "a\n");
+    git(&dir, 0, &["branch", "part-a"]);
+    git(&dir, 0, &["branch", "pushright-backup/old"]);
+    commit(&dir, 3, "b", "b\n");
+    git(&dir, 0, &["branch", "part-b"]);
+    let busy = dir.with_extension("busy");
+    let _ = fs::remove_dir_all(&busy);
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "elsewhere", busy.to_str().unwrap()]);
+    commit(&dir, 4, "c", "c\n"); commit(&dir, 5, "d", "d\n");
+    let repo = Repo::open(&dir).unwrap();
+    let id = |rev: &str| tools::revision(&repo, rev).unwrap();
+    let (old_a, old_b) = (id("part-a"), id("part-b"));
+
+    // 备份分支和别的工作树里检出的分支不在可跟随的范围内
+    let mut plan = rebase::plan(&repo, "HEAD~4").unwrap();
+    assert_eq!(plan.steps.iter().map(|s| s.branches.join(",")).collect::<Vec<_>>(), ["refs/heads/part-a", "refs/heads/part-b", "", ""]);
+
+    // 不勾选：其他分支原地不动
+    plan.steps[0].action = "reword".into(); plan.steps[0].message = "a reworded".into();
+    assert!(rebase::run(&repo, &plan.base, &plan.head, &plan.steps, false).unwrap().ok);
+    assert_eq!((id("part-a"), id("part-b")), (old_a.clone(), old_b.clone()));
+    run(&repo, Op::Reset { target: plan.head.clone(), mode: engine::ops::ResetMode::Hard });
+
+    // 勾选：分支落在对应的新提交上；c 并入 b 时 part-b 跟到合并后的提交
+    plan.steps[2].action = "fixup".into();
+    let result = rebase::run(&repo, &plan.base, &plan.head, &plan.steps, true).unwrap();
+    assert!(result.ok, "{}", result.output);
+    assert!(result.output.contains(&format!("refs/heads/part-a was {old_a}")) && result.output.contains(&format!("refs/heads/part-b was {old_b}")));
+    assert_eq!(id("part-a"), id("HEAD~2"));
+    assert_eq!(id("part-b"), id("HEAD~1"));
+    assert_ne!(id("part-a"), old_a);
+    assert_eq!(id("elsewhere"), old_b);
+    assert_eq!(id("pushright-backup/old"), old_a);
+    fs::remove_dir_all(&busy).unwrap();
+}
+
+#[test]
+fn patch_bisect_submodules_and_lfs() {
+    use engine::ops::Verdict;
+    let dir = init("tools-repo");
+    for n in 1..=6 { commit(&dir, n, "a.txt", &format!("line {n}\n")); }
+    let repo = Repo::open(&dir).unwrap();
+
+    // 补丁：整体生效；对不上时什么都不改
+    let patch = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-line 6\n+patched";
+    run(&repo, Op::ApplyPatch { text: patch.replace('\n', "\r\n"), index: true });
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "patched\n");
+    assert!(engine::status::status(&repo).unwrap().iter().any(|e| e.path == "a.txt" && e.staged.is_some()), "--index stages the result");
+    assert!(!ops::run(&repo, Op::ApplyPatch { text: patch.into(), index: false }).unwrap().ok, "a patch that no longer matches is refused");
+    assert!(!dir.join(".git/pushright-patch.diff").exists());
+    git(&dir, 0, &["reset", "-q", "--hard"]);
+
+    // 二分查找：HEAD 有问题、HEAD~5 没问题，「line 4」起算有问题
+    assert!(tools::bisect_log(&repo).is_none());
+    run(&repo, Op::BisectStart { bad: "HEAD".into(), good: "HEAD~5".into() });
+    assert!(tools::bisect_log(&repo).unwrap().contains("git bisect start"));
+    let mut last = String::new();
+    for _ in 0..6 {
+        let n: u32 = fs::read_to_string(dir.join("a.txt")).unwrap().trim()[5..].parse().unwrap();
+        let log = ops::run(&repo, Op::BisectMark { verdict: if n >= 4 { Verdict::Bad } else { Verdict::Good } }).unwrap();
+        assert!(log.ok, "{}", log.output);
+        last = log.output;
+        if last.contains("is the first") { break; }
+    }
+    assert!(last.contains("is the first") && last.contains("change 4"), "{last}");
+    run(&repo, Op::BisectReset);
+    assert!(tools::bisect_log(&repo).is_none());
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "line 6\n");
+
+    // 子模块：路径里带空格和括号也能解析
+    let sub = init("tools-repo-sub");
+    commit(&sub, 1, "s.txt", "sub\n");
+    git(&dir, 0, &["-c", "protocol.file.allow=always", "submodule", "add", "-q", sub.to_str().unwrap(), "libs/my lib (v1)"]);
+    git(&dir, 7, &["commit", "-qm", "add submodule"]);
+    let list = tools::submodules(&repo).unwrap();
+    assert_eq!((list[0].path.as_str(), list[0].state, list[0].id.len()), ("libs/my lib (v1)", "ok", 40));
+    // 子模块自己的工作树清单：主工作树是它的文件夹，不是父仓库 .git/modules 下的 git 目录
+    let inner = engine::refs::worktrees(&Repo::open(&dir.join("libs/my lib (v1)")).unwrap()).unwrap();
+    assert!(inner[0].current && inner[0].path.ends_with("libs/my lib (v1)"), "{}", inner[0].path);
+    git(&dir, 0, &["submodule", "deinit", "-q", "-f", "--all"]);
+    assert_eq!(tools::submodules(&repo).unwrap()[0].state, "missing");
+    assert_eq!(tools::submodules(&repo).unwrap()[0].path, "libs/my lib (v1)");
+
+    // LFS：没装 git-lfs 的机器上跳过
+    if tools::lfs(&repo).version.is_some() {
+        run(&repo, Op::LfsInstall);
+        run(&repo, Op::LfsTrack { pattern: "*.rbxl".into() });
+        let lfs = tools::lfs(&repo);
+        assert!(lfs.installed && lfs.patterns == ["*.rbxl"], "{lfs:?}");
+        run(&repo, Op::LfsUntrack { pattern: "*.rbxl".into() });
+        assert!(tools::lfs(&repo).patterns.is_empty());
+    }
+    fs::remove_dir_all(&dir).unwrap();
+    fs::remove_dir_all(&sub).unwrap();
+}
+
+#[test]
+fn stats_count_commits_authors_times_and_files() {
+    let dir = init("tools-stats");
+    let at = |date: &str, author: &str, path: &str, text: &str| {
+        fs::write(dir.join(path), text).unwrap();
+        git(&dir, 0, &["add", "."]);
+        git(&dir, 0, &["commit", "-q", "-m", "c", &format!("--date={date}T00:15:00+08:00"), &format!("--author={author} <a@example.invalid>")]);
+    };
+    at("2026-01-10", "Ann", "中文 名.txt", "1\n");
+    at("2026-01-20", "Bob", "b.txt", "1\n");
+    at("2026-04-02", "Ann", "中文 名.txt", "2\n");
+    let stats = tools::stats(&Repo::open(&dir).unwrap()).unwrap();
+    let pairs = |list: &[tools::Count]| list.iter().map(|c| (c.name.clone(), c.count)).collect::<Vec<_>>();
+    assert_eq!(stats.commits, 3);
+    assert_eq!(stats.times, [1_775_060_100, 1_768_839_300, 1_767_975_300]);
+    assert_eq!(pairs(&stats.authors), [("Ann".to_owned(), 2), ("Bob".to_owned(), 1)]);
+    assert_eq!(pairs(&stats.files), [("中文 名.txt".to_owned(), 2), ("b.txt".to_owned(), 1)]);
+    fs::remove_dir_all(&dir).unwrap();
 }

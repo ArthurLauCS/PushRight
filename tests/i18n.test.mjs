@@ -32,6 +32,8 @@ test('language packs cover the same UI, errors and operation explanations', () =
 
 test('language defaults to English, switches without resetting state, and survives reload', async () => {
   const storage = new Map()
+  const listeners = []
+  globalThis.addEventListener = (type, listener) => { if (type === 'storage') listeners.push(listener) }
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: key => storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, value),
@@ -63,6 +65,21 @@ test('language defaults to English, switches without resetting state, and surviv
   assert.equal((await load()).t.push, 'Push')
   storage.set('locale', 'unsupported')
   assert.equal((await load()).locale.current, 'en')
+
+  const instant = Date.parse('2026-01-01T00:15:00Z') / 1000
+  assert.equal(first.timeZone.current, '')
+  first.setTimeZone('Asia/Shanghai')
+  assert.equal(storage.get('timeZone'), 'Asia/Shanghai')
+  assert.equal(first.fmtTime(instant), '2026-01-01 08:15')
+  assert.equal((await load()).fmtTime(instant), '2026-01-01 08:15')
+  storage.set('timeZone', 'America/Los_Angeles')
+  for (const listener of listeners) listener({ key: 'timeZone' })
+  assert.equal(first.fmtTime(instant), '2025-12-31 16:15', 'open views receive host and cross-window changes')
+  first.setTimeZone('')
+  assert.equal((await load()).timeZone.current, '', 'system selection also survives reload')
+  storage.set('timeZone', 'invalid')
+  assert.equal((await load()).timeZone.current, '')
+  delete globalThis.addEventListener
 })
 
 test('Chinese Git labels cover actions outside menus and distinguish commands with different effects', () => {

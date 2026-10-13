@@ -101,3 +101,39 @@ pub fn repositories(repo: &Repo) -> Result<Vec<String>> {
     children.dedup();
     Ok(children.into_iter().map(|p| repo.path.join(p.trim_end_matches('/')).to_string_lossy().into_owned()).collect())
 }
+
+/// 在资源管理器里定位这个文件（`open` 为 true 时改为用默认程序打开）。文件已删除时定位到它所在的文件夹。
+pub fn reveal(repo: &Repo, path: &str, open: bool) -> Result<()> {
+    let path = path_in_repo(repo, path.trim_end_matches('/'))?;
+    let full = repo.path.join(path);
+    let exists = full.exists();
+    if open && !exists { return Err("PR_INVALID_PATH".into()); }
+    let target = if exists { full.as_path() } else { full.parent().unwrap() };
+    let mut cmd = std::process::Command::new(if cfg!(windows) { "explorer" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" });
+    if cfg!(windows) && exists && !open {
+        // explorer 只认反斜杠路径；「/select,」和路径必须是同一个参数
+        cmd.arg(format!("/select,{}", target.display().to_string().replace('/', "\\")));
+    } else if cfg!(target_os = "macos") && exists && !open {
+        cmd.arg("-R").arg(target);
+    } else {
+        cmd.arg(target);
+    }
+    // explorer 成功时退出码也是 1，只看能不能启动
+    cmd.spawn().map(drop).map_err(err)
+}
+
+/// 单个文件的补丁文本，「复制为补丁」用。`mode`：unstaged / staged / commit（此时 `id` 是提交）。
+pub fn patch(repo: &Repo, mode: &str, id: &str, path: &str) -> Result<String> {
+    const LIMIT: usize = 4 << 20;
+    let mut args = vec!["--literal-pathspecs", "-c", "core.quotepath=false"];
+    match mode {
+        "unstaged" => args.extend(["diff", "--no-color", "--no-ext-diff"]),
+        "staged" => args.extend(["diff", "--no-color", "--no-ext-diff", "--cached"]),
+        "commit" => args.extend(["show", "--format=", "--no-color", "--no-ext-diff", "--diff-merges=first-parent", crate::ops::safe(id)?]),
+        _ => return Err("PR_INVALID_NAME".into()),
+    }
+    args.extend(["--", path]);
+    let out = repo.git_limited(&args, LIMIT)?;
+    if out.len() > LIMIT { return Err("PR_DIFF_TOO_LARGE".into()); }
+    Ok(crate::decode(&out))
+}

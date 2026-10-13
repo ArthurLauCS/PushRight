@@ -1,7 +1,7 @@
 {
   "name": "pushright",
   "private": true,
-  "version": "1.1.10",
+  "version": "1.1.11",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -31,6 +31,7 @@
     "@fontsource-variable/noto-serif-sc": "^5.3.0",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-dialog": "^2.8.1",
+    "highlight.js": "^11.12.0",
     "lxgw-wenkai-webfont": "^1.7.0"
   }
 }
