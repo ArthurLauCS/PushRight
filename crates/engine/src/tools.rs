@@ -60,3 +60,51 @@ pub fn create(path: &str, url: Option<&str>) -> Result<String> {
     }
     Ok(Repo::open(path)?.path.to_string_lossy().into_owned())
 }
+
+/// 二分查找进行中时返回它的记录（`git bisect log` 的内容），否则 None。
+pub fn bisect_log(repo: &Repo) -> Option<String> {
+    std::fs::read(repo.gix().git_dir().join("BISECT_LOG")).ok().map(|b| decode(&b))
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Submodule {
+    pub path: String,
+    /// 子模块当前检出的提交；还没初始化时是主仓库记录的提交
+    pub id: String,
+    /// ok：和主仓库记录的一致；missing：还没初始化；moved：检出的提交和记录的不同；conflict：有合并冲突
+    pub state: &'static str,
+}
+
+pub fn submodules(repo: &Repo) -> Result<Vec<Submodule>> {
+    let out = decode(&repo.git(&["submodule", "status", "--recursive"])?);
+    Ok(out.lines().filter_map(|line| {
+        let state = match line.get(..1)? { "-" => "missing", "+" => "moved", "U" => "conflict", _ => "ok" };
+        let (id, rest) = line[1..].split_once(' ')?;
+        // 已初始化的后面跟着「 (git describe 的结果)」
+        let path = if state != "missing" && rest.ends_with(')') { rest.rsplit_once(" (").map_or(rest, |(p, _)| p) } else { rest };
+        Some(Submodule { path: path.to_owned(), id: id.to_owned(), state })
+    }).collect())
+}
+
+#[derive(Serialize, Debug)]
+pub struct Lfs {
+    /// 机器上装的 git-lfs 版本；没装时为 None
+    pub version: Option<String>,
+    /// LFS 的过滤器在这个仓库里是否生效（`git lfs install` 做过）
+    pub installed: bool,
+    /// 交给 LFS 管理的文件模式（.gitattributes 里的）
+    pub patterns: Vec<String>,
+}
+
+pub fn lfs(repo: &Repo) -> Lfs {
+    let Ok(version) = repo.git(&["lfs", "version"]) else { return Lfs { version: None, installed: false, patterns: Vec::new() } };
+    let listing = decode(&repo.git(&["lfs", "track"]).unwrap_or_default());
+    // 输出是「Listing tracked patterns」、缩进的「模式 (来源文件)」若干行，然后是排除的模式
+    let patterns = listing.lines().skip(1).take_while(|l| l.starts_with(' ')).filter_map(|l| l.trim().rsplit_once(" (").map(|(p, _)| p.to_owned())).collect();
+    Lfs { version: Some(decode(&version).trim().to_owned()), installed: repo.git(&["config", "--get", "filter.lfs.process"]).is_ok(), patterns }
+}
+
+/// 服务器上的文件锁清单，原样返回 `git lfs locks` 的输出；要联网。
+pub fn lfs_locks(repo: &Repo) -> Result<String> {
+    Ok(decode(&repo.git(&["lfs", "locks"])?).trim().to_owned())
+}

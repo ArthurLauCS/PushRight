@@ -248,3 +248,60 @@ fn rebase_can_carry_dependent_branches_and_reports_their_old_positions() {
     assert_eq!(id("pushright-backup/old"), old_a);
     fs::remove_dir_all(&busy).unwrap();
 }
+
+#[test]
+fn patch_bisect_submodules_and_lfs() {
+    use engine::ops::Verdict;
+    let dir = init("tools-repo");
+    for n in 1..=6 { commit(&dir, n, "a.txt", &format!("line {n}\n")); }
+    let repo = Repo::open(&dir).unwrap();
+
+    // 补丁：整体生效；对不上时什么都不改
+    let patch = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-line 6\n+patched";
+    run(&repo, Op::ApplyPatch { text: patch.replace('\n', "\r\n"), index: true });
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "patched\n");
+    assert!(engine::status::status(&repo).unwrap().iter().any(|e| e.path == "a.txt" && e.staged.is_some()), "--index stages the result");
+    assert!(!ops::run(&repo, Op::ApplyPatch { text: patch.into(), index: false }).unwrap().ok, "a patch that no longer matches is refused");
+    assert!(!dir.join(".git/pushright-patch.diff").exists());
+    git(&dir, 0, &["reset", "-q", "--hard"]);
+
+    // 二分查找：HEAD 有问题、HEAD~5 没问题，「line 4」起算有问题
+    assert!(tools::bisect_log(&repo).is_none());
+    run(&repo, Op::BisectStart { bad: "HEAD".into(), good: "HEAD~5".into() });
+    assert!(tools::bisect_log(&repo).unwrap().contains("git bisect start"));
+    let mut last = String::new();
+    for _ in 0..6 {
+        let n: u32 = fs::read_to_string(dir.join("a.txt")).unwrap().trim()[5..].parse().unwrap();
+        let log = ops::run(&repo, Op::BisectMark { verdict: if n >= 4 { Verdict::Bad } else { Verdict::Good } }).unwrap();
+        assert!(log.ok, "{}", log.output);
+        last = log.output;
+        if last.contains("is the first") { break; }
+    }
+    assert!(last.contains("is the first") && last.contains("change 4"), "{last}");
+    run(&repo, Op::BisectReset);
+    assert!(tools::bisect_log(&repo).is_none());
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "line 6\n");
+
+    // 子模块：路径里带空格和括号也能解析
+    let sub = init("tools-repo-sub");
+    commit(&sub, 1, "s.txt", "sub\n");
+    git(&dir, 0, &["-c", "protocol.file.allow=always", "submodule", "add", "-q", sub.to_str().unwrap(), "libs/my lib (v1)"]);
+    git(&dir, 7, &["commit", "-qm", "add submodule"]);
+    let list = tools::submodules(&repo).unwrap();
+    assert_eq!((list[0].path.as_str(), list[0].state, list[0].id.len()), ("libs/my lib (v1)", "ok", 40));
+    git(&dir, 0, &["submodule", "deinit", "-q", "-f", "--all"]);
+    assert_eq!(tools::submodules(&repo).unwrap()[0].state, "missing");
+    assert_eq!(tools::submodules(&repo).unwrap()[0].path, "libs/my lib (v1)");
+
+    // LFS：没装 git-lfs 的机器上跳过
+    if tools::lfs(&repo).version.is_some() {
+        run(&repo, Op::LfsInstall);
+        run(&repo, Op::LfsTrack { pattern: "*.rbxl".into() });
+        let lfs = tools::lfs(&repo);
+        assert!(lfs.installed && lfs.patterns == ["*.rbxl"], "{lfs:?}");
+        run(&repo, Op::LfsUntrack { pattern: "*.rbxl".into() });
+        assert!(tools::lfs(&repo).patterns.is_empty());
+    }
+    fs::remove_dir_all(&dir).unwrap();
+    fs::remove_dir_all(&sub).unwrap();
+}

@@ -254,3 +254,27 @@
 | 扩展：拉取时自动贮藏 | 拉取选择框的第二项 | 同桌面 |
 
 涉及文件：`crates/engine/src/ops.rs`、`local_files.rs`（`reveal`、`patch`）、`rpc.rs`、`RepoView.svelte`、`WorkingCopy.svelte`、`Detail.svelte`、`extension/src/sync.ts`、`extension/package.json`。
+
+## 仓库工具：二分查找、子模块、LFS、应用补丁
+
+对应 Fork 的 Repository 菜单里的 Bisect、Git LFS、Apply Patch 和侧栏的 Submodules 分组。
+
+**入口**：仓库工具页顶部的按钮分成两行。「历史」：比较版本、交互式变基、Reflog 恢复、查找出问题的提交；「仓库」：管理远程、子模块、大文件 LFS、应用补丁。桌面和完整面板共用；扩展原生界面没有入口。
+
+| 页 | 控件与行为 |
+| - | - |
+| 查找出问题的提交 | 选一个有问题的版本（默认 HEAD）和一个没问题的旧版本，开始后 Git 每次检出中间的一个提交；回答「正常 / 有问题 / 没法测试，跳过」，下方显示 Git 的输出和可展开的查找记录。找到后页面只留结论（提交号和说明）与「结束查找，回到原来的位置」。有合并、变基等操作进行中时不能开始。 |
+| 子模块 | 列出每个子模块的路径、提交号和状态（已就绪 / 还没初始化 / 检出的提交和主仓库记录的不同 / 有冲突）；「初始化并更新」（`--init --recursive`）、「同步子模块地址」；已初始化的可以「在新页签中打开」。 |
+| 大文件 LFS | 显示本机 git-lfs 版本和此仓库是否启用；没装时只提示先安装。启用（`git lfs install --local`）、下载 LFS 文件、列出交给 LFS 的文件模式并可逐个取消、新增模式；按路径锁定 / 解锁、查看文件锁（原样显示 `git lfs locks` 的输出，要联网）。 |
+| 应用补丁 | 粘贴补丁文本后应用到工作区，可勾选同时加入暂存区。整体生效：有一处对不上就什么都不改，失败原因显示在下方。 |
+
+**状态**：没有新增本机保存的状态。是否在二分查找中读 Git 目录里的 `BISECT_LOG`，结论取其中 Git 写下的 `# first 'bad' commit` 一行。
+
+**涉及文件**：`crates/engine/src/ops.rs`（`ApplyPatch`、`Bisect*`、`Submodule*`、`Lfs*`）、`tools.rs`（`bisect_log`、`submodules`、`lfs`、`lfs_locks`）、`rpc.rs`、`src/lib/ToolsExtra.svelte`、`Tools.svelte`、`RepoView.svelte`、`api.ts`。
+
+**与 Fork 的差别**
+
+- 补丁只能粘贴文本，不能选补丁文件；仓库里按 CRLF 存的文件（不是靠 `core.autocrlf` 转换的那种）会对不上。
+- 二分查找中顶部没有「进行中」横幅，状态只在这一页看得到；提交图里也不标 good / bad。
+- 子模块没有新增、删除和单个更新；LFS 的锁清单是纯文本，不能在文件列表里直接锁。
+- Git Flow、仓库统计、Treemap、托管平台账户与 PR 没有做。
