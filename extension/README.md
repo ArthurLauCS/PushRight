@@ -67,6 +67,8 @@ The branch picker lists local branches before remote branches in a fixed order a
 - New folders list their untracked files individually, so you can inspect and stage each file before committing. Ignored files stay excluded.
 - Run **PushRight: Open Commit Graph**, or use the sidebar graph's title button, to browse branches, commits and file differences in an editor tab. If the sidebar graph was hidden, enable **PushRight Graph** in Source Control's **Views** menu.
 - Change the commit name and email for the current repository.
+- The commit box is pre-filled with the repository's commit message template. **PushRight: Recent Commit Messages…** reuses an earlier message; **PushRight: Run Pre-Commit Check** runs the repository's check command. Set the template and the check command under **Repository settings** in the full graph view.
+- The sidebar graph has **Tags** and **First parent only** toggles.
 - In the full **Open Commit Graph** view, choose **Repository tools** to compare revisions, mark reviewed files, manage remote URLs, edit rebase actions/order, and recover reflog entries into new branches. Clone and initialize are available on the welcome page.
 - File history, line history and search load 200 entries per page with **Load more**. Unchanged selections in modified or unsaved buffers are mapped back to HEAD for line history.
 - Preview image changes side by side and large patches in read-only pages of 1,000 lines.

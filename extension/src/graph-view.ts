@@ -41,7 +41,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
           webview.postMessage({ store: 'diffColors', value: stored().diffColors ?? 'null' })
         }),
         webview.onDidReceiveMessage(async (m) => {
-          if (m.store === 'prefs') return void await store(m.store, m.value)
+          if (m.store === 'prefs' || m.store === 'graphView') return void await store(m.store, m.value)
           if (!m.cmd) return
           try {
             let value: unknown
@@ -65,7 +65,7 @@ export function registerGraphView(context: vscode.ExtensionContext) {
               } else if (m.cmd === 'open_commit_file') {
                 await openFile(m.args)
               } else if (m.cmd === 'load_graph' && typeof m.args.full === 'boolean') {
-                value = await engine.call(m.cmd, { tab: repo.tab, full: m.args.full, scope: scopeOf(repo.root, repo.refs.refs) })
+                value = await engine.call(m.cmd, { tab: repo.tab, full: m.args.full, scope: scopeOf(repo.root, repo.refs.refs), firstParent: m.args.firstParent === true })
               } else if (m.cmd === 'rows' && Number.isInteger(m.args.start) && m.args.start >= 0 && Number.isInteger(m.args.count) && m.args.count > 0 && m.args.count <= 128) {
                 value = await engine.call(m.cmd, { tab: repo.tab, start: m.args.start, count: m.args.count })
               } else throw new Error('Unsupported graph request')

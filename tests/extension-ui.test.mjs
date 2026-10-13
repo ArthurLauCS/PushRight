@@ -130,7 +130,7 @@ test('file-only refreshes read status alone and stay quiet until it changes', as
   assert.equal(fired, 2, 'created and deleted files are announced even when status is unchanged')
   calls.length = 0
   await core.refresh(repo)
-  assert.deepEqual([calls.sort(), fired], [['commit_identity', 'refs', 'remotes', 'status'], 3], 'a .git change rereads everything and always notifies')
+  assert.deepEqual([calls.sort(), fired], [['commit_identity', 'refs', 'remotes', 'status', 'workflow_settings'], 3], 'a .git change rereads everything and always notifies')
   const reading = deferred(), resume = deferred(), call = engine.call
   let paused = false
   engine.call = async (cmd) => {
@@ -144,7 +144,7 @@ test('file-only refreshes read status alone and stay quiet until it changes', as
   await core.refresh(repo, false)
   resume.resolve()
   await pending
-  assert.deepEqual(calls.sort(), ['commit_identity', 'refs', 'remotes', 'status', 'status'], 'a queued full refresh survives later file-only events')
+  assert.deepEqual(calls.sort(), ['commit_identity', 'refs', 'remotes', 'status', 'status', 'workflow_settings'], 'a queued full refresh survives later file-only events')
   assert.equal(fired, 4, 'the queued full refresh notifies even when status is unchanged')
 })
 
@@ -248,7 +248,9 @@ test('SCM graph routes only bounded reads to workspace repositories and disposes
   assert.equal(diffs.length, 4, 'paths absent from the commit cannot open')
   await send('graph_scope', { tab: 1, scope: '--all' })
   await send('load_graph', { tab: 1, full: false })
-  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: false, scope: 'all' }])
+  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: false, scope: 'all', firstParent: false }])
+  await send('load_graph', { tab: 1, full: true, firstParent: true })
+  assert.deepEqual(calls.at(-1), ['load_graph', { tab: 1, full: true, scope: 'all', firstParent: true }], 'the sidebar graph can collapse merges')
   assert.equal(saved.graphScopes['/repo1'], 'all')
   picked = undefined
   await send('graph_scope', { tab: 1 })
@@ -519,6 +521,19 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
   repos[1].refs = {}
   core.onRepoChange.fire(repos[1])
   assert.equal(controls[1].inputBox.value, '')
+  // 平时预填仓库的提交信息模板；「最近的提交信息」选中的那条填进输入框
+  repos[1].workflow = { template: 'feat: ' }
+  core.onRepoChange.fire(repos[1])
+  assert.equal(controls[1].inputBox.value, 'feat: ')
+  const call = core.engine.call
+  core.engine.call = async () => ['fix: a\n\nbody', 'feat: b']
+  vscode.window.showQuickPick = async (items) => { assert.deepEqual(items.map((i) => [i.label, i.detail]), [['fix: a', 'body'], ['feat: b', undefined]]); return items[0] }
+  await commands.get('pushright.recentMessages')(controls[1])
+  assert.equal(controls[1].inputBox.value, 'fix: a\n\nbody')
+  core.engine.call = call
+  repos[1].workflow = null
+  controls[1].inputBox.value = ''
+  core.onRepoChange.fire(repos[1])
   repos[1].files = []
   assert.deepEqual(controls.map(({ id, label, rootUri }) => [id, label, rootUri.fsPath]), [['pushright', 'PushRight', '/one'], ['pushright', 'PushRight', '/two']], 'shared provider IDs use one quick-diff menu label while roots distinguish repositories')
   await commands.get('pushright.stage')({ repo: repos[0], entry: { path: 'a' } }, { repo: repos[1], entry: { path: 'b' } })

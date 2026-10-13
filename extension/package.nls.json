@@ -18,6 +18,8 @@
   "command.refresh": "Refresh",
   "command.commit": "Commit",
   "command.commitAmend": "Amend Last Commit",
+  "command.recentMessages": "Recent Commit Messages…",
+  "command.runCheck": "Run Pre-Commit Check",
   "command.editIdentity": "Edit Commit Identity…",
   "command.stageAll": "Stage All Changes",
   "command.unstageAll": "Unstage All Changes",

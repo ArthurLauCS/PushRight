@@ -19,6 +19,8 @@
   "command.refresh": "刷新",
   "command.commit": "提交（git commit）",
   "command.commitAmend": "修补上次提交（git commit --amend）",
+  "command.recentMessages": "最近的提交信息…（git log）",
+  "command.runCheck": "运行提交前检查",
   "command.editIdentity": "修改提交身份…（git config --local）",
   "command.stageAll": "暂存全部改动（git add -A）",
   "command.unstageAll": "取消暂存全部改动（git reset）",
