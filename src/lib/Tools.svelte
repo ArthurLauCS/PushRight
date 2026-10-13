@@ -6,17 +6,18 @@
   import Icon from './Icon.svelte'
   import Label from './Label.svelte'
   import RevisionPicker from './RevisionPicker.svelte'
+  import ToolsExtra from './ToolsExtra.svelte'
   import type { Spec, Values } from './Dialog.svelte'
   import { t, errorText } from './i18n.svelte'
 
-  let { tab, path, refs, busy, left: initialLeft = 'HEAD~1', right: initialRight = 'HEAD', auto = false, exec, rebase, ask }: {
+  let { tab, path, refs, busy, left: initialLeft = 'HEAD~1', right: initialRight = 'HEAD', auto = false, exec, run: runOp, onopen, rebase, ask }: {
     tab: number; path: string; refs: api.Refs; busy: boolean; left?: string; right?: string
     /** 一打开就从共同祖先比较起点和终点：从提交图的「相比某分支」跳过来时用 */
     auto?: boolean
-    exec: (op: api.Op) => Promise<boolean>; rebase: (plan: api.RebasePlan, updateRefs: boolean) => Promise<api.Log | undefined>
+    exec: (op: api.Op) => Promise<boolean>; run: (op: api.Op) => Promise<api.Log | undefined>; onopen: (path: string) => void; rebase: (plan: api.RebasePlan, updateRefs: boolean) => Promise<api.Log | undefined>
     ask: (spec: Spec) => Promise<Values | null>
   } = $props()
-  let section = $state<'compare' | 'remotes' | 'rebase' | 'reflog'>('compare')
+  let section = $state<'compare' | 'remotes' | 'rebase' | 'reflog' | 'bisect' | 'submodules' | 'lfs' | 'patch'>('compare')
   let left = $state(untrack(() => initialLeft))
   let right = $state(untrack(() => initialRight))
   let commonBase = $state(untrack(() => auto))
@@ -121,8 +122,12 @@
 
 <div class="toolbox">
   <nav aria-label={t.tools.nav}>
-    {#each ['compare', 'remotes', 'rebase', 'reflog'] as key}
-      <button class="btn" class:on={section === key} disabled={disabled} onclick={() => choose(key as typeof section)}><Label text={t.tools[key as typeof section]} /></button>
+    {#each [['groupHistory', 'compare', 'rebase', 'reflog', 'bisect'], ['groupRepo', 'remotes', 'submodules', 'lfs', 'patch']] as [group, ...keys]}
+      <div class="actions"><small>{t.tools[group as 'groupHistory']}</small>
+        {#each keys as key}
+          <button class="btn" class:on={section === key} disabled={disabled} onclick={() => choose(key as typeof section)}><Label text={t.tools[key as typeof section]} /></button>
+        {/each}
+      </div>
     {/each}
   </nav>
   {#if error}<p class="error">{error}</p>{/if}
@@ -160,6 +165,8 @@
       {:else}<p class="none">{t.tools.noReflog}</p>{/each}
     </div>
     {#if moreLogs}<button class="btn" disabled={disabled} onclick={() => loadLogs(true)}>{t.tools.loadMore}</button>{/if}
+  {:else if section !== 'rebase'}
+    <ToolsExtra {tab} {path} {refs} {disabled} {section} run={runOp} {onopen} />
   {:else}
     <p>{t.tools.rebaseWarning}</p>
     <form onsubmit={(e) => { e.preventDefault(); loadPlan() }}>
@@ -201,6 +208,8 @@
   .toolbox { flex: 1; min-height: 0; overflow: auto; padding: 24px 32px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
   .toolbox > :not(.btn, nav) { align-self: stretch; }
   nav, .actions, form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  nav { flex-direction: column; align-items: flex-start; }
+  nav small { min-width: 4em; color: var(--muted); }
   form { align-items: flex-end; }
   form label { flex: 1; min-width: 200px; }
   label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }

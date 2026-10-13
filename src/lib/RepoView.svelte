@@ -435,6 +435,13 @@
     return ok
   }
 
+  /** 同 exec，但交回这次的命令日志：仓库工具要把输出显示在页面上 */
+  async function execLog(op: api.Op) {
+    const last = logs.at(-1)
+    await exec(op)
+    return logs.at(-1) === last ? undefined : logs.at(-1)
+  }
+
   async function undo() {
     const last = undos.at(-1)
     if (!last || !(await ask({ title: t.undoTitle(t.opNames[last.title] ?? last.title), explain: explain.undo, confirm: t.undo }))) return
@@ -1096,7 +1103,7 @@
         </div>
       {/if}
       {#if view === 'tools'}
-        {#key compareVersion}<Tools {tab} {path} {refs} {busy} left={compareLeft} right={compareRight} auto={compareAuto} {exec} {rebase} {ask} />{/key}
+        {#key compareVersion}<Tools {tab} {path} {refs} {busy} left={compareLeft} right={compareRight} auto={compareAuto} {exec} run={execLog} {onopen} {rebase} {ask} />{/key}
       {/if}
     </div>
   </main>

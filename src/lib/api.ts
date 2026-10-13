@@ -68,6 +68,12 @@ export type Op =
   | { op: 'remote_rename'; old: string; new: string }
   | { op: 'continue'; what: InProgress }
   | { op: 'abort'; what: InProgress }
+  | { op: 'apply_patch'; text: string; index: boolean }
+  | { op: 'bisect_start'; bad: string; good: string }
+  | { op: 'bisect_mark'; verdict: 'good' | 'bad' | 'skip' }
+  | { op: 'bisect_reset' | 'submodule_update' | 'submodule_sync' | 'lfs_install' | 'lfs_pull' }
+  | { op: 'lfs_track' | 'lfs_untrack'; pattern: string }
+  | { op: 'lfs_lock' | 'lfs_unlock'; path: string }
 export interface Stash {
   name: string
   id: string
@@ -243,3 +249,11 @@ export const externalTools = (tab: number) => invoke<ExternalTools>('external_to
 export const setExternalTools = (tab: number, tools: ExternalTools) => invoke<void>('set_external_tools', { tab, tools })
 /** 用外部工具打开对比或冲突，不等工具关闭；`mode`、`id` 同 `patch`，合并时不用 */
 export const externalOpen = (tab: number, kind: 'diff' | 'merge', mode: string, id: string, path: string) => invoke<void>('external_open', { tab, kind, mode, id, path })
+/** 二分查找进行中时是它的记录，否则 null */
+export const bisectLog = (tab: number) => invoke<string | null>('bisect_log', { tab })
+export interface Submodule { path: string; id: string; state: 'ok' | 'missing' | 'moved' | 'conflict' }
+export const submodules = (tab: number) => invoke<Submodule[]>('submodules', { tab })
+/** `version` 为 null 表示这台机器没装 git-lfs */
+export interface Lfs { version: string | null; installed: boolean; patterns: string[] }
+export const lfs = (tab: number) => invoke<Lfs>('lfs', { tab })
+export const lfsLocks = (tab: number) => invoke<string>('lfs_locks', { tab })

@@ -1,3 +1,26 @@
+## 接续更新：2026年10月13日
+
+集成分支 `feat_SC_private-workspace`，每项功能一个分支、本地提交后合并回来，没有推送。
+
+第三轮列的「对照 Fork 仍未做的主要项」现在的状态：
+
+| 项 | 状态 |
+| - | - |
+| 外部 diff / merge 工具配置 | 已合并（`feat_SC_external-tools`） |
+| 可手写的冲突解决与冲突跳转 | 已合并（`feat_SC_conflict-editor`） |
+| 提交模板和最近提交信息 | 已合并（`feat_SC_commit-assist`） |
+| 图里隐藏标签、折叠合并 | 已合并（`feat_SC_graph-view-options`） |
+| Bisect、子模块、LFS、应用补丁 | 本次完成（`feat_SC_repo-tools`），入口和行为见 `docs/UI_MAP.md` 最后一节 |
+| Git Flow、仓库统计、托管平台账户与 PR | 没有做 |
+
+本次验证：`cargo test -p engine`、`npm test` 52 项、`npm run check` 全部通过。桌面开发版在临时沙箱仓库实机点过：二分查找从开始到找到再结束、粘贴补丁成功和对不上被拒绝、LFS 新增和取消文件模式、子模块列表与在新页签中打开。
+
+没有实机点过的：LFS 启用 / 下载 / 锁定 / 解锁（沙箱没有 LFS 服务器，「查看文件锁」只确认了报错能显示出来）、子模块「初始化并更新」和「同步地址」、补丁的「同时加入暂存区」（有引擎测试）、英文界面、扩展的完整面板。
+
+`docs/UI_MAP.md` 里还缺前四项（外部工具、冲突编辑、提交辅助、图显示选项）各自的一节。
+
+---
+
 ## 接续更新：2026年10月12日（第三轮）
 
 仍在 `feat_SC_private-workspace`，全部改动未提交。入口和行为细节见 `docs/UI_MAP.md` 末尾几节。

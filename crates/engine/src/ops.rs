@@ -69,6 +69,50 @@ pub enum Op {
     RemoteRename { old: String, new: String },
     Continue { what: InProgress },
     Abort { what: InProgress },
+    /// 把补丁文本应用到工作区；`index` 为 true 时同时加入暂存区
+    ApplyPatch { text: String, index: bool },
+    /// 二分查找：已知 `bad` 有问题、`good` 没问题，在两者之间找第一个出问题的提交
+    BisectStart { bad: String, good: String },
+    /// 给当前检出的提交下结论
+    BisectMark { verdict: Verdict },
+    /// 结束二分查找，回到开始前的位置
+    BisectReset,
+    SubmoduleUpdate,
+    SubmoduleSync,
+    /// 给这个仓库装上 LFS 的过滤器和钩子
+    LfsInstall,
+    LfsTrack { pattern: String },
+    LfsUntrack { pattern: String },
+    LfsPull,
+    LfsLock { path: String },
+    LfsUnlock { path: String },
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+pub enum Verdict {
+    Good,
+    Bad,
+    Skip,
+}
+
+/// `git apply` 是整体生效的：有一处对不上就什么都不改。
+// ponytail: 补丁是界面粘贴进来的文本（换行是 \n）；仓库里按 CRLF 存的文件对不上，要支持时改成选补丁文件
+fn apply_patch(repo: &Repo, text: &str, index: bool) -> Result<Log> {
+    let file = repo.gix().git_dir().join("pushright-patch.diff");
+    let mut text = text.replace("\r\n", "\n");
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    std::fs::write(&file, text).map_err(crate::err)?;
+    let mut args = vec!["apply".to_owned(), "--whitespace=nowarn".into()];
+    if index {
+        args.push("--index".into());
+    }
+    args.push(file.to_string_lossy().into_owned());
+    let log = repo.git_log(&args);
+    let _ = std::fs::remove_file(&file);
+    Ok(log)
 }
 
 /// 名字来自界面输入，以 `-` 开头会被 git 当成选项
@@ -220,6 +264,18 @@ pub fn run(repo: &Repo, op: Op) -> Result<Log> {
             let flag = if matches!(op, Op::Abort { .. }) { "--abort" } else { "--continue" };
             args.extend(["-c", "core.editor=true", cmd, flag]);
         }
+        Op::ApplyPatch { text, index } => return apply_patch(repo, text, *index),
+        Op::BisectStart { bad, good } => args.extend(["bisect", "start", safe(bad)?, safe(good)?, "--"]),
+        Op::BisectMark { verdict } => args.extend(["bisect", match verdict { Verdict::Good => "good", Verdict::Bad => "bad", Verdict::Skip => "skip" }]),
+        Op::BisectReset => args.extend(["bisect", "reset"]),
+        Op::SubmoduleUpdate => args.extend(["submodule", "update", "--init", "--recursive"]),
+        Op::SubmoduleSync => args.extend(["submodule", "sync", "--recursive"]),
+        Op::LfsInstall => args.extend(["lfs", "install", "--local"]),
+        Op::LfsTrack { pattern } => args.extend(["lfs", "track", safe(pattern)?]),
+        Op::LfsUntrack { pattern } => args.extend(["lfs", "untrack", safe(pattern)?]),
+        Op::LfsPull => args.extend(["lfs", "pull"]),
+        Op::LfsLock { path } => args.extend(["lfs", "lock", safe(path)?]),
+        Op::LfsUnlock { path } => args.extend(["lfs", "unlock", safe(path)?]),
     }
     if matches!(op, Op::Reset { mode: ResetMode::Keep, .. }) {
         // 文件被改过又改回原样时，索引里的时间戳是旧的，reset --keep 会误判为有改动而拒绝
