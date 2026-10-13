@@ -100,6 +100,8 @@
         "title": "%command.commitAmend%",
         "category": "PushRight"
       },
+      { "command": "pushright.recentMessages", "title": "%command.recentMessages%", "category": "PushRight", "enablement": "pushright.hasRepo" },
+      { "command": "pushright.runCheck", "title": "%command.runCheck%", "category": "PushRight", "enablement": "pushright.hasRepo" },
       {
         "command": "pushright.editIdentity",
         "title": "%command.editIdentity%",
@@ -391,14 +393,24 @@
           "group": "2_commit@1"
         },
         {
-          "command": "pushright.editIdentity",
+          "command": "pushright.recentMessages",
           "when": "scmProvider == pushright",
           "group": "2_commit@2"
         },
         {
-          "command": "pushright.repositorySettings",
+          "command": "pushright.runCheck",
           "when": "scmProvider == pushright",
           "group": "2_commit@3"
+        },
+        {
+          "command": "pushright.editIdentity",
+          "when": "scmProvider == pushright",
+          "group": "2_commit@4"
+        },
+        {
+          "command": "pushright.repositorySettings",
+          "when": "scmProvider == pushright",
+          "group": "2_commit@5"
         },
         {
           "command": "pushright.diffColors",

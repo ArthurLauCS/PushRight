@@ -25,6 +25,8 @@ const COLORS: Record<string, string> = {
 }
 
 const controls = new Map<Repo, vscode.SourceControl>()
+/** 上一次自动填进提交输入框的内容 */
+const filled = new WeakMap<Repo, string>()
 
 /** 命令的参数可能是仓库（状态栏）、SourceControl（面板标题栏）或没有（命令面板）。 */
 export function repoArg(arg: unknown): Repo | undefined {
@@ -64,15 +66,21 @@ async function commit(repo: Repo, amend: boolean) {
   // 仓库设置了「提交前自动检查」时先跑一遍；没通过由用户决定要不要照样提交
   const settings = await attempt(engine.call<WorkflowSettings>('workflow_settings', { tab: repo.tab }))
   if (settings?.check_before_commit && settings.check_command) {
-    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `PushRight: ${settings.check_command}` }, () => attempt(engine.call<Log>('run_check', { tab: repo.tab })))
+    const result = await runCheck(repo, settings.check_command)
     if (!result) return
-    log.appendLine(`> ${result.command}\n${result.output}\n`)
-    if (!result.ok) {
-      log.show(true)
-      if (!(await vscode.window.showWarningMessage(t.check.failedTitle, { modal: true, detail: t.check.failedWarning }, t.check.commitAnyway))) return
-    }
+    if (!result.ok && !(await vscode.window.showWarningMessage(t.check.failedTitle, { modal: true, detail: t.check.failedWarning }, t.check.commitAnyway))) return
   }
-  if ((await write(repo, 'commit', { message, amend })) !== undefined) box.value = ''
+  // 回到自动填入的内容（提交信息模板），没有就是空的
+  if ((await write(repo, 'commit', { message, amend })) !== undefined) box.value = filled.get(repo) ?? ''
+}
+
+/** 跑仓库设置里的提交前检查，输出记进「PushRight」输出面板，没通过时把面板亮出来。没设置命令或启动失败时返回 undefined */
+async function runCheck(repo: Repo, command: string) {
+  const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `PushRight: ${command}` }, () => attempt(engine.call<Log>('run_check', { tab: repo.tab })))
+  if (!result) return
+  log.appendLine(`> ${result.command}\n${result.output}\n`)
+  if (!result.ok) log.show(true)
+  return result
 }
 
 async function editIdentity(repo: Repo) {
@@ -173,8 +181,6 @@ export function registerScm(context: vscode.ExtensionContext) {
   /** 每个仓库里有改动的文件：小写路径 → 状态 */
   const changed = new Map<Repo, Map<string, Entry>>()
   const groups = new Map<Repo, Record<'conflicts' | 'staged' | 'changes', vscode.SourceControlResourceGroup>>()
-  /** 上一次自动填进提交输入框的内容 */
-  const filled = new WeakMap<Repo, string>()
   const timers = new Map<Repo, { timer: ReturnType<typeof setTimeout>; git: boolean; notify: boolean }>()
 
   const addControl = (repo: Repo) => {
@@ -219,8 +225,8 @@ export function registerScm(context: vscode.ExtensionContext) {
     g.changes.resourceStates = repo.status.filter((e) => e.unstaged && !e.conflicted).map((e) => resource(repo, e, false))
     const files = conflictFiles(repo)
     g.conflicts.label = files.length ? `${v.conflicts} · ${t.conflictProgress(files.filter((f) => f.resolved).length, files.length)}` : v.conflicts
-    // 合并 / 摘取 / 撤销进行中时预填 Git 准备的提交信息；输入框里还是上次自动填的内容（或空着）才换，用户写过的不动
-    const prefill = repo.refs.in_progress && repo.refs.in_progress !== 'rebase' ? (repo.operation?.message ?? '') : ''
+    // 合并 / 摘取 / 撤销进行中时预填 Git 准备的提交信息，平时预填提交信息模板；输入框里还是上次自动填的内容（或空着）才换，用户写过的不动
+    const prefill = (repo.refs.in_progress && repo.refs.in_progress !== 'rebase' && repo.operation?.message) || repo.workflow?.template || ''
     if (control.inputBox.value === (filled.get(repo) ?? '')) control.inputBox.value = prefill
     filled.set(repo, prefill)
     control.count = repo.status.length
@@ -310,6 +316,18 @@ export function registerScm(context: vscode.ExtensionContext) {
     command('commit', (arg) => ((repo) => repo && commit(repo, false))(target(arg))),
     command('commitAmend', (arg) => ((repo) => repo && commit(repo, true))(target(arg))),
     command('editIdentity', (arg) => ((repo) => repo && editIdentity(repo))(target(arg))),
+    command('recentMessages', async (arg) => {
+      const repo = target(arg)
+      const list = repo && await attempt(engine.call<string[]>('recent_messages', { tab: repo.tab }))
+      const pick = list && await vscode.window.showQuickPick(list.map((message) => ({ label: message.split('\n')[0], detail: message.split('\n').slice(1).join(' ').trim() || undefined, message })), { title: `${repo!.name} · ${t.recentMessages}` })
+      if (pick) controls.get(repo!)!.inputBox.value = pick.message
+    }),
+    command('runCheck', async (arg) => {
+      const repo = target(arg)
+      const result = repo && await runCheck(repo, repo.workflow?.check_command ?? '')
+      if (result?.ok) vscode.window.showInformationMessage(t.check.passed)
+      else if (result) vscode.window.showWarningMessage(t.check.failed)
+    }),
     command('repositorySettings', async (arg) => {
       const repo = target(arg)
       if (!repo) return

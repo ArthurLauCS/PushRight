@@ -25,13 +25,20 @@
   /** 「相比」的基准在范围里是以 ^ 开头的一行 */
   const versus = $derived(scoped.find((name) => name.startsWith('^'))?.slice(1))
   const scopeLabel = $derived(scope === 'auto' ? t.vscode.graphAuto : scope === 'all' ? t.vscode.graphAll : versus ? t.compareBranch.label(short(scoped[0]), short(versus)) : scoped.length > 1 ? t.vscode.graphBranches(scoped.length) : short(scope))
+  /** 和完整提交图共用的显示开关：隐藏标签只影响标记；只看主线要重新加载图 */
+  const view = $state<{ hideTags: boolean; firstParent: boolean }>({ hideTags: false, firstParent: false, ...(() => { try { return JSON.parse(localStorage.getItem('graphView') ?? '{}') } catch { return {} } })() })
+  function toggle(key: 'hideTags' | 'firstParent') {
+    view[key] = !view[key]
+    localStorage.setItem('graphView', JSON.stringify(view))
+    if (key === 'firstParent') refresh()
+  }
   let loadedKey = ''
   let running = false
   let again = false
   let disposed = false
   const badges = $derived.by(() => {
     const result = new Map<string, Ref[]>()
-    for (const ref of repo?.refs.refs ?? []) result.set(ref.id, [...(result.get(ref.id) ?? []), ref])
+    for (const ref of repo?.refs.refs ?? []) if (!view.hideTags || !ref.name.startsWith('refs/tags/')) result.set(ref.id, [...(result.get(ref.id) ?? []), ref])
     return result
   })
 
@@ -50,7 +57,7 @@
         scope = next.scope
         // Auto 随 HEAD/上游切换；所有引用的提交集合没变，也可能需要换一份子图。
         const current = scope === 'auto' ? `${next.refs.head}:${next.refs.refs.find((r) => r.name === next.refs.head)?.upstream}` : ''
-        const key = `${next.tab}:${scope}:${current}:${graphKey(next.refs)}`
+        const key = `${next.tab}:${scope}:${view.firstParent}:${current}:${graphKey(next.refs)}`
         // 同一个仓库重载时留着旧图直接换成完整的新图：先清空或先退回首屏都会闪一下、丢滚动位置。
         const first = next.tab !== repo?.tab || !count
         repo = next
@@ -60,11 +67,11 @@
         selectedRow = null
         if (first) {
           count = 0
-          count = await invoke<number>('load_graph', { tab: next.tab, full: false })
+          count = await invoke<number>('load_graph', { tab: next.tab, full: false, firstParent: view.firstParent })
           version++
         }
         if (!first || count >= 2000) {
-          count = await invoke<number>('load_graph', { tab: next.tab, full: true })
+          count = await invoke<number>('load_graph', { tab: next.tab, full: true, firstParent: view.firstParent })
           version++
         }
         loadedKey = key
@@ -115,6 +122,8 @@
       {#each repos as r (r.tab)}<option value={r.tab}>{r.name}</option>{/each}
     </select>
     <span title={t.vscode.graphCurrentBranch(head)}>{head}</span>
+    <button class="action" class:on={!view.hideTags} aria-pressed={!view.hideTags} title={t.graphView.tagsHint} onclick={() => toggle('hideTags')}>{t.graphView.tags}</button>
+    <button class="action" class:on={view.firstParent} aria-pressed={view.firstParent} disabled={loading} title={t.graphView.firstParentHint} onclick={() => toggle('firstParent')}>{t.graphView.firstParent}</button>
   </div>
   <div class="toolbar">
     <button class="scope" aria-label={t.vscode.graphScope} onclick={changeScope} disabled={!repo || busy || loading} title={scope === 'auto' ? t.vscode.graphAutoHint : scoped.map((name) => (name.startsWith('^') ? t.compareBranch.against(short(name.slice(1))) : short(name))).join('\n')}><span>{scopeLabel}</span><Icon name="down" size={12} /></button>
@@ -163,6 +172,8 @@
   .toolbar span { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--muted); }
   .action { display: inline-flex; align-items: center; justify-content: center; height: 22px; min-width: 24px; padding: 0 4px; border: 0; border-radius: 3px; color: var(--text); background: transparent; cursor: pointer; }
   .action:hover { background: var(--hover); }
+  .action.on { background: var(--accent-soft); }
+  .action { flex: none; font: inherit; font-size: var(--fs-sm); white-space: nowrap; }
   .action:disabled { opacity: .45; cursor: default; }
   .action small { font-size: 10px; margin-left: 2px; }
   select:focus-visible, button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
