@@ -108,6 +108,76 @@ pub fn run_check(repo: &Repo) -> Result<Log> {
     Ok(Log { command, output: strip_ansi(&decode(&bytes)).trim().to_owned(), ok: out.status.success() })
 }
 
+/// 外部对比 / 合并工具。存在全局 git 配置里：工具装在这台机器上，所有仓库共用。
+/// 值是 git 认识的工具名（`git difftool --tool-help` 列出的，如 vscode、bc、meld、winmerge），
+/// 或一整条命令行，里面用 $LOCAL $REMOTE（合并时还有 $BASE $MERGED）指代文件。
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+pub struct Tools {
+    pub diff: String,
+    pub merge: String,
+}
+
+const TOOL_KEYS: [&str; 2] = ["pushright.diffTool", "pushright.mergeTool"];
+
+pub fn tools(repo: &Repo) -> Tools {
+    let text = decode(&repo.git(&["config", "--global", "--null", "--get-regexp", "^pushright[.](diff|merge)tool$"]).unwrap_or_default());
+    let get = |key: &str| text.split('\0').find_map(|rec| rec.split_once('\n').filter(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v.to_owned())).unwrap_or_default();
+    Tools { diff: get(TOOL_KEYS[0]), merge: get(TOOL_KEYS[1]) }
+}
+
+pub fn set_tools(repo: &Repo, tools: &Tools) -> Result<()> {
+    for (key, value) in TOOL_KEYS.into_iter().zip([tools.diff.trim(), tools.merge.trim()]) {
+        if value.is_empty() {
+            let _ = repo.git(&["config", "--global", "--unset-all", key]);
+        } else {
+            repo.git(&["config", "--global", "--replace-all", key, value])?;
+        }
+    }
+    Ok(())
+}
+
+/// 用外部工具打开一个文件的对比（`kind` 为 diff）或冲突（`kind` 为 merge），不等工具关闭。
+/// `mode`：unstaged / staged / commit（此时 `id` 是提交），只对 diff 有意义。
+/// 工具改完冲突文件并正常退出后，git 会把它标记为已解决；界面回到前台时自己刷新。
+// ponytail: commit 模式和第一个父提交比，仓库的第一个提交没有父提交，会报错
+pub fn launch(repo: &Repo, kind: &str, tool: &str, mode: &str, id: &str, path: &str) -> Result<()> {
+    if tool.is_empty() || !matches!(kind, "diff" | "merge") {
+        return Err("PR_NO_EXTERNAL_TOOL".into());
+    }
+    let command = format!("{kind}tool");
+    let mut args = vec!["--literal-pathspecs".to_owned(), "-c".into(), "mergetool.keepBackup=false".into()];
+    let name = if tool.contains([' ', '$']) {
+        args.extend(["-c".into(), format!("{command}.pushright.cmd={tool}"), "-c".into(), format!("{command}.pushright.trustExitCode=true")]);
+        "pushright"
+    } else {
+        tool
+    };
+    args.extend([command, "-y".into(), "-t".into(), name.to_owned()]);
+    match (kind, mode) {
+        ("merge", _) | (_, "unstaged") => {}
+        (_, "staged") => args.push("--cached".into()),
+        (_, "commit") => args.extend([format!("{}~1", crate::ops::safe(id)?), id.to_owned()]),
+        _ => return Err("PR_INVALID_NAME".into()),
+    }
+    args.extend(["--".into(), path.to_owned()]);
+    let mut child = crate::git_command(&repo.path).args(&args).stdout(Stdio::null()).spawn().map_err(err)?;
+    // 需要在终端里回答的情况（比如一边删除一边修改的冲突）读到 EOF 后放弃
+    drop(child.stdin.take());
+    // 工具名写错、命令找不到这类问题会马上失败，等一小会儿把报错带回界面
+    for _ in 0..15 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if let Some(status) = child.try_wait().map_err(err)? {
+            if status.success() {
+                return Ok(());
+            }
+            let mut message = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut child.stderr.take().unwrap(), &mut message);
+            return Err(decode(&message).trim().to_owned());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

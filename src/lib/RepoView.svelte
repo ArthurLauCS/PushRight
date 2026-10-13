@@ -110,6 +110,7 @@
   })
   /** 提交信息模板和提交前检查，存在仓库的本地 git 配置里 */
   let workflow = $state.raw<api.WorkflowSettings>({ template: '', check_command: '', check_before_commit: false })
+  let externalTools = $state.raw<api.ExternalTools>({ diff: '', merge: '' })
   /** 上游改了、本地也改着的二进制文件；拉取前提示 */
   let overlap = $state.raw<string[]>([])
   let logs = $state.raw<api.Log[]>([])
@@ -179,8 +180,8 @@
   }
 
   async function loadSidebar() {
-    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab), api.workflowSettings(tab)]))
-    if (r) [refs, stashes, worktrees, , identity, workflow] = r
+    const r = await guard(Promise.all([api.refs(tab), api.stashes(tab), api.worktrees(tab), loadStatus(), api.commitIdentity(tab), api.workflowSettings(tab), api.externalTools(tab)]))
+    if (r) [refs, stashes, worktrees, , identity, workflow, externalTools] = r
     operation = refs.in_progress ? ((await guard(api.operation(tab))) ?? null) : null
     // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
     overlap = refs.ahead_behind?.[1] ? ((await guard(api.binaryOverlap(tab))) ?? []) : []
@@ -477,9 +478,12 @@
         { key: 'check', label: t.check.command, type: 'text', optional: true, value: workflow.check_command },
         { key: 'auto', label: t.check.auto, type: 'checkbox', value: workflow.check_before_commit },
         { key: 'template', label: t.commitTemplate, type: 'textarea', optional: true, value: workflow.template },
+        { key: 'diffTool', label: t.externalTools.diffSetting, type: 'text', optional: true, value: externalTools.diff },
+        { key: 'mergeTool', label: t.externalTools.mergeSetting, type: 'text', optional: true, value: externalTools.merge },
       ],
     })
     if (!values) return
+    await guard(api.setExternalTools(tab, { diff: values.diffTool as string, merge: values.mergeTool as string }))
     await guard(api.setWorkflowSettings(tab, { template: values.template as string, check_command: values.check as string, check_before_commit: !!values.auto }))
     // 只有这一项会进命令日志和撤销列表，没改就不执行
     if (!!values.disabled !== refs.revert_disabled) await exec({ op: 'set_revert_disabled', disabled: !!values.disabled })
@@ -844,6 +848,7 @@
       { label: t.fileMenu.copyPath, action: () => navigator.clipboard.writeText(file) },
       { label: t.fileMenu.copyFullPath, action: () => navigator.clipboard.writeText(full) },
       ...(untracked ? [] : [{ label: t.fileMenu.copyPatch, action: async () => { const text = await guard(api.patch(tab, mode, id, file)); if (text) navigator.clipboard.writeText(text) } }]),
+      ...(untracked || !externalTools.diff ? [] : [{ label: t.externalTools.diff, action: () => void guard(api.externalOpen(tab, 'diff', mode, id, file)) }]),
       ...(untracked ? [] : [null, { label: t.fileMenu.history, action: () => { view = 'history'; search!.fileHistory(file) } }]),
     ]
   }
@@ -1083,7 +1088,7 @@
           fetchPage={(id, path, skip) => api.diffPage(tab, detailMode, '', id, path, skip, null, diffOptions())} />
       </div>
       <div class="pane" class:hidden={view !== 'changes'}>
-        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} {conflicts} prefill={(refs.in_progress && refs.in_progress !== 'rebase' && operation?.message) || workflow.template} check={{ command: workflow.check_command, auto: workflow.check_before_commit, running: checking, result: checkResult, run: runCheck }} {beforeCommit} showLog={() => (showLog = true)} reload={refresh} oncommitted={committed} {discard} {discardLines} onfilemenu={workFileMenu} />
+        <WorkingCopy {tab} {entries} {identity} {editIdentity} identityBusy={busy} bind:busy={workingBusy} rebasing={refs.in_progress === 'rebase'} {conflicts} prefill={(refs.in_progress && refs.in_progress !== 'rebase' && operation?.message) || workflow.template} check={{ command: workflow.check_command, auto: workflow.check_before_commit, running: checking, result: checkResult, run: runCheck }} {beforeCommit} showLog={() => (showLog = true)} reload={refresh} oncommitted={committed} {discard} {discardLines} onfilemenu={workFileMenu} onexternal={externalTools.merge ? (file) => void guard(api.externalOpen(tab, 'merge', '', '', file)) : undefined} />
       </div>
       {#if view === 'worktrees'}
         <div class="pane">

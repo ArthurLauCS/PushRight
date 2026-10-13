@@ -93,6 +93,14 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "set_workflow_settings" => out(workflow::write(repo, &arg::<workflow::Settings>(a, "settings")?)?),
         "recent_messages" => out(workflow::recent_messages(repo, 20)?),
         "run_check" => out(workflow::run_check(repo)?),
+        "external_tools" => out(workflow::tools(repo)),
+        "set_external_tools" => out(workflow::set_tools(repo, &arg::<workflow::Tools>(a, "tools")?)?),
+        "external_open" => {
+            // 工具取自配置而不是调用参数：界面只能触发，不能临时换成别的命令
+            let (kind, tools) = (arg::<String>(a, "kind")?, workflow::tools(repo));
+            let tool = if kind == "merge" { tools.merge } else { tools.diff };
+            out(workflow::launch(repo, &kind, &tool, &arg::<String>(a, "mode")?, &arg::<String>(a, "id")?, &arg::<String>(a, "path")?)?)
+        }
         "last_message" => out(status::last_message(repo)?),
         "commit_identity" => out(identity::read(repo)?),
         "set_commit_identity" => out(identity::set(repo, &arg::<String>(a, "name")?, &arg::<String>(a, "email")?)?),

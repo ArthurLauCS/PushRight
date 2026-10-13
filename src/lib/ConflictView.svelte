@@ -9,6 +9,7 @@
     rebasing,
     onresolve,
     ontake,
+    onexternal,
   }: {
     conflict: Conflict | null
     rebasing: boolean
@@ -16,6 +17,8 @@
     onresolve: (choices: Side[]) => void
     /** 整个文件取一边 */
     ontake: (theirs: boolean) => void
+    /** 用外部合并工具打开这个文件；没配置外部工具时不传 */
+    onexternal?: () => void
   } = $props()
 
   let choices = $state<(Side | null)[]>([])
@@ -55,6 +58,7 @@
         <button class="btn small quiet icon" title={t.conflictPrevious} aria-label={t.conflictPrevious} onclick={() => jump(-1)}><Icon name="up" size={14} /></button>
         <button class="btn small quiet icon" title={t.conflictNext} aria-label={t.conflictNext} onclick={() => jump(1)}><Icon name="down" size={14} /></button>
       {/if}
+      {#if onexternal}<button class="btn small" onclick={onexternal}><Label text={t.externalTools.merge} /></button>{/if}
       <button class="btn small" onclick={() => ontake(false)}><Label text={t.takeOurs} /></button>
       <button class="btn small" onclick={() => ontake(true)}><Label text={t.takeTheirs} /></button>
       {#if !conflict.binary}
