@@ -120,3 +120,24 @@ fn binary_conflict_takes_one_side() {
     assert!(!status::status(&repo).unwrap().iter().any(|e| e.conflicted));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn hand_edited_resolution_keeps_the_file_encoding_and_line_endings() {
+    // GBK 编码、CRLF 换行的文件：「中」是 D6 D0，「文」是 CE C4
+    let file = |top: &[u8]| [top, b"\r\n2\r\n3\r\n"].concat();
+    let (dir, repo) = conflicted("safety-custom", &file(b"\xd6\xd0 main"), &file(b"\xce\xc4 other"), &file(b"base"), "a.txt");
+    let c = conflict::read(&repo, "a.txt").unwrap();
+    assert!(matches!(&c.blocks[0], Block::Conflict { ours, theirs, .. } if ours.starts_with("中 main") && theirs.starts_with("文 other")));
+
+    // 界面给的是 UTF-8、\n 换行、结尾没有换行；一个选择对应一个冲突块，其余仍可以选一边
+    conflict::resolve(&repo, "a.txt", &[Side::Custom("中文 merged\nsecond line".into())]).unwrap();
+    assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"\xd6\xd0\xce\xc4 merged\r\nsecond line\r\n2\r\n3\r\n");
+    assert!(!status::status(&repo).unwrap()[0].conflicted);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // 清空内容等于把这一块删掉
+    let (dir, repo) = conflicted("safety-custom-empty", b"main\nkeep\n", b"other\nkeep\n", b"base\nkeep\n", "a.txt");
+    conflict::resolve(&repo, "a.txt", &[Side::Custom(String::new())]).unwrap();
+    assert_eq!(read(&dir, "a.txt"), "keep\n");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

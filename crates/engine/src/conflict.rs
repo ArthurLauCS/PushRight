@@ -16,13 +16,31 @@ pub enum Block {
     Conflict { ours: String, theirs: String, ours_label: String, theirs_label: String },
 }
 
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     Ours,
     Theirs,
     /// 先我方后对方，两段都保留
     Both,
+    /// 用户手动改出来的内容，整段替换这个冲突块
+    Custom(String),
+}
+
+/// 手动编辑的内容来自界面（UTF-8、换行是 \n），写回时跟文件原来的编码和换行保持一致。
+fn encode_like(text: &str, file: &[u8]) -> Vec<u8> {
+    let mut text = text.replace("\r\n", "\n");
+    // 冲突块后面的内容要另起一行
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    if file.windows(2).any(|w| w == b"\r\n") {
+        text = text.replace('\n', "\r\n");
+    }
+    match std::str::from_utf8(file) {
+        Ok(_) => text.into_bytes(),
+        Err(_) => encoding_rs::GB18030.encode(&text).0.into_owned(),
+    }
 }
 
 /// 按原始字节切开：写回文件时原样拼接，保持文件原来的编码和换行。
@@ -116,6 +134,7 @@ pub fn resolve(repo: &Repo, path: &str, choices: &[Side]) -> Result<()> {
                 Side::Ours => out.extend(ours.concat()),
                 Side::Theirs => out.extend(theirs.concat()),
                 Side::Both => out.extend([ours.concat(), theirs.concat()].concat()),
+                Side::Custom(text) => out.extend(encode_like(text, &bytes)),
             },
         }
     }

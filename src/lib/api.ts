@@ -90,7 +90,8 @@ export interface Conflict {
   binary: boolean
   blocks: Block[]
 }
-export type Side = 'ours' | 'theirs' | 'both'
+/** `custom` 是用户手动改出来的内容，整段替换这个冲突块 */
+export type Side = 'ours' | 'theirs' | 'both' | { custom: string }
 /** 进行中的合并 / 变基 / 摘取 / 撤销在 Git 里记下的信息 */
 export interface Operation {
   /** Git 准备好的提交信息 */
