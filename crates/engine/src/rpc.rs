@@ -130,6 +130,7 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "submodules" => out(tools::submodules(repo)?),
         "lfs" => out(tools::lfs(repo)),
         "lfs_locks" => out(tools::lfs_locks(repo)?),
+        "stats" => out(tools::stats(repo)?),
         "conflict_read" => out(conflict::read(repo, &arg::<String>(a, "path")?)?),
         "conflict_resolve" => out(conflict::resolve(repo, &arg::<String>(a, "path")?, &arg::<Vec<conflict::Side>>(a, "choices")?)?),
         "conflict_take" => out(conflict::take(repo, &arg::<String>(a, "path")?, arg(a, "theirs")?)?),

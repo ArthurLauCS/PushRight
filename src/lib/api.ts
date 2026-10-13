@@ -257,3 +257,7 @@ export const submodules = (tab: number) => invoke<Submodule[]>('submodules', { t
 export interface Lfs { version: string | null; installed: boolean; patterns: string[] }
 export const lfs = (tab: number) => invoke<Lfs>('lfs', { tab })
 export const lfsLocks = (tab: number) => invoke<string>('lfs_locks', { tab })
+export interface Count { name: string; count: number }
+/** 当前分支的提交统计；`months` 逐月连续，`files` 是改动次数最多的 100 个 */
+export interface Stats { commits: number; first: string; last: string; authors: Count[]; months: Count[]; files: Count[] }
+export const stats = (tab: number) => invoke<Stats>('stats', { tab })

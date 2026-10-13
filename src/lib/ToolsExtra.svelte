@@ -6,7 +6,7 @@
 
   let { tab, path, refs, disabled, section, run, onopen }: {
     tab: number; path: string; refs: api.Refs; disabled: boolean
-    section: 'bisect' | 'submodules' | 'lfs' | 'patch'
+    section: 'bisect' | 'submodules' | 'lfs' | 'patch' | 'stats'
     /** 执行一条写操作并刷新界面，返回它的命令日志 */
     run: (op: api.Op) => Promise<api.Log | undefined>
     onopen: (path: string) => void
@@ -24,6 +24,8 @@
   let good = $state('')
   let modules = $state.raw<api.Submodule[]>([])
   let lfs = $state.raw<api.Lfs | null>(null)
+  let stats = $state.raw<api.Stats | null>(null)
+  const peak = $derived(stats?.months.reduce((a, b) => (b.count > a.count ? b : a)))
   /** null 表示还没查过 */
   let locks = $state<string | null>(null)
   let pattern = $state('')
@@ -37,6 +39,7 @@
       if (section === 'bisect') bisecting = await api.bisectLog(tab)
       if (section === 'submodules') modules = await api.submodules(tab)
       if (section === 'lfs') lfs = await api.lfs(tab)
+      if (section === 'stats') stats = await api.stats(tab)
     } catch (e) { error = errorText(e) }
   }
   $effect(() => { section; last = null; load() })
@@ -93,6 +96,27 @@
       </div>
     {:else}<p class="none">{r.submoduleNone}</p>{/each}
   </div>
+{:else if section === 'stats'}
+  <p>{r.statsHint}</p>
+  {#if stats && peak}
+    <div class="tiles">
+      <div><b>{stats.commits.toLocaleString()}</b>{r.statsCommits}</div>
+      <div><b>{stats.authors.length}</b>{r.statsAuthors}</div>
+      <div><b>{stats.first}</b>{r.statsFirst}</div>
+      <div><b>{stats.last}</b>{r.statsLast}</div>
+    </div>
+    <h3>{r.statsMonths}</h3>
+    <div class="months">{#each stats.months as m (m.name)}<i style:height="{(m.count / peak.count) * 100}%" title={r.statsMonth(m.name, m.count)}></i>{/each}</div>
+    <div class="axis"><span>{stats.months[0].name}</span><span>{r.statsPeak(peak.name, peak.count)}</span><span>{stats.months.at(-1)!.name}</span></div>
+    {#each [[r.statsByAuthor, stats.authors], [r.statsByFile, stats.files]] as const as [title, list]}
+      <h3>{title}</h3>
+      <div class="table ranked">
+        {#each list as c (c.name)}
+          <div class="row" style:--w="{(c.count / list[0].count) * 100}%"><b title={c.name}>{c.name}</b><code>{c.count.toLocaleString()}</code></div>
+        {/each}
+      </div>
+    {/each}
+  {:else if stats}<p class="none">{r.statsNone}</p>{/if}
 {:else if lfs}
   <p>{r.lfsHint}</p>
   {#if !lfs.version}
@@ -150,5 +174,19 @@
   .none { max-width: none; padding: 24px; text-align: center; }
   textarea { min-height: 220px; font-family: var(--mono); font-size: var(--fs-sm); white-space: pre; }
   pre { margin: 0; padding: 12px 16px; max-height: 320px; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); font-size: var(--fs-sm); white-space: pre-wrap; user-select: text; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tiles div { display: flex; flex-direction: column; gap: 4px; min-width: 140px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--muted); font-size: var(--fs-sm); }
+  .tiles b { font-size: var(--fs-lg); font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+  /* 每月一根柱子：贴着基线、顶端圆角、柱间留 2px */
+  .months { display: flex; align-items: flex-end; gap: 2px; height: 120px; border-bottom: 1px solid var(--border); }
+  .months i { flex: 1; min-width: 1px; min-height: 1px; background: var(--accent); border-radius: 4px 4px 0 0; }
+  .months i:hover { filter: brightness(1.25); }
+  .axis { display: flex; justify-content: space-between; margin-top: -8px; color: var(--muted); font-size: var(--fs-sm); }
+  /* 外层是会收缩子项的纵向 flex：图和表不让它压扁，由整页滚动 */
+  .months, .ranked { flex: none; }
+  .ranked { max-height: 420px; overflow: auto; }
+  .ranked .row { min-height: 28px; background: linear-gradient(90deg, var(--accent-soft) var(--w), transparent var(--w)); }
+  .ranked b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ranked code { color: var(--fg); font-variant-numeric: tabular-nums; }
   summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 </style>
