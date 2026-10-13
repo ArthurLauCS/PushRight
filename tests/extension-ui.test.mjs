@@ -664,3 +664,57 @@ test('local files expand lazily and tracking commands distinguish local rules, s
   ])
   assert.deepEqual(new Set(discoveries), new Set([file.fsPath, second.fsPath]))
 })
+
+test('worktree view opens other worktrees in a new window, hides taken branches and forces removal only with changes', async () => {
+  let provider
+  const commands = new Map(), executed = [], ops = [], asked = []
+  const worktrees = [
+    { path: '/repo', head: 'aaaaaaaaaa', branch: 'refs/heads/main', current: true, changes: 0, ahead_behind: [0, 0], subject: 'one' },
+    { path: '/repo-feat', head: 'bbbbbbbbbb', branch: 'refs/heads/feat', current: false, changes: 2, ahead_behind: [1, 0], subject: 'two' },
+  ]
+  const repo = { tab: 3, root: '/repo', name: 'repo', refs: { refs: ['main', 'feat', 'free'].map((n) => ({ name: `refs/heads/${n}` })) } }
+  let pick, inputs = []
+  const vscode = {
+    EventEmitter: Event, Uri: { file: uri }, TreeItemCollapsibleState: { Expanded: 2 },
+    TreeItem: class { constructor(label, state) { Object.assign(this, { label, state }) } }, ThemeIcon: class { constructor(id) { this.id = id } },
+    window: {
+      createTreeView: (id, options) => { assert.equal(id, 'pushright.worktrees'); provider = options.treeDataProvider; return { visible: true, onDidChangeVisibility: new Event().event, dispose() {} } },
+      showQuickPick: async (items) => { asked.push(items.map((i) => i.label)); return pick(items) },
+      showInputBox: async (options) => { asked.push(options.value); return inputs.shift() },
+      showWarningMessage: async (title, options, confirm) => { asked.push(options.detail); return confirm },
+    },
+    commands: { registerCommand: (id, fn) => { commands.set(id, fn); return { dispose() {} } }, executeCommand: async (...args) => executed.push(args) },
+  }
+  const core = {
+    repos: [repo], onRepoChange: new Event(), attempt: (p) => p, activeRepo: () => repo, short: (n) => n.replace('refs/heads/', ''),
+    engine: { call: async (cmd, args) => { assert.deepEqual([cmd, args], ['worktrees', { tab: 3 }]); return worktrees } },
+    run: async (r, op) => { ops.push(op); return true },
+    help: { worktree: { short: 's', what: 'w', undo: 'kept' } },
+    t: { detached: 'detached', wtCurrent: 'current', wtDirty: (n) => `${n} files`, toPush: (n) => `push ${n}`, toPull: (n) => `pull ${n}`, newWorktree: 'New worktree', worktreePath: 'Folder', branchRule: 'rule', wtRemove: 'Remove', wtRemoveTitle: (n) => `Remove ${n}`, wtRemoveWarning: (n) => `${n} lost` },
+    v: { worktreeNewBranch: 'New branch', worktreeRemoveOpen: 'close it first' },
+  }
+  load('worktrees', { vscode, './core': core, '../../src/lib/branch-name': { BRANCH_NAME: /^feat_/ } }).registerWorktrees({ subscriptions: [] })
+  const items = await provider.getChildren()
+  const [here, other] = items.map((i) => provider.getTreeItem(i))
+  assert.deepEqual([here.label, here.description, here.command, here.contextValue], ['repo', 'main · current', undefined, undefined], 'the current worktree cannot open or remove itself')
+  assert.deepEqual([other.label, other.description, other.contextValue], ['repo-feat', 'feat · 2 files · push 1', 'worktree'])
+  await commands.get(other.command.command)(...other.command.arguments)
+  const opened = executed.pop()
+  assert.deepEqual([opened[0], opened[1].fsPath, opened[2]], ['vscode.openFolder', '/repo-feat', { forceNewWindow: true }], 'the original window stays')
+  pick = (list) => list.find((i) => i.label === 'free')
+  inputs = ['/repo-free']
+  await commands.get('pushright.worktree.add')()
+  assert.deepEqual(asked.splice(0), [['$(plus) New branch', 'free'], '/repo-free'], 'branches already open in a worktree are not offered; the folder defaults next to the repository')
+  assert.deepEqual(ops.pop(), { op: 'worktree_add', path: '/repo-free', start: 'free', new_branch: null })
+  assert.equal(executed.pop()[2].forceNewWindow, true, 'a new worktree opens in its own window')
+  pick = (list) => list[0]
+  inputs = ['feat_x', '/elsewhere']
+  await commands.get('pushright.worktree.add')()
+  assert.deepEqual(ops.pop(), { op: 'worktree_add', path: '/elsewhere', start: 'HEAD', new_branch: 'feat_x' })
+  asked.length = 0
+  await commands.get('pushright.worktree.remove')(items[1])
+  assert.match(asked[0], /2 lost[\s\S]*kept[\s\S]*close it first/, 'removal warns about lost changes and other windows')
+  assert.deepEqual(ops.pop(), { op: 'worktree_remove', path: '/repo-feat', force: true })
+  await commands.get('pushright.worktree.remove')()
+  assert.equal(ops.length, 0, 'the palette cannot remove without a target')
+})

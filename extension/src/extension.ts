@@ -10,6 +10,7 @@ import { offerTakeover, registerScm, repoArg } from './scm'
 import { checkout, fastForward, fetch, inProgress, pull, push } from './sync'
 import { registerLocalFiles } from './local-files'
 import { registerDiffColors } from './diff-colors'
+import { registerWorktrees } from './worktrees'
 
 export async function activate(context: vscode.ExtensionContext) {
   const exe = join(context.extensionPath, 'bin', process.platform === 'win32' ? 'pushright-engine.exe' : 'pushright-engine')
@@ -43,6 +44,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerHistory(context)
   registerLocalFiles(context)
   registerDiffColors(context)
+  registerWorktrees(context)
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => discoverRepositories()),
     vscode.window.onDidChangeActiveTextEditor((editor) => editor && discoverForFile(editor.document.uri)),
