@@ -230,6 +230,15 @@ pub fn worktrees(repo: &Repo) -> Result<Vec<Worktree>> {
             _ => {}
         }
     }
+    // 子模块的主工作树在 git 的清单里是它的 git 目录（父仓库的 .git/modules/…），真正的文件夹记在 core.worktree 里
+    if let Some(main) = list.first_mut() {
+        if let Ok(dir) = git_at(Path::new(&main.path), &["config", "--get", "core.worktree"], &[]) {
+            if let Ok(real) = std::fs::canonicalize(Path::new(&main.path).join(String::from_utf8_lossy(&dir).trim())) {
+                // canonicalize 在 Windows 上带 \\?\ 前缀；和 git 给的其他路径一样用正斜杠
+                main.path = real.to_string_lossy().trim_start_matches(r"\\?\").replace('\\', "/");
+            }
+        }
+    }
     // 每个工作树要跑三条 git 命令，各开一个线程并行
     let here = std::fs::canonicalize(&repo.path).ok();
     std::thread::scope(|s| {

@@ -522,6 +522,8 @@ export const messages = {
     graphAll: 'All branches',
     graphPickMany: 'Pick several branches…',
     fastForwardPick: 'Pick a branch to fast-forward to its upstream',
+    worktreeNewBranch: 'Create a new branch in the new worktree',
+    worktreeRemoveOpen: 'If this folder is open in another window, close that window first.',
     fastForwardNone: 'No local branch is behind its upstream and able to fast-forward',
     graphBranches: (n: number) => `${n} branches`,
     graphAutoHint: 'Current branch, upstream and remote base branch. Filtering does not check out a branch.',

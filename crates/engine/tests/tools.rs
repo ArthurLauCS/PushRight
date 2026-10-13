@@ -289,6 +289,9 @@ fn patch_bisect_submodules_and_lfs() {
     git(&dir, 7, &["commit", "-qm", "add submodule"]);
     let list = tools::submodules(&repo).unwrap();
     assert_eq!((list[0].path.as_str(), list[0].state, list[0].id.len()), ("libs/my lib (v1)", "ok", 40));
+    // 子模块自己的工作树清单：主工作树是它的文件夹，不是父仓库 .git/modules 下的 git 目录
+    let inner = engine::refs::worktrees(&Repo::open(&dir.join("libs/my lib (v1)")).unwrap()).unwrap();
+    assert!(inner[0].current && inner[0].path.ends_with("libs/my lib (v1)"), "{}", inner[0].path);
     git(&dir, 0, &["submodule", "deinit", "-q", "-f", "--all"]);
     assert_eq!(tools::submodules(&repo).unwrap()[0].state, "missing");
     assert_eq!(tools::submodules(&repo).unwrap()[0].path, "libs/my lib (v1)");
