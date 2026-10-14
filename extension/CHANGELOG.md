@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.12
+
+- Fix Windows pre-commit checks failing with Python `UnicodeEncodeError` when printing emoji, and preserve Chinese output from nested PowerShell commands. The shared runner sets the child console code page and Python streams to UTF-8 while preserving command exit status.
+
+修复 Windows 提交前检查中 Python 输出 emoji 时的 `UnicodeEncodeError`，以及嵌套 PowerShell 中文输出变成问号的问题。共用检查入口为子进程设置 UTF-8，保留命令原有的成功／失败状态。
+
 ## 1.1.11
 
 - Add a global time-zone dropdown to the shared full graph. Persist the selection across restarts and apply it to all repository views, native history and blame, including daylight-saving transitions and monthly statistics.

@@ -253,3 +253,35 @@ fn workflow_settings_recent_messages_and_check_command() {
     assert_eq!(workflow::recent_messages(&repo, 5).unwrap(), ["one", "two\n\nbody"], "newest first, duplicates removed");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[cfg(windows)]
+#[test]
+fn workflow_check_preserves_nested_powershell_unicode() {
+    use engine::workflow::{self, Settings};
+    let dir = init("workflow-unicode-shell");
+    let repo = Repo::open(&dir).unwrap();
+    let command = "powershell.exe -NoProfile -Command \"Write-Output ([string][char]0x8FD0 + [char]0x884C); [Console]::Error.WriteLine([string][char]0x9519 + [char]0x8BEF); exit 7\"";
+    workflow::write(&repo, &Settings { check_command: command.into(), ..Settings::default() }).unwrap();
+    let log = workflow::run_check(&repo).unwrap();
+    assert!(!log.ok, "a failing check must stay failed: {log:?}");
+    assert_eq!(log.command, command);
+    assert_eq!(log.output.lines().collect::<Vec<_>>(), ["运行", "错误"], "{log:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "requires Python on PATH; run explicitly on Windows"]
+fn workflow_check_preserves_python_unicode() {
+    use engine::workflow::{self, Settings};
+    let dir = init("workflow-unicode-python");
+    let repo = Repo::open(&dir).unwrap();
+    std::fs::write(dir.join("check.py"), "import sys\nprint(chr(0x1f680) + chr(0x8d44) + chr(0x6e90))\nprint(chr(0x9519) + chr(0x8bef), file=sys.stderr)\n").unwrap();
+    let command = "python -X utf8=0 check.py";
+    workflow::write(&repo, &Settings { check_command: command.into(), ..Settings::default() }).unwrap();
+    let log = workflow::run_check(&repo).unwrap();
+    assert!(log.ok, "{log:?}");
+    assert_eq!(log.command, command);
+    assert_eq!(log.output.lines().collect::<Vec<_>>(), ["🚀资源", "错误"], "{log:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

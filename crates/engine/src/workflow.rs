@@ -93,7 +93,9 @@ pub fn run_check(repo: &Repo) -> Result<Log> {
         use std::os::windows::process::CommandExt;
         cmd = Command::new("cmd");
         // 命令行原样交给 cmd，不经过 Rust 的参数转义；不弹出控制台窗口
-        cmd.raw_arg("/D /C").raw_arg(&command).creation_flags(0x0800_0000);
+        // 子 shell（如 just 的 PowerShell）继承 UTF-8 代码页；Python 的管道编码需单独设置。
+        cmd.raw_arg("/D /C").raw_arg(format!("chcp 65001 >nul && {command}")).creation_flags(0x0800_0000);
+        cmd.env("PYTHONIOENCODING", "utf-8");
     }
     #[cfg(not(windows))]
     {
