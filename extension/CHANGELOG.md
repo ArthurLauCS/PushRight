@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.13
+
+- Add resizable, collapsible Unstaged, Staged and Commit Author sections in the shared full panel. Support keyboard resizing and double-click reset; preserve drafts and file-tree state while folded. Small sections scroll independently.
+
+完整面板的本地更改新增三栏高度拖动与折叠，支持方向键调整和双击恢复默认。折叠保留提交草稿与文件树状态，缩小后的区域可独立滚动。
+
 ## 1.1.12
 
 - Fix Windows pre-commit checks failing with Python `UnicodeEncodeError` when printing emoji, and preserve Chinese output from nested PowerShell commands. The shared runner sets the child console code page and Python streams to UTF-8 while preserving command exit status.

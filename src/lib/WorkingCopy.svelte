@@ -148,12 +148,41 @@
 
   const dir = (p: string) => p.slice(0, p.lastIndexOf('/') + 1)
   const base = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
+  let folded = $state([false, false, false])
+  let sizes = $state([120, 120, 170])
+  const panes: HTMLDivElement[] = []
+  let dragSizes: number[] = []
+  const nextOpen = (index: number) => folded.findIndex((closed, i) => i > index && !closed)
+
+  function startResize() {
+    // flex-basis 留出 80px，拖动只分配剩余空间；按实际高度起拖，窗口缩放后也不跳动。
+    dragSizes = sizes.map((size, i) => folded[i] ? size : Math.max(1, panes[i]!.getBoundingClientRect().height - 80))
+  }
+
+  function resize(index: number, delta: number) {
+    const next = nextOpen(index)
+    if (next < 0) return
+    const total = dragSizes[index]! + dragSizes[next]!
+    const first = Math.max(1, Math.min(total - 1, dragSizes[index]! + delta))
+    sizes = dragSizes.map((size, i) => i === index ? first : i === next ? total - first : size)
+  }
 </script>
 
+{#snippet divider(index: number)}
+  {#if !folded[index] && nextOpen(index) >= 0}
+    <Splitter dir="y" label={t.dragHint} value={Math.round(100 * sizes[index]! / (sizes[index]! + sizes[nextOpen(index)]!))} onstart={startResize} onresize={(delta) => resize(index, delta)} onreset={() => (sizes = [120, 120, 170])} />
+  {/if}
+{/snippet}
+
 {#snippet list(title: string, hint: string, items: api.Entry[], isStaged: boolean)}
-  <div class="group">
+  {@const index = isStaged ? 1 : 0}
+  <div class="group" class:folded={folded[index]} style:flex-grow={folded[index] ? 0 : sizes[index]} bind:this={panes[index]}>
     <div class="title">
-      <span>{title}<span class="count">{filter.trim() ? t.fileList.shown(shown(items).length, items.length) : items.length}</span><span class="hint">{hint}</span></span>
+      <button class="section-toggle" aria-expanded={!folded[index]} onclick={() => (folded[index] = !folded[index])} title={`${title} · ${hint}`}>
+        <Icon name={folded[index] ? 'right' : 'down'} size={12} />
+        <span>{title}<span class="count">{filter.trim() ? t.fileList.shown(shown(items).length, items.length) : items.length}</span><span class="hint">{hint}</span></span>
+      </button>
       {#if !isStaged}
         <button class="btn small quiet danger" disabled={disabled || !items.length} title={t.discardAll} onclick={() => discard([])}><Label text={t.discardAll} /></button>
       {/if}
@@ -161,7 +190,7 @@
         <Label text={isStaged ? t.unstageAll : t.stageAll} />
       </button>
     </div>
-    <div class="items">
+    <div class="items" hidden={folded[index]}>
       <FileTree items={shown(items)} bind:this={trees[isStaged ? 'staged' : 'unstaged']}>
         {#snippet row(e, depth)}
           {@const s = (isStaged ? e.staged : e.unstaged) ?? ''}
@@ -213,6 +242,7 @@
       </FileTree>
     </div>
   </div>
+  {@render divider(index)}
 {/snippet}
 
 <div class="working">
@@ -234,40 +264,47 @@
     <FileListBar bind:filter onfold={(open) => { trees.unstaged?.setAll(open); trees.staged?.setAll(open) }} />
     {@render list(t.unstaged, t.unstagedHint, unstaged, false)}
     {@render list(t.staged, t.stagedHint, staged, true)}
-    <div class="commit">
-      {#if error}<p class="error">{errorText(error)}</p>{/if}
-      <div class="identity">
-        <span title={(amend ? identity?.committer : identity?.author) ?? t.identityMissing}>
-          <small>{amend ? t.committer : t.commitIdentity}</small>
-          <strong>{(amend ? identity?.committer : identity?.author) ?? t.identityMissing}</strong>
-        </span>
-        <button class="btn small" disabled={busy || identityBusy} title={t.editIdentity} onclick={editIdentity}><Label text={t.editIdentity} /></button>
+    <div class="group" class:folded={folded[2]} style:flex-grow={folded[2] ? 0 : sizes[2]} bind:this={panes[2]}>
+      <div class="title">
+        <button class="section-toggle" aria-expanded={!folded[2]} onclick={() => (folded[2] = !folded[2])}>
+          <Icon name={folded[2] ? 'right' : 'down'} size={12} />
+          <span>{amend ? t.committer : t.commitIdentity}</span>
+        </button>
       </div>
-      {#if amend}<small class="identity-note">{t.amendIdentityHint}</small>
-      {:else if identity?.committer && identity.committer !== identity.author}
-        <small class="identity-note">{t.committer}：{identity.committer}</small>
-      {/if}
-      <select class="field recent" aria-label={t.recentMessages} title={t.recentMessages} value="" onfocus={loadRecent} onchange={(e) => { message = recent[+e.currentTarget.value] ?? message; e.currentTarget.value = '' }}>
-        <option value="" disabled hidden>{t.recentMessages}</option>
-        {#each recent as m, i (i)}<option value={i}>{m.split('\n')[0].slice(0, 80)}</option>{/each}
-      </select>
-      <textarea
-        placeholder={t.commitPlaceholder}
-        bind:value={message}
-        onkeydown={(e) => e.ctrlKey && e.key === 'Enter' && commit()}
-      ></textarea>
-      {#if check.command}
-        <div class="check">
-          <button class="btn small" disabled={check.running || disabled} title={`${t.check.run} · ${check.command}`} onclick={check.run}>{check.running ? t.working : t.check.run}</button>
-          <code title={check.command}>{check.command}</code>
-          {#if check.result}
-            <button class="btn small quiet" class:failed={!check.result.ok} title={t.check.output} onclick={showLog}>{check.result.ok ? t.check.passed : t.check.failed}</button>
-          {:else if check.auto}<small>{t.check.autoOn}</small>{/if}
+      <div class="commit" hidden={folded[2]}>
+        {#if error}<p class="error">{errorText(error)}</p>{/if}
+        <div class="identity">
+          <span title={(amend ? identity?.committer : identity?.author) ?? t.identityMissing}>
+            <strong>{(amend ? identity?.committer : identity?.author) ?? t.identityMissing}</strong>
+          </span>
+          <button class="btn small" disabled={busy || identityBusy} title={t.editIdentity} onclick={editIdentity}><Label text={t.editIdentity} /></button>
         </div>
-      {/if}
-      <div class="actions">
-        <label title={t.amend}><input type="checkbox" bind:checked={amend} onchange={toggleAmend} /><span><Label text={t.amend} /></span></label>
-        <button class="btn primary" disabled={!canCommit} title={t.commit} onclick={commit}><Label text={t.commit} /></button>
+        {#if amend}<small class="identity-note">{t.amendIdentityHint}</small>
+        {:else if identity?.committer && identity.committer !== identity.author}
+          <small class="identity-note">{t.committer}：{identity.committer}</small>
+        {/if}
+        <select class="field recent" aria-label={t.recentMessages} title={t.recentMessages} value="" onfocus={loadRecent} onchange={(e) => { message = recent[+e.currentTarget.value] ?? message; e.currentTarget.value = '' }}>
+          <option value="" disabled hidden>{t.recentMessages}</option>
+          {#each recent as m, i (i)}<option value={i}>{m.split('\n')[0].slice(0, 80)}</option>{/each}
+        </select>
+        <textarea
+          placeholder={t.commitPlaceholder}
+          bind:value={message}
+          onkeydown={(e) => e.ctrlKey && e.key === 'Enter' && commit()}
+        ></textarea>
+        {#if check.command}
+          <div class="check">
+            <button class="btn small" disabled={check.running || disabled} title={`${t.check.run} · ${check.command}`} onclick={check.run}>{check.running ? t.working : t.check.run}</button>
+            <code title={check.command}>{check.command}</code>
+            {#if check.result}
+              <button class="btn small quiet" class:failed={!check.result.ok} title={t.check.output} onclick={showLog}>{check.result.ok ? t.check.passed : t.check.failed}</button>
+            {:else if check.auto}<small>{t.check.autoOn}</small>{/if}
+          </div>
+        {/if}
+        <div class="actions">
+          <label title={t.amend}><input type="checkbox" bind:checked={amend} onchange={toggleAmend} /><span><Label text={t.amend} /></span></label>
+          <button class="btn primary" disabled={!canCommit} title={t.commit} onclick={commit}><Label text={t.commit} /></button>
+        </div>
       </div>
     </div>
   </div>
@@ -303,6 +340,8 @@
     flex: none;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
     background: var(--panel);
     container-type: inline-size;
   }
@@ -326,11 +365,39 @@
     pointer-events: none;
   }
   .group {
-    flex: 1;
-    min-height: 0;
+    flex: 1 0 80px;
+    min-height: 80px;
     display: flex;
     flex-direction: column;
     border-bottom: 1px solid var(--border);
+  }
+  .group.folded {
+    flex-basis: 37px;
+    min-height: 37px;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  .section-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    align-self: stretch;
+  }
+  .section-toggle > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* 冲突清单最多占三成高度，文件多时自己滚动，不挤掉下面两组 */
   .conflicts {
@@ -366,6 +433,7 @@
   }
   .items {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
   }
   .item {
@@ -431,13 +499,20 @@
     color: var(--accent);
   }
   .commit {
-    flex: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding: 12px;
   }
+  .commit > :global(*) {
+    flex-shrink: 0;
+  }
   textarea {
+    flex-grow: 1;
+    min-height: 96px;
     height: 96px;
     padding: 8px;
     resize: none;
@@ -493,14 +568,12 @@
     flex: 1;
     min-width: 0;
   }
-  .identity small,
   .identity strong {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .identity small,
   .identity-note {
     color: var(--muted);
   }
