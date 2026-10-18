@@ -10,3 +10,4 @@ extension/bin/
 extension/icon.png
 extension/THIRD_PARTY_NOTICES.txt
 extension/LICENSE
+crates/app/assets/fonts/

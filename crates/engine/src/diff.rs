@@ -25,7 +25,7 @@ impl Options {
     }
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 pub struct Diff {
     pub binary: bool,
     pub too_large: bool,
@@ -36,14 +36,14 @@ pub struct Diff {
     pub clipped: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Hunk {
     /// `@@ -a,b +c,d @@ ...` 整行，按行暂存时用来确认文件没变过
     pub header: String,
     pub lines: Vec<Line>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Line {
     /// ' ' 上下文，'+' 新增，'-' 删除，'\\' 文件末尾无换行的标记
     pub kind: char,

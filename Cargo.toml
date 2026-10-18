@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/engine", "crates/sidecar", "src-tauri"]
+members = ["crates/engine", "crates/sidecar", "crates/app"]
 
 # 开发构建也优化 engine 和依赖，否则大仓库加载慢一个数量级，看不出真实性能
 [profile.dev.package."*"]
@@ -8,3 +8,8 @@ opt-level = 3
 
 [profile.dev.package.engine]
 opt-level = 3
+
+# 跨 crate 内联让界面框架的热路径更快，去掉符号让 exe 小一半
+[profile.release]
+lto = "thin"
+strip = true

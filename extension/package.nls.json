@@ -1,5 +1,6 @@
 {
   "command.diffColors": "Diff Colors…",
+  "command.timeZone": "Time Zone…",
   "command.closeRepository": "Close Repository",
   "command.reopenRepository": "Reopen Closed Repository…",
   "view.localFiles": "PushRight Local Files",
@@ -8,6 +9,7 @@
   "command.trackFile": "Track File (Stage)",
   "command.untrackFile": "Stop Tracking and Keep Locally",
   "command.openGraph": "Open Commit Graph",
+  "config.desktopPath": "Path to the PushRight desktop app (pushright.exe) used by Open Commit Graph. Leave empty to use the installed app.",
   "command.pull": "Pull…",
   "command.push": "Push…",
   "command.fetch": "Fetch",

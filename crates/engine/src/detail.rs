@@ -2,7 +2,7 @@ use crate::{err, Repo, Result};
 use gix::ObjectId;
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Detail {
     pub id: String,
     pub parents: Vec<String>,
@@ -15,7 +15,7 @@ pub struct Detail {
     pub files: Vec<FileChange>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct FileChange {
     /// git 的状态字母：A M D R C T
     pub status: char,

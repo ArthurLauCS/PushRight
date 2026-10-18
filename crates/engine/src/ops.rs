@@ -2,7 +2,7 @@ use crate::{Repo, Result};
 use serde::{Deserialize, Serialize};
 
 /// 一次写操作实际执行的命令和它的输出，界面的命令日志原样展示。
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Log {
     pub command: String,
     pub output: String,
@@ -29,7 +29,7 @@ pub enum InProgress {
     Revert,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
     /// 检出分支、标签或提交

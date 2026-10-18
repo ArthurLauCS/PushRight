@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- **Open Commit Graph** and **Show in Commit Graph** open the repository in the PushRight desktop app; a running instance switches to it. Set `pushright.desktopPath` when the app is not in its default location. The in-editor full panel is removed, shrinking the VSIX from 13 MB to 1.7 MB.
+- Add **PushRight: Time Zone…** to the command palette and Source Control menu.
+
+“打开提交图”和“在提交图中定位”改为用 PushRight 桌面版打开仓库，桌面版已在运行时直接切换过去；不在默认位置时可设置 `pushright.desktopPath`。移除编辑器内的完整面板，VSIX 从 13 MB 减到 1.7 MB。命令面板和源代码管理菜单新增“PushRight: 时区…”。
+
 ## 1.1.13
 
 - Add resizable, collapsible Unstaged, Staged and Commit Author sections in the shared full panel. Support keyboard resizing and double-click reset; preserve drafts and file-tree state while folded. Small sections scroll independently.

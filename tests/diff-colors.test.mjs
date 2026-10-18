@@ -17,7 +17,7 @@ function host() {
       current = value ?? {}
     } }) },
   }
-  const core = { panel: { post: (m) => posted.push(m) }, store: async (key, value) => web.set(key, value), stored: () => Object.fromEntries(web), t: { diffColors: { invalid: 'Invalid HEX' } } }
+  const core = { store: async (key, value) => web.set(key, value), stored: () => Object.fromEntries(web), t: { diffColors: { invalid: 'Invalid HEX' } } }
   const deps = { vscode, './core': core, '../../src/lib/diff-colors': palettes }
   const source = readFileSync(new URL('../extension/src/diff-colors.ts', import.meta.url), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 } }).outputText

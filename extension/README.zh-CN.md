@@ -6,31 +6,31 @@
 
 PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图。推送前明确目标，每次 Pull 默认勾选 **Rebase instead of merge**。包含中英文界面，扩展语言跟随 VS Code。
 
-**1.1.13 正式版**让完整面板的本地更改区域支持拖动高度和折叠，分隔线也支持方向键调整，折叠保留提交草稿。原生源代码管理视图继续使用编辑器自身的布局。
+**1.2.0 正式版**：**PushRight: 打开提交图** 和 **在提交图中定位** 改为用 [PushRight 桌面版](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0)打开仓库，不再在编辑器页签里显示；桌面版已在运行时直接切换到该仓库。需要先安装桌面版，或把 `pushright.desktopPath` 设为它的 `pushright.exe`。VSIX 从 13 MB 减到 1.7 MB。日期时区改用 **PushRight: 时区…** 选择。
 
 中文菜单、弹窗选项和命令面板附加对应 Git 命令。源代码管理中的“仓库设置”可禁用当前仓库的 revert，与桌面版及关联工作树共享；禁用后阻止发起和继续 revert，仍允许中止。默认允许 revert，此设置不限制终端或其他 Git 工具。
 
-**[下载 VSIX · Windows x64 · 1.1.13](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/pushright-win32-x64-1.1.13.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13)
+**[下载 VSIX · Windows x64 · 1.2.0](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0)
 
 ## 界面预览
 
-![PushRight 1.1.10：共用的提交图与文件差异](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/desktop-1.1.10.png)
+![PushRight 1.2.0：桌面版中的提交图与文件差异](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.2.0/docs/images/desktop-1.2.0.png)
 
-扩展与桌面版共用完整提交图界面；上图来自 1.1.10 桌面程序，使用本地示例仓库和虚构作者。
+“打开提交图”在桌面版中显示仓库；上图来自 1.2.0 桌面程序，使用本地示例仓库和虚构作者。
 
-![PushRight 1.1.10：拉取默认使用 Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.1.10/docs/images/pull-rebase-1.1.10.png)
+![PushRight 1.2.0：拉取默认使用 Rebase instead of merge](https://raw.githubusercontent.com/ArthurLauCS/PushRight/v1.2.0/docs/images/pull-rebase-1.2.0.png)
 
 ## 时区
 
-运行 **PushRight: Open Commit Graph（打开提交图）**，使用右上角时区下拉框，选择“跟随系统时区”、`UTC` 或 `Asia/Shanghai` 等地区。偏好全局保存在当前编辑器中，对所有仓库立即生效：完整与侧栏提交图、提交详情、文件与行历史、搜索、Blame、工作树及仓库统计均使用所选时区，按提交日期自动处理夏令时。桌面版和各编辑器分别保存偏好。
+在命令面板或源代码管理菜单运行 **PushRight: 时区…**，选择“跟随系统时区”、`UTC` 或 `Asia/Shanghai` 等地区。偏好全局保存在当前编辑器中，对所有仓库立即生效：侧栏提交图、提交详情、文件与行历史、搜索、Blame 和工作树均使用所选时区，按提交日期自动处理夏令时。桌面版和各编辑器分别保存偏好。
 
 ## 差异配色
 
-在命令面板或源代码管理菜单运行 **PushRight: 差异配色…**，或点击完整提交图顶部的“差异配色”。提供蓝／橙、紫／金、青／玫红三组预设，也可分别输入新增、删除的 HEX 色值；完整提交图弹窗另有颜色选择器和实时预览。配色同时用于 PushRight 和 VS Code／Cursor 原生 diff（包括 Review Branch），会写入用户级 `workbench.colorCustomizations`，工作区设置可能优先覆盖。“恢复原配色”恢复此前值，同时保留无关设置和之后的手动改色。
+在命令面板或源代码管理菜单运行 **PushRight: 差异配色…**。提供蓝／橙、紫／金、青／玫红三组预设，也可分别输入新增、删除的 HEX 色值。配色同时用于 PushRight 和 VS Code／Cursor 原生 diff（包括 Review Branch），会写入用户级 `workbench.colorCustomizations`，工作区设置可能优先覆盖。“恢复原配色”恢复此前值，同时保留无关设置和之后的手动改色。
 
 ## Diff 工具与文件树
 
-完整提交图里的 diff 上方有七个工具：忽略空白差异、显示隐藏字符、自动换行、减少／增加上下文行、显示整个文件、并排对比；变更文件可按文件夹显示、筛选、整夹暂存。原生 diff 编辑器不重复这些按钮，用 VS Code／Cursor 自带的设置：
+桌面版的 diff 上方有七个工具：忽略空白差异、显示隐藏字符、自动换行、减少／增加上下文行、显示整个文件、并排对比；变更文件可按文件夹显示、筛选、整夹暂存。原生 diff 编辑器不重复这些按钮，用 VS Code／Cursor 自带的设置：
 
 | 工具 | 原生 diff 的对应设置 |
 | - | - |
@@ -68,12 +68,12 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 - 可选择 **自动（Auto）**、**全部分支**或某个本地/远程分支。Auto 显示 HEAD、上游及远程基准分支（依次尝试已有 VS Code 基准设置、分支创建来源、远程默认分支）。按仓库记住选择，筛选不切换分支。获取、拉取、推送作用于所选仓库的**当前检出分支**；图中的推送固定使用同名远程分支，并确认目标。
 - 已初始化的子模块和嵌套仓库分别显示仓库入口、提交图和源代码管理，子仓库名称包含父路径。新增仓库后可点“刷新”；新增工作区文件夹会自动识别。打开被忽略的嵌套仓库内的文件，也会识别其仓库归属。
 - 新增目录逐个列出未跟踪文件，可在暂存前查看每个文件，并分别暂存；仍遵守忽略规则。
-- 运行 **PushRight: 打开提交图** 或点击侧栏提交图标题栏按钮，在编辑器页签中浏览分支、提交和差异。如果曾隐藏侧栏图，可在源代码管理的“视图”菜单中重新勾选 **PushRight 提交图**。
+- 运行 **PushRight: 打开提交图** 或点击侧栏提交图标题栏按钮，在桌面版中浏览分支、提交和差异。如果曾隐藏侧栏图，可在源代码管理的“视图”菜单中重新勾选 **PushRight 提交图**。
 - 快速修改当前仓库的提交名和邮箱。
-- 提交输入框自动带出仓库的提交信息模板；**PushRight: 最近的提交信息…** 复用之前写过的信息，**PushRight: 运行提交前检查** 执行仓库设置的检查命令。模板和检查命令在完整提交图的“仓库设置”里填写。
+- 提交输入框自动带出仓库的提交信息模板；**PushRight: 最近的提交信息…** 复用之前写过的信息，**PushRight: 运行提交前检查** 执行仓库设置的检查命令。模板和检查命令在桌面版的“仓库设置”里填写。
 - 侧栏提交图顶部有“标签”“只看主线”两个开关。
 - PushRight 页面的“工作树”视图列出这个仓库的全部工作树。点一行在新窗口中打开（原窗口保留），加号从已有分支或新分支新建，垃圾桶按钮删除。删除的只是文件夹，分支和提交都还在。
-- 在“打开提交图”的完整界面中选择 **仓库工具**：比较两个提交/分支、标记已审阅文件、管理远程地址、编辑变基顺序/动作、从 Reflog 创建恢复分支。欢迎页提供克隆与初始化。
+- 在桌面版中选择 **仓库工具**：比较两个提交/分支、标记已审阅文件、管理远程地址、编辑变基顺序/动作、从 Reflog 创建恢复分支。欢迎页提供克隆与初始化。
 - 文件、行历史和搜索每页 200 条，可“加载更多”；有本地或未保存修改时，将未改变的选区映射回 HEAD 后查询。
 - 图片差异前后预览；大补丁可按每页 1000 行只读浏览。
 - 在仓库列表中右键选择 **关闭仓库**，保留已打开的文件，并阻止切换文件、刷新或重载时自动重新发现。使用 **PushRight: 重新打开已关闭仓库…** 恢复。
@@ -106,11 +106,11 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 
 ## VSIX 安装
 
-在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
+在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
 
 ```sh
-code --install-extension pushright-win32-x64-1.1.13.vsix
-cursor --install-extension pushright-win32-x64-1.1.13.vsix
+code --install-extension pushright-win32-x64-1.2.0.vsix
+cursor --install-extension pushright-win32-x64-1.2.0.vsix
 ```
 
 反馈问题请提交到 [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues)，附版本和复现步骤；分享日志前移除凭据和私有仓库信息。

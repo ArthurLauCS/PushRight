@@ -5,7 +5,7 @@ use crate::{decode, err, ops::Log, Repo, Result};
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
 
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
 pub struct Settings {
     /// 提交框为空时自动带出的内容
     pub template: String,
@@ -113,7 +113,7 @@ pub fn run_check(repo: &Repo) -> Result<Log> {
 /// 外部对比 / 合并工具。存在全局 git 配置里：工具装在这台机器上，所有仓库共用。
 /// 值是 git 认识的工具名（`git difftool --tool-help` 列出的，如 vscode、bc、meld、winmerge），
 /// 或一整条命令行，里面用 $LOCAL $REMOTE（合并时还有 $BASE $MERGED）指代文件。
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone)]
 pub struct Tools {
     pub diff: String,
     pub merge: String,

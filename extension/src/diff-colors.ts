@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { DIFF_PRESETS, validDiffColors, readDiffColors, type DiffColors } from '../../src/lib/diff-colors'
-import { panel, store, stored, t } from './core'
+import { store, stored, t } from './core'
 
 type Customizations = Record<string, string | Record<string, string>>
 interface Backup { original: Record<string, Record<string, string | null>>; applied: Record<string, string> }
@@ -55,7 +55,6 @@ export async function applyDiffColors(context: vscode.ExtensionContext, colors: 
   }
   const value = JSON.stringify(colors)
   await store('diffColors', value)
-  panel.post?.({ store: 'diffColors', value })
 }
 
 export function registerDiffColors(context: vscode.ExtensionContext) {

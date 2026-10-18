@@ -1,7 +1,7 @@
 use crate::{Repo, Result};
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Identity {
     /// 用于编辑的有效 user 配置（含全局配置和 include）。
     pub name: String,

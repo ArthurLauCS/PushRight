@@ -1,0 +1,23 @@
+[package]
+name = "pushright"
+version = "1.2.0"
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+engine = { path = "../engine" }
+base64 = "0.22.1"
+futures = "0.3"
+gpui = { package = "gpui-pre", version = "=0.3.9" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.9" }
+gpui-component = "=0.7.3"
+gpui-kit-assets = "=0.7.3"
+jiff = "0.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
+syntect = { version = "5.3", default-features = false, features = ["parsing", "dump-load", "regex-fancy"] }
+two-face = { version = "0.5", default-features = false, features = ["syntect-fancy"] }
+
+[dependencies.windows]
+version = "0.62"
+features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes"]

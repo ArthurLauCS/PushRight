@@ -4,7 +4,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-A Git desktop client built with Svelte, Tauri and Rust. PushRight makes push destinations explicit, recommends a remote branch with the same name, and defaults Pull to **Rebase instead of merge**.
+A Git desktop client written in Rust, with a native GPU-rendered interface (gpui) instead of a web view. PushRight makes push destinations explicit, recommends a remote branch with the same name, and defaults Pull to **Rebase instead of merge**.
 
 ## Why PushRight
 
@@ -19,43 +19,42 @@ A Git desktop client built with Svelte, Tauri and Rust. PushRight makes push des
 9. **Worktrees and repository tools.** Worktree overview, arbitrary revision comparison, reviewed-file marks, remote URLs, interactive rebase and reflog recovery are available in the interface.
 10. **Works on large repositories.** Measured on a Linux repository with 1.48 million commits and a 128 MiB file; see the [performance report (Chinese)](docs/PERFORMANCE.md).
 11. **English and Simplified Chinese, light and dark themes**, with individual author styles.
-12. **The desktop app and extension share one engine and interface.** The extension includes its own engine and does not require the desktop installation. MIT licensed.
+12. **The desktop app and extension share one engine.** The extension includes its own engine; its Open Commit Graph command opens the desktop app. MIT licensed.
 
 The extension updates automatically when installed from VS Code Marketplace. The desktop app has no automatic updates yet; download the installer for each new version.
 
 ## This release
 
-Version **1.1.13** adds resizable and collapsible Unstaged, Staged and Commit Author sections to Local Changes. Drag the dividers, double-click to reset, or use arrow keys; folding preserves the commit draft. See the [release notes](docs/RELEASE_1.1.13.md).
+Version **1.2.0** rewrites the desktop app in Rust with a native GPU-rendered interface, replacing the Tauri web view. The look, layout, features and both languages stay the same. On the same machine, a repository opens in about 0.5–0.7 s using one process and about 124 MB of memory, down from 7 processes and about 415 MB. WebView2 is no longer required. See the [release notes](docs/RELEASE_1.2.0.md).
 
-Choose **System time zone**, **UTC** or a region such as **Asia/Shanghai** in the top-right time-zone dropdown. In VS Code / Cursor, open **PushRight: Open Commit Graph** to find it. The setting applies to every repository in that app, including commit details, history, blame, worktrees and the dates and months in repository statistics. Changes apply immediately and survive restarts; daylight saving follows each commit's date. The desktop app and each editor store their preferences separately.
+In VS Code / Cursor, **PushRight: Open Commit Graph** and **Show in Commit Graph** now open the repository in the desktop app; if it is already running, it switches to that repository. The VSIX shrinks from 13 MB to 1.7 MB. Choose the date time zone with **PushRight: Time Zone…**.
+
+Choose **System time zone**, **UTC** or a region such as **Asia/Shanghai** in the top-right time-zone dropdown of the desktop app. The setting applies to every repository in that app, including commit details, history, blame, worktrees and the dates and months in repository statistics. Changes apply immediately and survive restarts; daylight saving follows each commit's date. The desktop app and each editor store their preferences separately.
 
 Chinese action labels append native Git commands across menus, dialogs, buttons and extension commands; toolbar buttons show the name only, with the command in the tooltip. **Repository settings**, available in the desktop toolbar and extension Source Control menu, can disable revert for the local repository. Both apps and linked worktrees share `pushright.disableRevert` in the local Git config; other repositories are unaffected. Revert remains allowed by default. When disabled, PushRight blocks starting or continuing revert while allowing abort. Terminal Git and other tools are outside this setting's scope.
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.1.13 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.2.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
-The desktop client and editor extension share the new repository tools. The extension includes its own engine and does not require the desktop installation.
+![PushRight 1.2.0: commit graph, branches and file differences](docs/images/desktop-1.2.0.png)
 
-![PushRight 1.1.10: commit graph, branches and file differences](docs/images/desktop-1.1.10.png)
+Screenshots show the actual 1.2.0 desktop app with a local demo repository and fictional identities.
 
-Screenshots show the actual 1.1.10 desktop app with a local demo repository and fictional identities. The extension shares this full graph interface.
-
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.13.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.13.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.0.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/PushRight_1.1.13_x64-setup.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/pushright-win32-x64-1.1.13.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/PushRight-Setup-1.2.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/SHA256SUMS.txt)
 
-Download `PushRight_1.1.13_x64-setup.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13).
+Download `PushRight-Setup-1.2.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
-- Microsoft Edge WebView2 Runtime is required; the installer attempts an online installation if missing.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight_1.1.13_x64-setup.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.2.0.exe -Algorithm SHA256`.
 
-Previously named GitGod. PushRight retains the application data identifier for settings compatibility. The old GitGod installation may remain separately installed; it is not removed automatically.
+Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
 Configure your identity in Git or edit it per repository in the app:
 
@@ -78,7 +77,7 @@ Open a local repository, or pass its path when launching:
 
 ### Diff colors
 
-The toolbar’s **Diff Colors** dialog offers Blue / Orange, Purple / Gold and Cyan / Rose presets, independent added/deleted color pickers, HEX input and a live preview. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
+The toolbar’s **Diff Colors** dialog offers Blue / Orange, Purple / Gold and Cyan / Rose presets, or independent added/deleted HEX colors. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
 
 ### Commit and push
 
@@ -97,7 +96,7 @@ Click **Pull**. The dialog shows the upstream and checks **Rebase instead of mer
 - Commit or stash unfinished work first. Automatic stashing and updates to other local branch refs are disabled for this operation.
 - On conflicts, resolve and **Continue**, or **Abort** to restore the previous local state. During rebase, “ours” is upstream plus commits already replayed; “theirs” is the local commit being replayed.
 
-![PushRight 1.1.10: Pull with Rebase instead of merge checked by default](docs/images/pull-rebase-1.1.10.png)
+![PushRight 1.2.0: Pull with Rebase instead of merge checked by default](docs/images/pull-rebase-1.2.0.png)
 
 This is a **pull strategy** for any current branch. It does not determine how a feature branch merges into `dev`, `main` or `master`, or approve a hosted PR/MR. Follow the repository's separate merge policy. Rebase rewrites replayed commit IDs; coordinate before rewriting shared history. See the [Git pull reference](https://git-scm.com/docs/git-pull).
 
@@ -137,21 +136,21 @@ App text, tooltips, explanations and app-generated errors are translated. Reposi
 
 ## VS Code / Cursor extension
 
-Extension **1.1.13** includes inline commit file lists and native diffs, Auto / All / branch filters, same-name push from the graph, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
+Extension **1.2.0** opens the commit graph in the desktop app and adds **PushRight: Time Zone…**. The sidebar graph keeps inline commit file lists and native diffs, Auto / All / branch filters, same-name push, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
 
-The same engine and interface run inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
+The same engine runs inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
 
 ```sh
-npm ci
-npm run ext:package
-code --install-extension extension/pushright-win32-x64-1.1.13.vsix
+pnpm install --frozen-lockfile
+pnpm ext:package
+code --install-extension extension/pushright-win32-x64-1.2.0.vsix
 ```
 
 - **Source Control panel**: staged, unstaged and conflicted files; stage, unstage or discard files or selected lines; commit and amend; gutter change markers and Explorer badges. On first use PushRight explains what turning off VS Code's built-in Git means and lets you decide.
 - **Push and pull checks**: Pull asks every time with **Rebase instead of merge** checked. Push recommends the same-name remote branch when the upstream has a different name, and the status bar warns about the mismatch. Force push uses `--force-with-lease --force-if-includes` and asks twice.
 - **Authors in the editor**: author, date and subject at the end of the current line, with a hover card; whole-file blame (`Alt+B`) colored by author or by age; CodeLens above files, classes and functions; a status bar item. Author styles set in the commit graph also apply here, and "Highlight Only This Line's Author" marks that author's lines in the file and scrollbar.
 - **History**: file history that follows the active editor, line history for a selection, previous / next revision (`Alt+,` / `Alt+.`), compare with any branch, tag or commit, and commit search by message, author, file, changed text or ID.
-- **Commit graph**: "PushRight: Open Commit Graph" opens the desktop interface in an editor tab.
+- **Commit graph**: "PushRight: Open Commit Graph" and "Show in Commit Graph" open the repository in the PushRight desktop app (an already running instance switches to it). Set `pushright.desktopPath` if the app is not installed in the default location.
 
 Not included yet: macOS, Linux and remote (WSL / SSH) builds, PR / Issue integration. Submodules must already be initialized.
 
@@ -162,39 +161,36 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, PR / Issue integra
 - Large patches offer read-only pages that rescan the Git stream; Git may still consume time and memory before producing output. Partial staging/discard remains limited to 4 MiB patches.
 - The graph has at most 24 lanes, reduced by available width. Highly parallel histories can omit connections.
 - No automatic updates or macOS / Linux installers yet.
+- Diff text cannot be selected or copied with the mouse yet.
 - Undo covers some local operations, not every Git action. Check prompts before destructive operations.
 
 ## Development
 
-Requires Node.js 24, Rust stable, MSVC C++ tools and Windows SDK. See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Requires Rust stable, MSVC C++ tools and Windows SDK for the desktop app; Node.js 24 and pnpm for the extension; [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer.
 
-```sh
-npm ci
-npm run desktop:dev
+```powershell
+.\scripts\fonts.ps1                       # downloads the two bundled CJK fonts (about 50 MB, not in git)
+cargo run -p pushright -- C:\path\to\repo
+cargo test --workspace
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm desktop:build   # installer: target\installer\PushRight-Setup-<version>.exe
+pnpm ext:build       # VS Code extension: engine sidecar, sidebar graph and host
+pnpm ext:smoke       # runs the extension inside a throwaway VS Code profile
 ```
 
-`npm run dev` starts only the frontend; Git operations require the desktop backend.
-
-```sh
-npm run check
-npm test
-cargo test -p engine
-npm run desktop:build
-npm run ext:build   # VS Code extension: engine sidecar, panel and host
-npm run ext:smoke   # runs the extension inside a throwaway VS Code profile
-```
-
-The installer is written to `target/release/bundle/nsis/`. The first build may download dependencies and NSIS tools. See [Tauri Windows installers](https://v2.tauri.app/distribute/windows-installer/).
+The app icon comes from `crates/app/assets/icon.svg` and `icon-small.svg`; after editing them run `python scripts/icon.py`.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/` | Svelte UI, graph and operation workflows |
-| `src/lib/locales/` | English and Simplified Chinese packs |
+| `crates/app/` | Desktop app: native interface (gpui), English and Simplified Chinese text, icon and fonts |
 | `crates/engine/` | Rust Git engine: gix reads and Git CLI operations |
 | `crates/sidecar/` | The engine as a child process for the VS Code extension |
-| `extension/` | VS Code extension: source control, blame, history and the commit graph panel |
-| `src-tauri/` | Desktop window, command bridge and installer |
-| `tests/` | Frontend regression checks |
+| `extension/` | VS Code extension: source control, blame, history and the sidebar commit graph |
+| `src/lib/` | Svelte components and text packs used by the extension's sidebar graph and host |
+| `installer/` | Inno Setup script for the desktop installer |
+| `tests/` | Extension and shared-module regression checks |
 
 ## Feedback and licenses
 

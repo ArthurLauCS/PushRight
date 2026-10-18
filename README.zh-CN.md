@@ -2,7 +2,7 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-面向多分支日常工作的 Git 桌面可视化客户端，使用 Svelte、Tauri 和 Rust 构建。
+面向多分支日常工作的 Git 桌面可视化客户端，用 Rust 编写，界面由 GPU 直接绘制（gpui），不依赖网页内核。
 
 ## 为什么用 PushRight
 
@@ -17,42 +17,41 @@
 9. **工作树和仓库工具**。工作树总览、任意版本比较、文件审阅标记、远程地址管理、交互式变基和 Reflog 恢复都在界面里完成。
 10. **大仓库可用**。在 148 万提交的 Linux 仓库和 128 MiB 文件上实测，数据见[性能记录](docs/PERFORMANCE.md)。
 11. **中英双语、深浅主题**，可为每个作者单独设置显示样式。
-12. **桌面版与扩展共用同一套引擎和界面**，扩展自带引擎，无须先安装桌面版；MIT 开源。
+12. **桌面版与扩展共用同一套引擎**，扩展自带引擎；扩展的「打开提交图」会打开桌面版；MIT 开源。
 
 扩展通过 VS Code Marketplace 安装时由编辑器自动更新；桌面版暂无自动更新，新版本需重新下载安装包。
 
 ## 本版更新
 
-**1.1.13 正式版**让本地更改中的未暂存、已暂存和新提交作者三个区域支持拖动高度与折叠。分隔线可双击恢复默认，也支持方向键调整；折叠保留提交草稿。详见[发行说明](docs/RELEASE_1.1.13.md)。
+**1.2.0 正式版**用 Rust 重写桌面版，界面改由 GPU 直接绘制，不再使用 Tauri 网页内核；外观、布局、功能和中英双语保持不变。同一台机器上打开仓库约 0.5–0.7 秒，只占 1 个进程、约 124 MB 内存（原来 7 个进程、约 415 MB），也不再需要 WebView2。详见[发行说明](docs/RELEASE_1.2.0.md)。
 
-在右上角时区下拉框中选择“跟随系统时区”、`UTC` 或 `Asia/Shanghai` 等地区。VS Code／Cursor 中先打开 **PushRight: Open Commit Graph（打开提交图）**。设置对当前应用中的所有仓库生效，覆盖提交详情、历史、Blame、工作树及仓库统计的日期和月份；立即刷新并在重启后保留，按提交日期自动处理夏令时。桌面版和各编辑器分别保存偏好。
+VS Code／Cursor 中的 **PushRight: 打开提交图** 和 **在提交图中定位** 改为用桌面版打开仓库，桌面版已在运行时直接切换过去；VSIX 从 13 MB 减到 1.7 MB。日期时区改用 **PushRight: 时区…** 选择。
+
+在桌面版右上角时区下拉框中选择“跟随系统时区”、`UTC` 或 `Asia/Shanghai` 等地区。设置对当前应用中的所有仓库生效，覆盖提交详情、历史、Blame、工作树及仓库统计的日期和月份；立即刷新并在重启后保留，按提交日期自动处理夏令时。桌面版和各编辑器分别保存偏好。
 
 中文操作名称附带对应 Git 命令，覆盖菜单、弹窗选项、按钮和扩展命令面板；工具栏只显示名称，命令在悬停提示里。桌面版顶部和扩展的源代码管理菜单均提供“仓库设置”，可禁用当前仓库中的 revert。设置保存在本地仓库配置 `pushright.disableRevert`，两端及关联工作树共用，不影响其他仓库；默认不禁用。启用后 PushRight 拒绝发起或继续 revert，仍可中止。此设置不限制终端或其他 Git 工具。
 
 桌面应用每分钟刷新所有已打开的仓库，打开仓库时及之后每十分钟自动 fetch，后台页签也生效。两项默认开启，可在语言选择框旁的“自动刷新与获取”中分别关闭。仓库忙碌时延后执行，失败写入命令日志并按周期重试；后台 fetch 保留 `FETCH_HEAD`、暂存区和工作区文件。强制推送增加 `--force-if-includes` 检查，防止覆盖后台刚获取但未在本地整合的远端提交。应用退出后不执行定时任务，扩展版不启用这些定时器。
 
-当前版本为 **v1.1.13 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
+当前版本为 **v1.2.0 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
 
-本次发布同步更新桌面客户端与编辑器扩展，两者共用新增仓库工具。扩展自带引擎，无须先安装桌面版。
+![PushRight 1.2.0：提交图、分支与文件差异](docs/images/desktop-1.2.0.png)
 
-![PushRight 1.1.10：提交图、分支与文件差异](docs/images/desktop-1.1.10.png)
+截图来自 1.2.0 桌面程序，使用虚构作者和本地示例仓库。
 
-截图来自 1.1.10 桌面程序，使用虚构作者和本地示例仓库。扩展与桌面版共用这套完整提交图界面。
-
-本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.13.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.1.13.tar.gz)。
+本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.0.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.0.tar.gz)。
 
 ## 下载与安装
 
-**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/PushRight_1.1.13_x64-setup.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/pushright-win32-x64-1.1.13.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.1.13/SHA256SUMS.txt)
+**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/PushRight-Setup-1.2.0.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/SHA256SUMS.txt)
 
-从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases) 下载 `PushRight_1.1.13_x64-setup.exe`，运行安装程序。
+从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) 下载 `PushRight-Setup-1.2.0.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
 
 - 支持 Windows 10 / 11 x64；本次发布在 Windows x64 上构建和验证。
 - 需要安装 [Git for Windows](https://git-scm.com/downloads/win)，并确保 `git` 在 PATH 中可用。
-- 需要 Microsoft Edge WebView2 Runtime；缺少时安装程序会尝试联网安装。
-- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight_1.1.13_x64-setup.exe -Algorithm SHA256` 核对文件。
+- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.2.0.exe -Algorithm SHA256` 核对文件。
 
-安装器支持英文和简体中文，应用语言独立选择。产品此前名为 GitGod；PushRight 保留应用数据标识以兼容已有设置。旧版 GitGod 可能作为独立安装保留，不会被自动删除。
+安装器支持英文和简体中文，应用语言独立选择。从 1.1.x 升级时会自动卸载旧版。偏好保存在 `%APPDATA%\PushRight\settings.json`；1.1.x 的语言、主题、时区、差异配色、作者样式和最近仓库不会迁移，需要重新设置一次。
 
 首次使用前，在 Git 中配置提交身份及远程认证：
 
@@ -75,7 +74,7 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 
 ### 差异配色
 
-顶部“差异配色”提供蓝／橙、紫／金、青／玫红三组预设，支持分别选择新增、删除颜色，输入 HEX 色值并实时预览。选择保存在本机；“恢复原配色”重新跟随应用主题。差异行保留 + / − 标记和边框辅助区分。
+顶部“差异配色”提供蓝／橙、紫／金、青／玫红三组预设，也可分别输入新增、删除的 HEX 色值。选择保存在本机；“恢复原配色”重新跟随应用主题。差异行保留 + / − 标记和边框辅助区分。
 
 ### 提交与推送
 
@@ -94,7 +93,7 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 - 先提交或贮藏未完成的改动；此次拉取禁用自动贮藏和自动更新其他本地分支引用。
 - 遇到冲突，解决后点击「继续」，或点击「中止」恢复原状态。变基时 Git 的「我方」是上游及已重放的提交，「对方」是正在重放的本地提交。
 
-![PushRight 1.1.10：拉取时默认勾选 Rebase instead of merge](docs/images/pull-rebase-1.1.10.png)
+![PushRight 1.2.0：拉取时默认勾选 Rebase instead of merge](docs/images/pull-rebase-1.2.0.png)
 
 这是各分支拉取上游时的策略，不规定功能分支如何合入 `dev`、`main` 或 `master`，也不会审批托管平台 PR/MR；合入方式仍按仓库的独立规范执行。变基会改变重放提交的 ID，重写共享历史前应与协作者协调。参见 [Git pull 官方文档](https://git-scm.com/docs/git-pull)。
 
@@ -132,21 +131,21 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 
 ## VS Code / Cursor 扩展
 
-扩展 **1.1.13** 包含提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、图内同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
+扩展 **1.2.0** 改为用桌面版打开提交图，并新增 **PushRight: 时区…**。侧栏提交图保留提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
 
-同一套引擎和界面可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
+同一套引擎可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
 
 ```sh
-npm ci
-npm run ext:package
-code --install-extension extension/pushright-win32-x64-1.1.13.vsix
+pnpm install --frozen-lockfile
+pnpm ext:package
+code --install-extension extension/pushright-win32-x64-1.2.0.vsix
 ```
 
 - **源代码管理面板**：已暂存、未暂存和冲突的文件；按文件或按选中的行暂存、取消暂存、丢弃；提交和修补上次提交；行号旁的改动标记和资源管理器角标。首次使用时 PushRight 会说明关闭 VS Code 自带 Git 的后果，由你决定是否关闭。
 - **推拉检查**：拉取每次都询问，并默认勾选 **变基而非合并**。上游与本地分支不同名时，推送优先推荐同名远程分支，状态栏同时给出警告。强制推送使用 `--force-with-lease --force-if-includes`，需要确认两次。
 - **编辑器里的作者**：当前行末尾显示作者、时间和提交说明，悬停可看详情；整文件作者标注（`Alt+B`）可按作者或按新旧上色；文件、类和函数上方的 CodeLens；状态栏显示当前行作者。在提交图里设置的作者样式在这里同样生效；「只高亮这一行的作者」会在文件和滚动条上标出该作者写的所有行。
 - **历史**：跟随当前文件的文件历史、选中行的行历史、上一版 / 下一版对比（`Alt+,` / `Alt+.`）、与任意分支、标签或提交对比，以及按提交说明、作者、文件、改动内容或提交号搜索提交。
-- **提交图**：执行「PushRight: 打开提交图」，桌面版的界面会在编辑器页签里打开。
+- **提交图**：「PushRight: 打开提交图」和「在提交图中定位」会在 PushRight 桌面版里打开这个仓库（桌面版已经开着时直接切过去）。桌面版没装在默认位置时，在设置 `pushright.desktopPath` 里指定它。
 
 尚未包含：macOS、Linux 和远程开发（WSL / SSH）版本，PR / Issue 集成。子模块需要先初始化。
 
@@ -157,43 +156,38 @@ code --install-extension extension/pushright-win32-x64-1.1.13.vsix
 - 大补丁按页只读预览，分页会重新扫描补丁；Git 子进程在输出前仍可能消耗较多时间和内存。部分暂存/丢弃继续限制为 4 MiB。
 - 提交图最多显示 24 条轨道，实际数量随面板宽度变化；高度并行的复杂历史可能无法显示所有连线。
 - 尚未提供自动更新，也未发布 macOS / Linux 安装包。
+- 差异文本暂不能用鼠标选中复制。
 - 部分操作提供撤销入口，并非所有 Git 操作都能撤销；删除分支、丢弃变更、重置等操作前应检查提示。
 
 ## 本地开发
 
-需要 Node.js 24、Rust stable，以及 Windows 的 MSVC C++ 工具链和 Windows SDK。完整环境要求见 [Tauri 官方文档](https://v2.tauri.app/start/prerequisites/)。
+桌面版需要 Rust stable、MSVC C++ 工具链和 Windows SDK；扩展需要 Node.js 24 和 pnpm；打安装包需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)。
 
-```sh
-npm ci
-npm run desktop:dev
+```powershell
+.\scripts\fonts.ps1                       # 下载打包进安装包的两套中文字体（约 50 MB，不进 git）
+cargo run -p pushright -- C:\path\to\repo
+cargo test --workspace
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm desktop:build   # 安装包：target\installer\PushRight-Setup-<版本>.exe
+pnpm ext:build       # VS Code 扩展：引擎子进程、侧栏提交图和扩展主机
+pnpm ext:smoke       # 在临时的 VS Code 配置里跑一遍扩展
 ```
 
-`npm run dev` 只启动前端网页，不能独立调用桌面 Git 后端。
-
-检查与构建：
-
-```sh
-npm run check
-npm test
-cargo test -p engine
-npm run desktop:build
-npm run ext:build   # VS Code 扩展：引擎子进程、面板和扩展主机
-npm run ext:smoke   # 在临时的 VS Code 配置里跑一遍扩展
-```
-
-Windows 安装包输出到 `target/release/bundle/nsis/`。首次构建可能需要联网下载 Rust 依赖及 NSIS 打包工具。安装包构建方式见 [Tauri Windows Installer 文档](https://v2.tauri.app/distribute/windows-installer/)。
+应用图标的源文件是 `crates/app/assets/icon.svg` 和 `icon-small.svg`，改完运行 `python scripts/icon.py`。
 
 目录：
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/` | Svelte 界面、提交图、操作交互 |
-| `src/lib/locales/` | 完整英文和简体中文语言包 |
+| `crates/app/` | 桌面版：原生界面（gpui）、中英文案、图标和字体 |
 | `crates/engine/` | Rust Git 引擎：gix 读取、Git CLI 操作 |
 | `crates/sidecar/` | 把引擎包成子进程，供 VS Code 扩展调用 |
-| `extension/` | VS Code 扩展：源代码管理、作者标注、历史和提交图面板 |
-| `src-tauri/` | 桌面窗口、命令接口和安装包配置 |
-| `tests/` | 前端回归检查 |
+| `extension/` | VS Code 扩展：源代码管理、作者标注、历史和侧栏提交图 |
+| `src/lib/` | 扩展的侧栏提交图和扩展主机用到的 Svelte 组件与语言包 |
+| `installer/` | 桌面版安装包（Inno Setup）脚本 |
+| `tests/` | 扩展和共用模块的回归检查 |
 
 ## 反馈与许可
 

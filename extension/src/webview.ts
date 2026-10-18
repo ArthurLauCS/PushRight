@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import * as vscode from 'vscode'
 import { locale, stored } from './core'
 
-/** 编辑器提交图与侧栏提交图共用资源、偏好、CSP 和主题同步。 */
-export function setupWebview(context: vscode.ExtensionContext, webview: vscode.Webview, entry = 'index.js') {
+/** 侧栏提交图的资源、偏好、CSP 和主题同步。 */
+export function setupWebview(context: vscode.ExtensionContext, webview: vscode.Webview, entry: string) {
   const media = vscode.Uri.joinPath(context.extensionUri, 'media')
   webview.options = { enableScripts: true, localResourceRoots: [media] }
   const nonce = randomUUID().replaceAll('-', '')

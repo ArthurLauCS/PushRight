@@ -299,39 +299,6 @@ test('SCM graph routes only bounded reads to workspace repositories and disposes
   assert.equal(changed.listeners.length + prefs.listeners.length + messages.listeners.length + visibility.listeners.length, 0)
 })
 
-test('graph keeps its document on theme changes and releases both loaded and late sessions', async () => {
-  const messages = new Event(), closed = new Event(), theme = new Event()
-  const posted = [], calls = []
-  const late = deferred()
-  const webview = { html: '', cspSource: 'self', asWebviewUri: (u) => u.fsPath, postMessage: (m) => posted.push(m), onDidReceiveMessage: messages.event }
-  const panel = { webview, onDidDispose: closed.event }
-  const vscode = {
-    Uri: { file: uri, joinPath: (u, p) => uri(`${u.fsPath}/${p}`) }, ColorThemeKind: { Dark: 2, HighContrast: 3 }, ViewColumn: { Active: 1 },
-    window: { createWebviewPanel: () => panel, activeColorTheme: { kind: 2 }, onDidChangeActiveColorTheme: theme.event },
-  }
-  const core = { engine: { call: async (cmd, args) => { calls.push([cmd, args]); return cmd === 'open_repo' ? args.path === 'late' ? late.promise : [7, 'repo', 2] : null } }, panel: {}, stored: () => ({}), repos: [], locale: 'en' }
-  const webviews = load('webview', { vscode, './core': core })
-  const colors = []
-  load('panel', { vscode, './core': core, './webview': webviews, './diff-colors': { applyDiffColors: async (_, value) => colors.push(value) } }).openPanel({ extensionUri: uri('/extension') }, { id: 'older', root: 'repo' })
-  await Promise.all(messages.fire({ id: 0, cmd: 'set_diff_colors', args: { colors: null } }))
-  assert.deepEqual(colors, [null])
-  assert.deepEqual(calls, [], 'editor color preferences do not go to the Git engine')
-  const html = webview.html
-  await Promise.all(messages.fire({ id: 1, cmd: 'open_repo', args: { path: 'repo' } }))
-  await Promise.all(messages.fire({ id: 3, cmd: 'refs', args: { tab: 7 } }))
-  assert.equal(posted.some((m) => m.reveal), false)
-  await Promise.all(messages.fire({ id: 4, cmd: 'load_graph', args: { tab: 7, full: true } }))
-  assert.deepEqual(posted.at(-1), { reveal: { id: 'older', root: 'repo' } })
-  theme.fire({ kind: 1 })
-  assert.equal(webview.html, html)
-  assert.deepEqual(posted.at(-1), { store: 'theme', value: 'light' })
-  const opening = messages.fire({ id: 2, cmd: 'open_repo', args: { path: 'late' } })
-  closed.fire()
-  late.resolve([8, 'late', 2])
-  await Promise.all(opening)
-  assert.deepEqual(calls.filter(([cmd]) => cmd === 'close_repo').map(([, args]) => args.tab), [7, 8])
-})
-
 test('history context menus resolve their list and stale file requests cannot replace it', async () => {
   const editorChanged = new Event(), repoChanged = new Event(), commands = new Map(), views = new Map(), diffs = []
   const repo = { tab: 0, refs: { head_id: 'head' } }

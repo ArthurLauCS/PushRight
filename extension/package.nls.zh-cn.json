@@ -1,5 +1,6 @@
 {
   "command.diffColors": "差异配色…",
+  "command.timeZone": "时区…",
   "config.maxFileSize": "历史文本文件大小上限，单位 MiB（4–64）。调大会增加编辑器内存占用；大补丁也可在提交图中分页预览。",
   "command.closeRepository": "关闭仓库",
   "command.reopenRepository": "重新打开已关闭仓库…",
@@ -9,6 +10,7 @@
   "command.trackFile": "开始跟踪（暂存）（git add -f）",
   "command.untrackFile": "停止跟踪并保留本地文件（git rm --cached）",
   "command.openGraph": "打开提交图（git log --graph）",
+  "config.desktopPath": "「打开提交图」使用的 PushRight 桌面版路径（pushright.exe）。留空时使用安装的桌面版。",
   "command.pull": "拉取…（git pull）",
   "command.push": "推送…（git push）",
   "command.fetch": "获取（git fetch --all --prune）",

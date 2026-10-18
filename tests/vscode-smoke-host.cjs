@@ -214,17 +214,6 @@ exports.run = async () => {
     step('Auto rebuilds its ancestry when the checked-out branch changes')
     api.engine.call = call
 
-    // 面板里的界面起来后会自己在引擎里打开仓库，会话号紧接主机的 0
-    await vscode.commands.executeCommand('pushright.openGraph')
-    await until('commit graph panel', () => api.engine.call('refs', { tab: 1 }).then(() => true, () => false))
-    assert.ok(vscode.window.tabGroups.all.some((g) => g.tabs.some((tab) => tab.input instanceof vscode.TabInputWebview)))
-    step('commit graph panel loads and talks to the engine')
-
-    const graphTab = vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((tab) => tab.input instanceof vscode.TabInputWebview)
-    await vscode.window.tabGroups.close(graphTab)
-    await until('graph session closed', () => api.engine.call('refs', { tab: 1 }).then(() => false, (e) => String(e).includes('PR_TAB_CLOSED')))
-    step('closing the commit graph releases its engine session')
-
     mkdirSync(join(root, '新增 目录', 'nested'), { recursive: true })
     const newPaths = ['新增 目录/a.txt', '新增 目录/nested/b.txt']
     for (const path of newPaths) writeFileSync(join(root, path), `${path}\n`)

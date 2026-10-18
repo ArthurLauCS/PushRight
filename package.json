@@ -1,24 +1,19 @@
 {
   "name": "pushright",
   "private": true,
-  "version": "1.1.13",
+  "version": "1.2.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build --bundles nsis",
-    "build": "vite build",
-    "preview": "vite preview",
+    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/installer.ps1",
     "test": "node --test tests/*.test.mjs",
-    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json && tsc -p extension/tsconfig.json",
-    "ext:build": "cargo build --release -p sidecar && node -e \"fs.mkdirSync('extension/bin',{recursive:true});fs.copyFileSync('target/release/pushright-engine.exe','extension/bin/pushright-engine.exe');fs.copyFileSync('LICENSE','extension/LICENSE');fs.copyFileSync('THIRD_PARTY_NOTICES.txt','extension/THIRD_PARTY_NOTICES.txt');fs.copyFileSync('src-tauri/icons/128x128.png','extension/icon.png')\" && vite build -c extension/vite.webview.mts && vite build -c extension/vite.host.mts",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p extension/tsconfig.json",
+    "ext:build": "cargo build --release -p sidecar && node -e \"fs.mkdirSync('extension/bin',{recursive:true});fs.copyFileSync('target/release/pushright-engine.exe','extension/bin/pushright-engine.exe');fs.copyFileSync('LICENSE','extension/LICENSE');fs.copyFileSync('THIRD_PARTY_NOTICES.txt','extension/THIRD_PARTY_NOTICES.txt');fs.copyFileSync('crates/app/assets/icon-128.png','extension/icon.png')\" && vite build -c extension/vite.webview.mts && vite build -c extension/vite.host.mts",
     "ext:smoke": "node tests/vscode-smoke.mjs",
-    "ext:package": "npm run ext:build && cd extension && npx --yes @vscode/vsce package --target win32-x64 --no-dependencies"
+    "ext:package": "pnpm ext:build && node -e \"for(const f of fs.readdirSync('extension'))if(f.endsWith('.vsix'))fs.rmSync('extension/'+f)\" && cd extension && pnpm dlx @vscode/vsce package --target win32-x64 --no-dependencies"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
-    "@tauri-apps/cli": "^2.12.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.13.3",
     "@types/vscode": "1.90.0",
@@ -26,12 +21,5 @@
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
-  },
-  "dependencies": {
-    "@fontsource-variable/noto-serif-sc": "^5.3.0",
-    "@tauri-apps/api": "^2.12.1",
-    "@tauri-apps/plugin-dialog": "^2.8.1",
-    "highlight.js": "^11.12.0",
-    "lxgw-wenkai-webfont": "^1.7.0"
   }
 }

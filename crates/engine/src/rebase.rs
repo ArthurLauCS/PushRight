@@ -13,7 +13,7 @@ pub struct Step {
     pub branches: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Plan { pub head: String, pub base: String, pub steps: Vec<Step> }
 
 fn git_path(repo: &Repo, name: &str) -> Result<PathBuf> {
