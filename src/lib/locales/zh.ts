@@ -588,6 +588,8 @@ export const messages = {
     enterCommit: '输入提交号',
     compareTitle: (file: string) => `将 ${file} 与…对比（git diff）`,
     openAtRevision: '打开文件的某个版本（git show）',
+    desktopMissing: '提交图在 PushRight 桌面版里打开，没有找到桌面版。请先安装，或在设置 pushright.desktopPath 里指定它的 pushright.exe。',
+    desktopDownload: '下载 PushRight',
   },
 }
 

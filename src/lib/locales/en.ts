@@ -575,6 +575,8 @@ export const messages = {
     enterCommit: 'Enter a commit ID',
     compareTitle: (file: string) => `Compare ${file} with…`,
     openAtRevision: 'Open file at revision',
+    desktopMissing: 'The commit graph opens in the PushRight desktop app, which was not found. Install it, or set pushright.desktopPath to its pushright.exe.',
+    desktopDownload: 'Download PushRight',
   },
 } satisfies typeof zh
 

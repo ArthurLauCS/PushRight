@@ -5,7 +5,8 @@ import { registerBlame } from './blame'
 import { activeRepo, discoverForFile, discoverRepositories, engine, log, onPrefsChange, onRepoChange, openRepos, repos, v } from './core'
 import { registerHistory } from './history'
 import { registerGraphView } from './graph-view'
-import { openPanel } from './panel'
+import { openDesktop } from './desktop'
+import { pickTimeZone } from './time-zone'
 import { offerTakeover, registerScm, repoArg } from './scm'
 import { checkout, fastForward, fetch, inProgress, pull, push } from './sync'
 import { registerLocalFiles } from './local-files'
@@ -28,8 +29,8 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     log, onRepoChange, onPrefsChange,
     { dispose: () => engine.dispose() },
-    command('openGraph', () => openPanel(context)),
-    command('revealCommit', (id: string, root?: string) => openPanel(context, { id, root: root ?? activeRepo()?.root })),
+    command('openGraph', () => openDesktop()),
+    command('revealCommit', (id: string, root?: string) => openDesktop(root, id)),
     command('pull', onRepo(pull)),
     command('push', onRepo(push)),
     command('fetch', onRepo(fetch)),
@@ -37,6 +38,7 @@ export async function activate(context: vscode.ExtensionContext) {
     command('checkout', onRepo(checkout)),
     command('inProgress', onRepo(inProgress)),
     command('showLog', () => log.show()),
+    command('timeZone', pickTimeZone),
   )
   registerScm(context)
   registerGraphView(context)

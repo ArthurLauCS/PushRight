@@ -5,7 +5,7 @@
   import Icon from '../../src/lib/Icon.svelte'
   import { graphKey } from '../../src/lib/graph-key'
   import { errorText, t } from '../../src/lib/i18n.svelte'
-  import { invoke } from './tauri'
+  import { invoke } from './host'
 
   type Repository = { tab: number; root: string; name: string; refs: Refs; scope: string }
   let repos = $state.raw<Repository[]>([])

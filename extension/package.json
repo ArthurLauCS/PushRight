@@ -2,7 +2,7 @@
   "name": "pushright",
   "displayName": "PushRight",
   "description": "%description%",
-  "version": "1.1.13",
+  "version": "1.2.0",
   "publisher": "AthurLau",
   "private": true,
   "icon": "icon.png",
@@ -31,6 +31,7 @@
   "contributes": {
     "commands": [
       { "command": "pushright.diffColors", "title": "%command.diffColors%", "category": "PushRight" },
+      { "command": "pushright.timeZone", "title": "%command.timeZone%", "category": "PushRight" },
       { "command": "pushright.closeRepository", "title": "%command.closeRepository%", "category": "PushRight", "enablement": "pushright.hasRepo" },
       { "command": "pushright.repositorySettings", "title": "%command.repositorySettings%", "category": "PushRight", "enablement": "pushright.hasRepo" },
       { "command": "pushright.reopenRepository", "title": "%command.reopenRepository%", "category": "PushRight", "enablement": "pushright.hasClosedRepos" },
@@ -423,6 +424,11 @@
           "group": "2_commit@4"
         },
         {
+          "command": "pushright.timeZone",
+          "when": "scmProvider == pushright",
+          "group": "2_commit@6"
+        },
+        {
           "command": "pushright.stageAll",
           "when": "scmProvider == pushright",
           "group": "3_changes@1"
@@ -686,6 +692,11 @@
     "configuration": {
       "title": "PushRight",
       "properties": {
+        "pushright.desktopPath": {
+          "type": "string",
+          "default": "",
+          "description": "%config.desktopPath%"
+        },
         "pushright.history.maxFileSizeMiB": {
           "type": "number",
           "default": 4,

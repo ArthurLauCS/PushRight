@@ -45,8 +45,6 @@ export const onPrefsChange = new vscode.EventEmitter<void>()
 export const log = vscode.window.createOutputChannel('PushRight')
 export let engine: Engine
 let context: vscode.ExtensionContext
-/** 提交图面板打开时由它填上，用来通知面板 */
-export const panel: { post?: (message: object) => void } = {}
 
 export async function openRepos(ctx: vscode.ExtensionContext, exe: string) {
   context = ctx
@@ -184,7 +182,6 @@ export async function attempt<T>(promise: Promise<T>): Promise<T | undefined> {
 export async function write<T>(repo: Repo, cmd: string, args: object): Promise<T | undefined> {
   const result = await attempt(engine.call<T>(cmd, { tab: repo.tab, ...args }))
   await refresh(repo)
-  panel.post?.({ refresh: true })
   return result
 }
 
@@ -287,5 +284,4 @@ export async function setAuthorStyle(key: string, style: AuthorStyle) {
   else delete styles[key]
   const value = JSON.stringify({ authorStyles: styles })
   await store('prefs', value)
-  panel.post?.({ store: 'prefs', value })
 }
