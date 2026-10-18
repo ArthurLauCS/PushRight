@@ -142,8 +142,8 @@ Extension **1.1.13** includes inline commit file lists and native diffs, Auto / 
 The same engine and interface run inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
 
 ```sh
-npm ci
-npm run ext:package
+pnpm install --frozen-lockfile
+pnpm ext:package
 code --install-extension extension/pushright-win32-x64-1.1.13.vsix
 ```
 
@@ -166,22 +166,22 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, PR / Issue integra
 
 ## Development
 
-Requires Node.js 24, Rust stable, MSVC C++ tools and Windows SDK. See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Requires Node.js 24, pnpm, Rust stable, MSVC C++ tools and Windows SDK. See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```sh
-npm ci
-npm run desktop:dev
+pnpm install --frozen-lockfile
+pnpm desktop:dev
 ```
 
-`npm run dev` starts only the frontend; Git operations require the desktop backend.
+`pnpm dev` starts only the frontend; Git operations require the desktop backend.
 
 ```sh
-npm run check
-npm test
+pnpm check
+pnpm test
 cargo test -p engine
-npm run desktop:build
-npm run ext:build   # VS Code extension: engine sidecar, panel and host
-npm run ext:smoke   # runs the extension inside a throwaway VS Code profile
+pnpm desktop:build
+pnpm ext:build      # VS Code extension: engine sidecar, panel and host
+pnpm ext:smoke      # runs the extension inside a throwaway VS Code profile
 ```
 
 The installer is written to `target/release/bundle/nsis/`. The first build may download dependencies and NSIS tools. See [Tauri Windows installers](https://v2.tauri.app/distribute/windows-installer/).

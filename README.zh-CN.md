@@ -137,8 +137,8 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 同一套引擎和界面可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.1.13) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
 
 ```sh
-npm ci
-npm run ext:package
+pnpm install --frozen-lockfile
+pnpm ext:package
 code --install-extension extension/pushright-win32-x64-1.1.13.vsix
 ```
 
@@ -161,24 +161,24 @@ code --install-extension extension/pushright-win32-x64-1.1.13.vsix
 
 ## 本地开发
 
-需要 Node.js 24、Rust stable，以及 Windows 的 MSVC C++ 工具链和 Windows SDK。完整环境要求见 [Tauri 官方文档](https://v2.tauri.app/start/prerequisites/)。
+需要 Node.js 24、pnpm、Rust stable，以及 Windows 的 MSVC C++ 工具链和 Windows SDK。完整环境要求见 [Tauri 官方文档](https://v2.tauri.app/start/prerequisites/)。
 
 ```sh
-npm ci
-npm run desktop:dev
+pnpm install --frozen-lockfile
+pnpm desktop:dev
 ```
 
-`npm run dev` 只启动前端网页，不能独立调用桌面 Git 后端。
+`pnpm dev` 只启动前端网页，不能独立调用桌面 Git 后端。
 
 检查与构建：
 
 ```sh
-npm run check
-npm test
+pnpm check
+pnpm test
 cargo test -p engine
-npm run desktop:build
-npm run ext:build   # VS Code 扩展：引擎子进程、面板和扩展主机
-npm run ext:smoke   # 在临时的 VS Code 配置里跑一遍扩展
+pnpm desktop:build
+pnpm ext:build      # VS Code 扩展：引擎子进程、面板和扩展主机
+pnpm ext:smoke      # 在临时的 VS Code 配置里跑一遍扩展
 ```
 
 Windows 安装包输出到 `target/release/bundle/nsis/`。首次构建可能需要联网下载 Rust 依赖及 NSIS 打包工具。安装包构建方式见 [Tauri Windows Installer 文档](https://v2.tauri.app/distribute/windows-installer/)。
