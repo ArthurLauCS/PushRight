@@ -1,14 +1,14 @@
 use crate::{decode, err, Repo, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 pub struct Conflict {
     /// 二进制文件没法逐块选，只能整个文件取一边
     pub binary: bool,
     pub blocks: Vec<Block>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Block {
     /// 两边一致的部分；长的只保留头尾几行供定位
@@ -149,7 +149,7 @@ pub fn take(repo: &Repo, path: &str, theirs: bool) -> Result<()> {
 }
 
 /// 进行中的合并 / 变基 / 摘取 / 撤销：Git 自己记下的提交信息、正在处理的提交和冲突清单。
-#[derive(Serialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Default, Debug, PartialEq, Clone)]
 pub struct Operation {
     /// Git 准备好的提交信息原文，`# Conflicts:` 清单也在里面；界面预填到提交框
     pub message: String,

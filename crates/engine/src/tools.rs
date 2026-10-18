@@ -8,7 +8,7 @@ pub fn revision(repo: &Repo, rev: &str) -> Result<String> {
     Ok(decode(&repo.git(&["rev-parse", "--verify", "--end-of-options", &format!("{}^{{commit}}", safe(rev)?)])?).trim().to_owned())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Comparison {
     pub left: String,
     pub right: String,
@@ -23,7 +23,7 @@ pub fn compare(repo: &Repo, left: &str, right: &str, common_base: bool) -> Resul
     Ok(Comparison { left, right, files: parse_name_status(&decode(&out)) })
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Remote { pub name: String, pub fetch: String, pub push: String }
 
 pub fn remotes(repo: &Repo) -> Result<Vec<Remote>> {
@@ -34,7 +34,7 @@ pub fn remotes(repo: &Repo) -> Result<Vec<Remote>> {
     }).collect()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Reflog { pub id: String, pub selector: String, pub subject: String }
 
 pub fn reflog(repo: &Repo, skip: usize, limit: usize) -> Result<Vec<Reflog>> {
@@ -66,7 +66,7 @@ pub fn bisect_log(repo: &Repo) -> Option<String> {
     std::fs::read(repo.gix().git_dir().join("BISECT_LOG")).ok().map(|b| decode(&b))
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 pub struct Submodule {
     pub path: String,
     /// 子模块当前检出的提交；还没初始化时是主仓库记录的提交
@@ -86,7 +86,7 @@ pub fn submodules(repo: &Repo) -> Result<Vec<Submodule>> {
     }).collect())
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Lfs {
     /// 机器上装的 git-lfs 版本；没装时为 None
     pub version: Option<String>,
@@ -109,10 +109,10 @@ pub fn lfs_locks(repo: &Repo) -> Result<String> {
     Ok(decode(&repo.git(&["lfs", "locks"])?).trim().to_owned())
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 pub struct Count { pub name: String, pub count: u32 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Stats {
     /// 当前分支历史里的提交数，含合并提交
     pub commits: u32,

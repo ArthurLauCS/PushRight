@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Ref {
     /// 完整引用名，如 refs/heads/main
     pub name: String,
@@ -14,7 +14,7 @@ pub struct Ref {
     pub upstream: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Refs {
     /// HEAD 指向的完整引用名；游离 HEAD 时为 None
     pub head: Option<String>,
@@ -27,14 +27,14 @@ pub struct Refs {
     pub refs: Vec<Ref>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Stash {
     pub name: String,
     pub id: String,
     pub subject: String,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 pub struct Worktree {
     pub path: String,
     pub head: String,
@@ -52,7 +52,7 @@ pub struct Worktree {
 }
 
 /// 分支选择器里每个分支下面显示的最新提交
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 pub struct Tip {
     /// 完整引用名
     pub name: String,
@@ -63,7 +63,7 @@ pub struct Tip {
 }
 
 /// 本地分支相对各自上游的同步状态
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 pub struct Track {
     /// 完整引用名
     pub name: String,

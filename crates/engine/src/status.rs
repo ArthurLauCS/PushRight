@@ -1,7 +1,7 @@
 use crate::{Repo, Result};
 use serde::Serialize;
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 pub struct Entry {
     pub path: String,
     /// 重命名/复制的来源路径

@@ -18,7 +18,7 @@ pub struct Graph {
     checkpoints: Vec<Vec<u32>>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 pub struct Row {
     pub id: String,
     pub lane: u32,

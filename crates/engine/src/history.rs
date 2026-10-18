@@ -2,7 +2,7 @@ use crate::ops::safe;
 use crate::{decode, Repo, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Commit {
     pub id: String,
     pub author: String,
