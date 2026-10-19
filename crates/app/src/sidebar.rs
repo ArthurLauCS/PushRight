@@ -15,8 +15,8 @@ pub struct SidebarState {
     filter: Entity<InputState>,
     /// 单击选中的引用或贮藏：只高亮，不改变列表顺序
     selected: String,
-    /// 本地分支、远程分支、标签、贮藏、工作树各组是否展开
-    open: [bool; 5],
+    /// 本地分支、远程分支、标签、贮藏、工作树、拉取请求各组是否展开
+    open: [bool; 6],
     _sub: Subscription,
 }
 
@@ -28,7 +28,7 @@ impl SidebarState {
                 cx.notify();
             }
         });
-        SidebarState { filter, selected: String::new(), open: [true, false, false, false, true], _sub: sub }
+        SidebarState { filter, selected: String::new(), open: [true, false, false, false, true, true], _sub: sub }
     }
 }
 
@@ -199,6 +199,10 @@ pub fn render(this: &mut RepoView, _window: &mut Window, cx: &mut Context<RepoVi
                 if elsewhere.contains(&r.name) {
                     el = el.child(div().id("elsewhere").flex_none().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.in_other_worktree_mark).build(window, cx)).child(icon(Icon::Windows, px(12.), p.muted)));
                 }
+                if let Some(pr) = this.prs.iter().find(|pr| kind == Kind::Branch && pr.head == r.label) {
+                    let tip: SharedString = format!("#{} {}", pr.number, pr.title).into();
+                    el = el.child(div().id("pr").flex_none().font_family(MONO).text_size(FS_SM).text_color(p.muted).font_weight(FontWeight::NORMAL).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)).child(format!("#{}", pr.number)));
+                }
                 if this.auto_ff.contains(&r.name) {
                     el = el.child(div().id("auto-ff").flex_none().tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.auto_ff.mark).build(window, cx)).child(icon(Icon::Pull, px(12.), p.muted)));
                 }
@@ -294,6 +298,68 @@ pub fn render(this: &mut RepoView, _window: &mut Window, cx: &mut Context<RepoVi
         }
     }
     scroll = scroll.child(trees);
+
+    if this.github.is_some() {
+        let prs: Vec<_> = this.prs.iter().filter(|pr| pr.title.to_lowercase().contains(&query) || pr.head.to_lowercase().contains(&query)).cloned().collect();
+        let mut section = div().relative().child(summary(5, t.pr.nav, prs.len(), cx)).child(
+            div()
+                .id("refresh-prs")
+                .absolute()
+                .right(px(8.))
+                .top(px(6.))
+                .px(px(4.))
+                .py(px(2.))
+                .cursor_pointer()
+                .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.pr.refresh).build(window, cx))
+                .on_click(cx.listener(|this, _, _, cx| this.load_prs(cx)))
+                .child(icon(Icon::Sync, px(12.), p.muted)),
+        );
+        if this.sidebar.open[5] || filtering {
+            let note = |text: String, color| div().pl(px(24.)).pr(px(12.)).py(px(4.)).text_size(FS_SM).text_color(color).child(text);
+            if !this.pr_error.is_empty() {
+                section = section.child(note(crate::i18n::error_text(cx, &this.pr_error), p.red));
+            } else if prs.is_empty() && !filtering {
+                section = section.child(note(t.pr.empty.to_owned(), p.muted));
+            }
+            for pr in prs {
+                let key = format!("pr-{}", pr.number);
+                let (mark, color, checks) = match pr.checks.as_str() {
+                    "success" => ("✓", p.green, t.pr.checks_success),
+                    "failure" => ("✗", p.red, t.pr.checks_failure),
+                    "pending" => ("●", p.yellow, t.pr.checks_pending),
+                    _ => ("", p.muted, ""),
+                };
+                let review = match pr.review.as_str() {
+                    "APPROVED" => t.pr.approved,
+                    "CHANGES_REQUESTED" => t.pr.changes_requested,
+                    "REVIEW_REQUIRED" => t.pr.review_required,
+                    _ => "",
+                };
+                let status = [if pr.draft { t.pr.draft_mark } else { "" }, review, checks].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ");
+                let tip: SharedString = format!("#{} {}\n{} → {} · {}{}", pr.number, pr.title, pr.head, pr.base, pr.author, if status.is_empty() { String::new() } else { format!("\n{status}") }).into();
+                let (k, head, n, pr2) = (key.clone(), pr.head.clone(), pr.number, pr.clone());
+                section = section.child(
+                    item(key.clone().into(), this.sidebar.selected == key, false)
+                        .child(div().flex_none().font_family(MONO).text_size(FS_SM).text_color(p.muted).child(format!("#{}", pr.number)))
+                        .child(div().min_w_0().truncate().when(pr.draft, |s| s.text_color(p.muted)).child(pr.title.clone()))
+                        .child(div().flex_1())
+                        .when(pr.review == "APPROVED", |s| s.child(div().flex_none().text_size(FS_SM).text_color(p.green).child(t.pr.approved)))
+                        .when(pr.review == "CHANGES_REQUESTED", |s| s.child(div().flex_none().text_size(FS_SM).text_color(p.red).child(t.pr.changes_requested)))
+                        .when(!mark.is_empty(), |s| s.child(div().flex_none().text_color(color).child(mark)))
+                        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
+                        .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| {
+                            if e.click_count() >= 2 {
+                                return this.checkout_pr(n, cx);
+                            }
+                            this.sidebar.selected = k.clone();
+                            this.jump_pr(&head, cx);
+                        }))
+                        .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, window, cx| this.pr_menu(e.position, &pr2, window, cx))),
+                );
+            }
+        }
+        scroll = scroll.child(section);
+    }
 
     let _ = name_only;
     div().flex().flex_col().flex_1().min_h_0().bg(p.panel).child(nav).child(search).child(scroll).into_any_element() as AnyElement
