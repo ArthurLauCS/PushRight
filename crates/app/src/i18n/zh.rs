@@ -33,6 +33,13 @@ pub static MESSAGES: Messages = Messages {
             elsewhere: |b| format!("{b}（已在另一个工作树中打开）"),
             failed: |b| format!("{b}（执行失败，详见命令日志）"),
     },
+        tabs: TabMenu {
+            rename: "重命名页签…",
+            rename_hint: "留空则显示文件夹名",
+            name: "页签名称",
+            copy_path: "复制路径",
+            close_others: "关闭其他页签",
+        },
         file_menu: FileMenu {
         open: "打开文件",
             reveal: "在资源管理器中显示",

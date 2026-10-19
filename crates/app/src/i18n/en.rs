@@ -33,6 +33,13 @@ pub static MESSAGES: Messages = Messages {
             elsewhere: |b| format!("{b} (checked out in another worktree)"),
             failed: |b| format!("{b} (failed; see the command log)"),
     },
+        tabs: TabMenu {
+            rename: "Rename tab…",
+            rename_hint: "Leave empty to show the folder name",
+            name: "Tab name",
+            copy_path: "Copy path",
+            close_others: "Close other tabs",
+        },
         file_menu: FileMenu {
         open: "Open file",
             reveal: "Show in File Explorer",

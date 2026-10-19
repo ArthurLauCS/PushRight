@@ -4,7 +4,8 @@ use crate::diff_colors::{to_hex, DiffColors, PRESETS};
 use crate::dialog::{Dialog, Field, Spec, Values};
 use crate::git::{self, Session};
 use crate::help::Help;
-use crate::menu::Menu;
+use crate::menu::{Item, Menu};
+use crate::rules::short;
 use crate::repo_view::AutoSync;
 use crate::i18n::{self, t, I18n, Locale};
 use crate::icons::{icon, Icon};
@@ -14,9 +15,10 @@ use crate::time::{self, Zone};
 use crate::ui::{btn, Opt};
 use crate::store;
 use gpui::prelude::*;
-use gpui::{actions, div, px, App, Context, Entity, FocusHandle, FontWeight, MouseButton, PathPromptOptions, SharedString, Subscription, Window};
+use gpui::{actions, div, px, App, ClickEvent, ClipboardItem, Context, Entity, FocusHandle, FontWeight, MouseButton, MouseDownEvent, PathPromptOptions, SharedString, Subscription, Window};
 use gpui_component::select::{Select, SelectEvent, SelectState};
 use gpui_component::{IndexPath, Sizable};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 actions!(pushright, [NextTab, PrevTab, CloseTab, NewTab]);
@@ -25,6 +27,27 @@ struct Tab {
     id: u32,
     path: String,
     view: Entity<RepoView>,
+}
+
+/// 页签的自定义名字，按仓库路径记
+const TAB_NAMES: &str = "tabNames";
+
+/// 路径的最后一级文件夹名
+pub fn folder(path: &str) -> String {
+    path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(path).to_owned()
+}
+
+/// 拖动中的页签，跟着鼠标走的那块
+struct DraggedTab {
+    id: u32,
+    name: SharedString,
+}
+
+impl Render for DraggedTab {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        div().px(px(16.)).py(px(4.)).rounded(R_MD).bg(p.accent).text_color(p.on_accent).font_family(DISPLAY).font_weight(FontWeight::BOLD).child(self.name.clone())
+    }
 }
 
 pub struct PushRight {
@@ -201,6 +224,66 @@ impl PushRight {
         cx.notify();
     }
 
+    fn close_others(&mut self, id: u32, cx: &mut Context<Self>) {
+        self.tabs.retain(|t| t.id == id);
+        self.active = Some(id);
+        self.save_tabs(cx);
+        cx.notify();
+    }
+
+    /// 把页签 `from` 挪到 `to` 的位置：往右拖落在它后面，往左拖落在它前面
+    fn move_tab(&mut self, from: u32, to: u32, cx: &mut Context<Self>) {
+        let (Some(i), Some(j)) = (self.tabs.iter().position(|t| t.id == from), self.tabs.iter().position(|t| t.id == to)) else { return };
+        let tab = self.tabs.remove(i);
+        self.tabs.insert(j, tab);
+        self.save_tabs(cx);
+        cx.notify();
+    }
+
+    /// 自定义页签名字；留空恢复文件夹名
+    fn rename_tab(&mut self, id: u32, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(path) = self.tabs.iter().find(|t| t.id == id).map(|t| t.path.clone()) else { return };
+        let t = t(cx);
+        let current = store::get::<HashMap<String, String>>(cx, TAB_NAMES).and_then(|mut m| m.remove(&path)).unwrap_or_else(|| folder(&path));
+        let spec = Spec::new(t.tabs.rename).message(format!("{}\n{}", path, t.tabs.rename_hint)).field(Field::text("name", t.tabs.name).value(current).optional());
+        let rx = self.dialog.update(cx, |d, cx| d.ask(spec, window, cx));
+        cx.spawn(async move |this, cx| {
+            let Ok(Some(v)) = rx.await else { return };
+            let name = v.text("name").trim().to_owned();
+            let _ = this.update(cx, |_, cx| {
+                let mut names = store::get::<HashMap<String, String>>(cx, TAB_NAMES).unwrap_or_default();
+                if name.is_empty() || name == folder(&path) {
+                    names.remove(&path);
+                } else {
+                    names.insert(path, name);
+                }
+                store::set(cx, TAB_NAMES, names);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn tab_menu(&mut self, e: &MouseDownEvent, id: u32, window: &mut Window, cx: &mut Context<Self>) {
+        let t = t(cx);
+        let Some(path) = self.tabs.iter().find(|t| t.id == id).map(|t| t.path.clone()) else { return };
+        let me = cx.entity().downgrade();
+        let act = |f: fn(&mut PushRight, u32, &mut Window, &mut Context<PushRight>)| {
+            let me = me.clone();
+            move |window: &mut Window, cx: &mut App| {
+                let _ = me.update(cx, |this, cx| f(this, id, window, cx));
+            }
+        };
+        let items = vec![
+            Item::new(t.tabs.rename, act(|this, id, window, cx| this.rename_tab(id, window, cx))).hint(t.tabs.rename_hint),
+            Item::new(t.tabs.copy_path, move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(path.clone()))),
+            Item::Sep,
+            Item::new(t.close_tab, act(|this, id, _, cx| this.close(id, cx))),
+            Item::new(t.tabs.close_others, act(|this, id, _, cx| this.close_others(id, cx))).disabled(self.tabs.len() < 2),
+        ];
+        self.menu.update(cx, |m, cx| m.show(e.position, items, window, cx));
+    }
+
     fn pick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(t(cx).open_repo.into()) });
         cx.spawn_in(window, async move |this, cx| {
@@ -311,9 +394,12 @@ impl PushRight {
         cx.notify();
     }
 
+    /// 仓库页签单独一行，按页签数平分整行宽度；选中的页签用陶土色底。
+    /// 名字是自定义名或文件夹名，后面跟当前分支，多个工作树同名时也分得清
     fn render_tabs(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx).clone();
         let t = t(cx);
+        let names = store::get::<HashMap<String, String>>(cx, TAB_NAMES).unwrap_or_default();
         let mut nav = div()
             .flex()
             .flex_none()
@@ -327,37 +413,57 @@ impl PushRight {
         for tab in &self.tabs {
             let id = tab.id;
             let active = self.active == Some(id);
-            let name = tab.path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(&tab.path).to_owned();
+            let name = names.get(&tab.path).cloned().unwrap_or_else(|| folder(&tab.path));
+            let branch = tab.view.read(cx).refs.head.as_deref().map(|h| short(h).to_owned()).filter(|b| *b != name);
+            let fg = if active { p.on_accent } else { p.muted };
             let group: SharedString = format!("tab-{id}").into();
+            let dragged = DraggedTab { id, name: name.clone().into() };
             nav = nav.child(
                 div()
                     .id(("tab", id))
                     .group(group.clone())
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .gap(px(8.))
                     .h(px(32.))
-                    .min_w_0()
-                    .max_w(px(220.))
                     .pl(px(16.))
                     .pr(px(8.))
                     .mb(px(-1.))
-                    .border_1()
-                    .border_b_0()
                     .rounded_t(R_MD)
                     .font_family(DISPLAY)
-                    .when(active, |s| s.bg(p.panel).border_color(p.border).text_color(p.text).font_weight(FontWeight::BOLD))
-                    .when(!active, |s| s.border_color(theme::alpha(p.border, 0.)).text_color(p.muted).hover(|s| s.bg(p.hover).text_color(p.text)))
+                    .text_color(fg)
+                    .when(active, |s| s.bg(p.accent).font_weight(FontWeight::BOLD))
+                    .when(!active, |s| s.hover(|s| s.bg(p.hover).text_color(p.text)))
+                    .drag_over::<DraggedTab>(move |s, _, _, _| s.bg(p.accent_soft))
+                    .on_drag(dragged, |d, _, _, cx| cx.new(|_| DraggedTab { id: d.id, name: d.name.clone() }))
+                    .on_drop(cx.listener(move |this, d: &DraggedTab, _, cx| this.move_tab(d.id, id, cx)))
                     .tooltip({
                         let path: SharedString = tab.path.clone().into();
                         move |window, cx| gpui_component::tooltip::Tooltip::new(path.clone()).build(window, cx)
                     })
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+                        if e.click_count() >= 2 {
+                            return this.rename_tab(id, window, cx);
+                        }
                         this.active = Some(id);
                         cx.notify();
                     }))
                     .on_mouse_down(MouseButton::Middle, cx.listener(move |this, _, _, cx| this.close(id, cx)))
-                    .child(div().min_w_0().truncate().child(name))
+                    .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, window, cx| this.tab_menu(e, id, window, cx)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .items_baseline()
+                            .gap(px(8.))
+                            .overflow_hidden()
+                            .child(div().min_w_0().truncate().child(name))
+                            // 窄的时候先缩分支名
+                            .when_some(branch, |s, b| s.child(div().min_w_0().flex_shrink(4.).truncate().font_family(theme::UI).text_size(FS_SM).font_weight(FontWeight::NORMAL).opacity(0.8).child(b))),
+                    )
                     .child(
                         div()
                             .id(("close", id))
@@ -367,35 +473,38 @@ impl PushRight {
                             .justify_center()
                             .size(px(20.))
                             .rounded(R_SM)
-                            .text_color(p.muted)
                             .when(!active, |s| s.invisible().group_hover(group, |s| s.visible()))
-                            .hover(|s| s.bg(p.raised).text_color(p.text))
+                            .hover(|s| s.bg(theme::alpha(fg, 0.2)))
                             .cursor_pointer()
                             .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.close_tab).build(window, cx))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
                                 this.close(id, cx);
                             }))
-                            .child(icon(Icon::Close, px(12.), p.muted)),
+                            .child(icon(Icon::Close, px(12.), fg)),
                     ),
             );
         }
-        let dark = p.dark;
         nav.child(
-            div().mb(px(4.)).child(
+            div().flex_none().mb(px(4.)).child(
                 btn("new-tab").quiet().icon(Icon::Plus).on(self.active.is_none()).tip(t.new_tab).on_click(cx.listener(|this, _, _, cx| {
                     this.active = None;
                     cx.notify();
                 })),
             ),
         )
-        .child(div().flex_1())
-        .child(
+    }
+
+    /// 全局设置单独一行，靠右
+    fn render_settings(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx).clone();
+        let t = t(cx);
+        let dark = p.dark;
+        div().flex().flex_none().justify_end().h(px(36.)).px(px(8.)).bg(p.bg).child(
             div()
                 .flex()
                 .items_center()
                 .gap(px(2.))
-                .mb(px(4.))
                 .child(btn("diff-colors").quiet().icon(Icon::Contrast).tip(t.diff_colors.title).on_click(cx.listener(|this, _, window, cx| this.diff_colors(window, cx))))
                 .child(btn("auto-sync").quiet().icon(Icon::Sync).tip(t.auto_sync_settings).on_click(cx.listener(|this, _, window, cx| this.auto_sync_settings(window, cx))))
                 .child(div().id("time-zone").mx(px(8.)).w(px(190.)).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.time_zone_hint).build(window, cx)).child(Select::new(&self.zones).small().menu_width(px(260.))))
@@ -538,6 +647,7 @@ impl Render for PushRight {
             .font_family(theme::UI)
             .text_size(theme::FS_MD)
             .line_height(gpui::relative(1.5))
+            .child(self.render_settings(cx))
             .child(self.render_tabs(cx))
             .child(body)
             .child(self.help.clone())

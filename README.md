@@ -122,7 +122,7 @@ Measurements on a local Linux repository with 1.48 million commits and a 128 MiB
 
 ### Included features
 
-- Multiple repository tabs, recent repositories and session restoration.
+- Repository tabs on their own row, sharing its width; drag to reorder, double-click or right-click to rename (handy for several worktrees of one repository). Each tab shows the checked-out branch. Recent repositories and session restoration.
 - Virtualized graph, branches, tags, commit details and file diffs.
 - Stage, unstage, commit and amend; file, hunk and selected-line operations.
 - Create, switch, rename and delete branches; merge, rebase, cherry-pick, revert, reset and tags.

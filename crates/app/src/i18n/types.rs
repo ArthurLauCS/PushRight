@@ -27,6 +27,15 @@ pub struct AutoFf {
     pub failed: fn(&str) -> String,
 }
 
+/// 页签右键菜单
+pub struct TabMenu {
+    pub rename: &'static str,
+    pub rename_hint: &'static str,
+    pub name: &'static str,
+    pub copy_path: &'static str,
+    pub close_others: &'static str,
+}
+
 pub struct FileMenu {
     pub open: &'static str,
     pub reveal: &'static str,
@@ -337,6 +346,7 @@ pub struct Messages {
     pub auto_fetch_failed: &'static str,
     pub fast_forward_to: fn(&str) -> String,
     pub auto_ff: AutoFf,
+    pub tabs: TabMenu,
     pub file_menu: FileMenu,
     pub external_tools: ExternalTools,
     pub copy_name: &'static str,
