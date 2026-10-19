@@ -1,7 +1,7 @@
 //! 窗口的最外层：顶上一排仓库页签和全局设置，下面是当前页签的仓库页或「打开仓库」页。
 
-use crate::diff_colors::{DiffColors, PRESETS};
-use crate::dialog::{Dialog, Field, Spec};
+use crate::diff_colors::{to_hex, DiffColors, PRESETS};
+use crate::dialog::{Dialog, Field, Spec, Values};
 use crate::git::{self, Session};
 use crate::help::Help;
 use crate::menu::Menu;
@@ -9,7 +9,7 @@ use crate::repo_view::AutoSync;
 use crate::i18n::{self, t, I18n, Locale};
 use crate::icons::{icon, Icon};
 use crate::repo_view::RepoView;
-use crate::theme::{self, palette, DISPLAY, FS_SM, FS_XL, MONO, PROSE, R_MD, R_SM};
+use crate::theme::{self, palette, Palette, DISPLAY, FS_SM, FS_XL, MONO, PROSE, R_MD, R_SM};
 use crate::time::{self, Zone};
 use crate::ui::{btn, Opt};
 use crate::store;
@@ -274,32 +274,24 @@ impl PushRight {
         .detach();
     }
 
-    /// 差异配色：预设或自定义的两个 HEX 颜色；选「恢复原配色」回到主题自带的绿和红
+    /// 差异配色：新增、删除各一个取色器，色板里是主题原配色和几组色盲友好的预设，下方实时预览；
+    /// 勾「恢复原配色」回到主题自带的绿和红
     fn diff_colors(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let t = t(cx);
+        let base = if palette(cx).dark { Palette::dark() } else { Palette::light() };
         let current = store::get::<DiffColors>(cx, "diffColors");
-        let preset = match &current {
-            None => "default".to_owned(),
-            Some(c) => PRESETS.iter().find(|(_, a, d)| *a == c.added && *d == c.deleted).map_or("custom".to_owned(), |(k, _, _)| (*k).to_owned()),
-        };
-        let names = [t.diff_colors.blue_orange, t.diff_colors.purple_gold, t.diff_colors.cyan_rose];
-        let mut options = vec![("default".to_owned(), t.diff_colors.default.to_owned())];
-        options.extend(PRESETS.iter().zip(names).map(|((k, _, _), n)| ((*k).to_owned(), n.to_owned())));
-        options.push(("custom".to_owned(), t.diff_colors.custom.to_owned()));
-        let c = current.unwrap_or(DiffColors { added: PRESETS[0].1.into(), deleted: PRESETS[0].2.into() });
-        let spec = Spec::new(t.diff_colors.title).message(format!("{}\n{}", t.diff_colors.hint, t.diff_colors.invalid)).fields([
-            Field::select("preset", t.diff_colors.preset, options).value(preset),
-            Field::text("added", format!("{} HEX", t.diff_colors.added)).value(c.added).pattern(crate::diff_colors::is_diff_color),
-            Field::text("deleted", format!("{} HEX", t.diff_colors.deleted)).value(c.deleted).pattern(crate::diff_colors::is_diff_color),
+        let c = current.clone().unwrap_or(DiffColors { added: to_hex(base.diff_added), deleted: to_hex(base.diff_deleted) });
+        let mut swatches = vec![base.diff_added, base.diff_deleted];
+        swatches.extend(PRESETS.iter().flat_map(|(_, a, d)| [a, d]).filter_map(|h| crate::diff_colors::hex(h)));
+        let spec = Spec::new(t.diff_colors.title).message(t.diff_colors.hint).preview(diff_preview).fields([
+            Field::checkbox("default", t.diff_colors.default, current.is_none()),
+            Field::color("added", t.diff_colors.added, swatches.clone()).value(c.added),
+            Field::color("deleted", t.diff_colors.deleted, swatches).value(c.deleted),
         ]);
         let rx = self.dialog.update(cx, |d, cx| d.ask(spec, window, cx));
         cx.spawn_in(window, async move |_, cx| {
             let Ok(Some(v)) = rx.await else { return };
-            let colors = match v.text("preset").as_str() {
-                "default" => None,
-                "custom" => Some(DiffColors { added: v.text("added").to_lowercase(), deleted: v.text("deleted").to_lowercase() }),
-                key => PRESETS.iter().find(|(k, _, _)| *k == key).map(|(_, a, d)| DiffColors { added: (*a).into(), deleted: (*d).into() }),
-            };
+            let colors = (!v.bool("default")).then(|| DiffColors { added: v.text("added"), deleted: v.text("deleted") }).filter(|c| c.hsla().is_some());
             let _ = cx.update(|window, cx| {
                 store::set(cx, "diffColors", colors);
                 apply_theme(window, cx);
@@ -467,6 +459,37 @@ impl PushRight {
                 }))
             })
     }
+}
+
+/// 差异配色对话框里的预览：按当前选的颜色画一行新增、一行删除
+fn diff_preview(v: &Values, cx: &App) -> gpui::AnyElement {
+    let p = palette(cx);
+    let t = t(cx);
+    let base = if p.dark { Palette::dark() } else { Palette::light() };
+    let pick = |key: &str, fallback| if v.bool("default") { fallback } else { crate::diff_colors::hex(&v.text(key)).unwrap_or(fallback) };
+    let (added, deleted) = (pick("added", base.diff_added), pick("deleted", base.diff_deleted));
+    let line = |color: gpui::Hsla, sign: &str, text: &str| {
+        div().flex().h(px(22.)).bg(theme::alpha(color, 0.22)).border_l_3().border_color(color).child(div().w(px(24.)).flex().justify_center().font_weight(FontWeight::BOLD).child(sign.to_owned())).child(text.to_owned())
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .child(div().text_size(FS_SM).text_color(p.muted).child(t.diff_colors.preview))
+        .child(
+            div()
+                .rounded(R_SM)
+                .overflow_hidden()
+                .border_1()
+                .border_color(p.border)
+                .bg(p.bg)
+                .font_family(MONO)
+                .text_size(FS_SM)
+                .child(line(deleted, "-", "let color = \"red\";"))
+                .child(line(added, "+", "let color = \"blue\";")),
+        )
+        .when(added == deleted, |s| s.child(div().text_size(FS_SM).text_color(p.red).child(t.diff_colors.same)))
+        .into_any_element()
 }
 
 /// 设置里选过主题就用它，否则跟随系统；差异配色叠在主题上

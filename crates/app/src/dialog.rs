@@ -8,8 +8,9 @@ use crate::theme::{alpha, palette, DISPLAY, FS_MD, FS_SM, FS_XL, LH_BODY, MONO, 
 use crate::ui::{btn, label, Opt};
 use futures::channel::oneshot;
 use gpui::prelude::*;
-use gpui::{div, point, px, relative, Animation, AnimationExt, BoxShadow, Context, Entity, FocusHandle, FontWeight, KeyDownEvent, SharedString, Subscription, Window};
+use gpui::{div, point, px, relative, AnyElement, Animation, AnimationExt, App, BoxShadow, Context, Entity, FocusHandle, FontWeight, Hsla, KeyDownEvent, SharedString, Subscription, Window};
 use gpui_component::checkbox::Checkbox;
+use gpui_component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_component::radio::Radio;
 use gpui_component::select::{Select, SelectState};
@@ -25,6 +26,8 @@ pub enum Kind {
     /// 没有默认值时必须选一个才能确认
     Radio(Vec<(String, String)>),
     Select(Vec<(String, String)>),
+    /// 取色器，值是六位 HEX；给的颜色作为色板
+    Color(Vec<Hsla>),
 }
 
 pub struct Field {
@@ -56,6 +59,9 @@ impl Field {
     pub fn select(key: impl Into<String>, label: impl Into<String>, options: Vec<(String, String)>) -> Field {
         Field::new(key, label, Kind::Select(options))
     }
+    pub fn color(key: impl Into<String>, label: impl Into<String>, swatches: Vec<Hsla>) -> Field {
+        Field::new(key, label, Kind::Color(swatches))
+    }
     pub fn value(mut self, value: impl Into<String>) -> Field {
         self.text = value.into();
         self
@@ -82,6 +88,8 @@ pub struct Spec {
     confirm: Option<String>,
     danger: bool,
     fields: Vec<Field>,
+    /// 按当前各项的值画一块预览，改动时立即更新
+    preview: Option<fn(&Values, &App) -> AnyElement>,
 }
 
 impl Spec {
@@ -116,6 +124,10 @@ impl Spec {
         self.danger = true;
         self
     }
+    pub fn preview(mut self, f: fn(&Values, &App) -> AnyElement) -> Spec {
+        self.preview = Some(f);
+        self
+    }
     pub fn field(mut self, f: Field) -> Spec {
         self.fields.push(f);
         self
@@ -145,6 +157,7 @@ enum Control {
     Check(bool),
     Choice(Option<usize>),
     Select(Entity<SelectState<Vec<Opt>>>),
+    Color(Entity<ColorPickerState>),
 }
 
 struct Open {
@@ -217,7 +230,21 @@ impl Dialog {
                 Kind::Select(options) => {
                     let opts: Vec<Opt> = options.iter().map(|(v, l)| Opt::new(v.clone(), l.clone())).collect();
                     let selected = options.iter().position(|(v, _)| *v == f.text).unwrap_or(0);
-                    Control::Select(cx.new(|cx| SelectState::new(opts, Some(IndexPath::new(selected)), window, cx).searchable(options.len() > 12)))
+                    let state = cx.new(|cx| SelectState::new(opts, Some(IndexPath::new(selected)), window, cx).searchable(options.len() > 12));
+                    subs.push(cx.observe(&state, |_, _, cx| cx.notify()));
+                    Control::Select(state)
+                }
+                Kind::Color(_) => {
+                    let value = crate::diff_colors::hex(&f.text);
+                    let state = cx.new(|cx| {
+                        let s = ColorPickerState::new(window, cx);
+                        match value {
+                            Some(v) => s.default_value(v),
+                            None => s,
+                        }
+                    });
+                    subs.push(cx.subscribe(&state, |_, _, _: &ColorPickerEvent, cx| cx.notify()));
+                    Control::Color(state)
                 }
             })
             .collect();
@@ -234,7 +261,7 @@ impl Dialog {
     fn ready(&self, cx: &gpui::App) -> bool {
         let Some(open) = &self.open else { return false };
         open.spec.fields.iter().zip(&open.controls).all(|(f, c)| match c {
-            Control::Check(_) | Control::Select(_) => true,
+            Control::Check(_) | Control::Select(_) | Control::Color(_) => true,
             Control::Choice(choice) => choice.is_some(),
             Control::Input(state) => {
                 let v = state.read(cx).value();
@@ -244,28 +271,33 @@ impl Dialog {
         })
     }
 
+    /// 各项当前的值
+    fn values(&self, cx: &App) -> Values {
+        let mut values = Values::default();
+        let Some(open) = &self.open else { return values };
+        for (f, c) in open.spec.fields.iter().zip(&open.controls) {
+            let v = match c {
+                Control::Input(s) => (s.read(cx).value().to_string(), false),
+                Control::Area(s) => (s.read(cx).value().to_string(), false),
+                Control::Check(b) => (String::new(), *b),
+                Control::Choice(i) => match &f.kind {
+                    Kind::Radio(options) => (i.map(|i| options[i].0.clone()).unwrap_or_default(), false),
+                    _ => unreachable!(),
+                },
+                Control::Select(s) => (s.read(cx).selected_value().map(|v| v.to_string()).unwrap_or_default(), false),
+                Control::Color(s) => (s.read(cx).value().map(crate::diff_colors::to_hex).unwrap_or_default(), false),
+            };
+            values.0.insert(f.key.clone(), v);
+        }
+        values
+    }
+
     fn close(&mut self, ok: bool, window: &mut Window, cx: &mut Context<Self>) {
         if ok && !self.ready(cx) {
             return;
         }
+        let values = ok.then(|| self.values(cx));
         let Some(open) = self.open.take() else { return };
-        let values = ok.then(|| {
-            let mut values = Values::default();
-            for (f, c) in open.spec.fields.iter().zip(&open.controls) {
-                let v = match c {
-                    Control::Input(s) => (s.read(cx).value().to_string(), false),
-                    Control::Area(s) => (s.read(cx).value().to_string(), false),
-                    Control::Check(b) => (String::new(), *b),
-                    Control::Choice(i) => match &f.kind {
-                        Kind::Radio(options) => (i.map(|i| options[i].0.clone()).unwrap_or_default(), false),
-                        _ => unreachable!(),
-                    },
-                    Control::Select(s) => (s.read(cx).selected_value().map(|v| v.to_string()).unwrap_or_default(), false),
-                };
-                values.0.insert(f.key.clone(), v);
-            }
-            values
-        });
         if ok && open.skip {
             if let Some(key) = open.spec.skip_key {
                 store::set(cx, &format!("skip:{key}"), "1");
@@ -342,7 +374,14 @@ impl Render for Dialog {
                         .into_any_element()
                 }
                 Control::Select(state) => div().flex().flex_col().gap(px(4.)).child(caption()).child(Select::new(state)).into_any_element(),
+                Control::Color(state) => {
+                    let Kind::Color(swatches) = &f.kind else { unreachable!() };
+                    div().flex().items_center().gap(px(12.)).child(ColorPicker::new(state).featured_colors(swatches.clone())).child(f.label.clone()).into_any_element()
+                }
             });
+        }
+        if let Some(preview) = spec.preview {
+            body = body.child(preview(&self.values(cx), cx));
         }
         if spec.skip_key.is_some() {
             let entity = entity.clone();

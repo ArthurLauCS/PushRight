@@ -77,7 +77,7 @@ Open a local repository, or pass its path when launching:
 
 ### Diff colors
 
-The toolbar’s **Diff Colors** dialog offers Blue / Orange, Purple / Gold and Cyan / Rose presets, or independent added/deleted HEX colors. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
+The toolbar’s **Diff Colors** dialog has a color picker each for added and deleted lines, with the theme colors and Blue / Orange, Purple / Gold and Cyan / Rose swatches, and previews the result as you pick. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
 
 ### Commit and push
 

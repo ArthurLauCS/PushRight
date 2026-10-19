@@ -5,18 +5,12 @@ use super::{Dict, Explain};
 
 pub struct DiffColors {
     pub title: &'static str,
-    pub preset: &'static str,
     pub r#default: &'static str,
-    pub custom: &'static str,
-    pub blue_orange: &'static str,
-    pub purple_gold: &'static str,
-    pub cyan_rose: &'static str,
     pub added: &'static str,
     pub deleted: &'static str,
     pub preview: &'static str,
     pub hint: &'static str,
     pub editor_hint: &'static str,
-    pub invalid: &'static str,
     pub same: &'static str,
 }
 
