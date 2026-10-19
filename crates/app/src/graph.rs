@@ -327,9 +327,21 @@ impl Render for Graph {
                                     this.focus_author = if this.focus_author.as_ref().is_some_and(|(k, _)| *k == k1) { None } else { Some((k1.clone(), n1.clone())) };
                                     cx.notify();
                                 }))
-                                .on_mouse_down(MouseButton::Right, cx.listener(move |_, _, _, cx| {
-                                    cx.stop_propagation();
-                                    cx.emit(GraphEvent::StyleAuthor { key: key.clone(), name: name.clone(), email: email.clone() });
+                                .on_mouse_down(MouseButton::Right, cx.listener({
+                                    let (key, name, email) = (key.clone(), name.clone(), email.clone());
+                                    move |_, _, _, cx| {
+                                        cx.stop_propagation();
+                                        cx.emit(GraphEvent::StyleAuthor { key: key.clone(), name: name.clone(), email: email.clone() });
+                                    }
+                                }))
+                                // 键盘：Tab 聚焦到作者后按 Shift+F10 或菜单键，和右键一样打开作者样式
+                                .focusable()
+                                .on_key_down(cx.listener(move |_, e: &gpui::KeyDownEvent, _, cx| {
+                                    let k = &e.keystroke;
+                                    if (k.key == "f10" && k.modifiers.shift) || k.key == "menu" {
+                                        cx.stop_propagation();
+                                        cx.emit(GraphEvent::StyleAuthor { key: key.clone(), name: name.clone(), email: email.clone() });
+                                    }
                                 }))
                                 .child(row.author.clone()),
                         ),

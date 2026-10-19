@@ -753,6 +753,7 @@ fn data_image(src: &str) -> Option<Arc<gpui::Image>> {
         "image/bmp" => gpui::ImageFormat::Bmp,
         "image/svg+xml" => gpui::ImageFormat::Svg,
         "image/tiff" => gpui::ImageFormat::Tiff,
+        "image/x-icon" | "image/vnd.microsoft.icon" => gpui::ImageFormat::Ico,
         _ => return None,
     };
     let bytes = base64::engine::general_purpose::STANDARD.decode(data).ok()?;

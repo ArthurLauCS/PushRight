@@ -62,7 +62,7 @@ impl PushRight {
         let current = cx.global::<Zone>().name.clone();
         let selected = zone_opts.iter().position(|o| o.value.as_ref() == current).unwrap_or(0);
         let zones = cx.new(|cx| SelectState::new(zone_opts, Some(IndexPath::new(selected)), window, cx).searchable(true));
-        let lang_opts = vec![Opt::new("en", "English"), Opt::new("zh-CN", "简体中文")];
+        let lang_opts = vec![Opt::new("en", "English"), Opt::new("zh-CN", "中文/Chinese")];
         let selected = if cx.global::<I18n>().locale == Locale::Zh { 1 } else { 0 };
         let languages = cx.new(|cx| SelectState::new(lang_opts, Some(IndexPath::new(selected)), window, cx));
         let subscriptions = vec![
@@ -406,7 +406,7 @@ impl PushRight {
                 .mb(px(4.))
                 .child(btn("diff-colors").quiet().icon(Icon::Contrast).tip(t.diff_colors.title).on_click(cx.listener(|this, _, window, cx| this.diff_colors(window, cx))))
                 .child(btn("auto-sync").quiet().icon(Icon::Sync).tip(t.auto_sync_settings).on_click(cx.listener(|this, _, window, cx| this.auto_sync_settings(window, cx))))
-                .child(div().mx(px(8.)).w(px(190.)).child(Select::new(&self.zones).small().menu_width(px(260.))))
+                .child(div().id("time-zone").mx(px(8.)).w(px(190.)).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.time_zone_hint).build(window, cx)).child(Select::new(&self.zones).small().menu_width(px(260.))))
                 .child(div().mr(px(8.)).w(px(120.)).child(Select::new(&self.languages).small()))
                 .child(
                     btn("theme")

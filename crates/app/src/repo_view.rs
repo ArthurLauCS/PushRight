@@ -1987,7 +1987,7 @@ impl RepoView {
             }
             if let Some(base) = &base {
                 let keep = refs.clone();
-                bar = bar.child(crate::ui::chip("scope-base", format!("{} ×", (t.compare_branch.against)(short(base))), p.accent, cx.listener(move |this, _, _, cx| this.set_scope(keep.clone(), cx).detach())));
+                bar = bar.child(div().id("scope-base-tip").tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.compare_branch.remove).build(window, cx)).child(crate::ui::chip("scope-base", format!("{} ×", (t.compare_branch.against)(short(base))), p.accent, cx.listener(move |this, _, _, cx| this.set_scope(keep.clone(), cx).detach()))));
                 if refs.len() == 1 {
                     bar = bar.child(btn("compare-files").small().text(t.compare_branch.files).on_click(cx.listener(|this, _, window, cx| this.compare_files(window, cx))));
                 }
