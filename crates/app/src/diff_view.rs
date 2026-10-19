@@ -10,7 +10,7 @@ use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, MONO, PROSE};
 use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
 use gpui::prelude::*;
-use gpui::{div, img, list, px, AnyElement, App, Context, Entity, FontStyle, Global, HighlightStyle, ListAlignment, ListOffset, ListState, ScrollWheelEvent, StyledText, Task, Window};
+use gpui::{div, img, list, px, AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -85,6 +85,19 @@ pub fn partial_blocked(cx: &App) -> bool {
 /// 一行占多少个等宽字符位：制表符按 4、中日韩字符按 2
 fn columns(text: &str) -> usize {
     text.chars().map(|c| if c == '\t' { 4 } else if c as u32 >= 0x2e80 { 2 } else { 1 }).sum()
+}
+
+/// 显示列换算成原文里的字节位置；落在一个字符中间时取近的那条边
+fn byte_at(text: &str, col: usize) -> usize {
+    let mut c = 0;
+    for (i, ch) in text.char_indices() {
+        let w = if ch == '\t' { 4 - c % 4 } else if ch as u32 >= 0x2e80 { 2 } else { 1 };
+        if col <= c + w / 2 {
+            return i;
+        }
+        c += w;
+    }
+    text.len()
 }
 
 /// 并排 diff 的一行：连续的删除和紧跟的新增逐行对齐，上下文两边各放一份；数字是行在区块里的下标
@@ -193,6 +206,14 @@ fn display(text: &str, spans: Option<&Spans>, hidden: bool, p: &Palette) -> (Str
     (out, merged)
 }
 
+/// 鼠标选中的文字：起点和终点都是（行在 items 里的下标，显示列）；并排时只在一栏里选，`side` 同 `code_line` 的 `half`
+#[derive(Clone, Copy, PartialEq)]
+struct TextSel {
+    side: Option<bool>,
+    anchor: (usize, usize),
+    head: (usize, usize),
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Readonly,
@@ -239,10 +260,17 @@ pub struct DiffView {
     _colors: Option<Task<()>>,
     /// 上一次布局时的宽度，算并排分隔条的位置
     width: Rc<std::cell::Cell<f32>>,
+    text_sel: Option<TextSel>,
+    dragging: bool,
+    /// 正文左边缘在窗口里的横坐标：单栏或并排左栏、并排右栏。按鼠标位置算列要用
+    code_left: Rc<std::cell::Cell<[f32; 2]>>,
+    /// 等宽字体一个字符的宽度
+    char_w: f32,
+    focus: FocusHandle,
 }
 
 impl DiffView {
-    pub fn new(_cx: &mut Context<Self>) -> DiffView {
+    pub fn new(cx: &mut Context<Self>) -> DiffView {
         DiffView {
             source: None,
             page: None,
@@ -264,6 +292,11 @@ impl DiffView {
             on_discard: None,
             _colors: None,
             width: Rc::new(std::cell::Cell::new(800.)),
+            text_sel: None,
+            dragging: false,
+            code_left: Rc::new(std::cell::Cell::new([0.; 2])),
+            char_w: 7.2,
+            focus: cx.focus_handle(),
         }
     }
 
@@ -295,6 +328,7 @@ impl DiffView {
     /// 内容或显示方式变了：重排行、清掉选择、后台重新着色
     fn rebuild(&mut self, reset_scroll: bool, cx: &mut Context<Self>) {
         self.selected.clear();
+        self.text_sel = None;
         self.scroll_x = 0.;
         let side = prefs(cx).side_by_side;
         let mut items = Vec::new();
@@ -443,6 +477,80 @@ impl DiffView {
         }
     }
 
+    /// 不换行时最多能往右滚多少
+    fn max_scroll(&self, cx: &App) -> f32 {
+        let p = prefs(cx);
+        let view = self.width.get() * if p.side_by_side { p.split_ratio.min(1. - p.split_ratio) } else { 1. };
+        (self.widest as f32 * self.char_w + 80. - view).max(0.)
+    }
+
+    fn line_at(&self, ix: usize, side: Option<bool>) -> Option<&Line> {
+        let d = self.diff()?;
+        let line = match (self.items.get(ix)?, side) {
+            (Item::Line(h, i), None) => &d.hunks[*h].lines[*i],
+            (Item::Split(h, l, r), Some(old)) => &d.hunks[*h].lines[(if old { *l } else { *r })?],
+            _ => return None,
+        };
+        (line.kind != '\\').then_some(line)
+    }
+
+    /// 这一行被选中的显示列范围，选到行尾是 usize::MAX；换行显示时按整行选
+    fn sel_cols(&self, ix: usize, side: Option<bool>, cx: &App) -> Option<(usize, usize)> {
+        let s = self.text_sel.filter(|s| s.side == side && s.anchor != s.head)?;
+        let (a, b) = if s.anchor <= s.head { (s.anchor, s.head) } else { (s.head, s.anchor) };
+        if ix < a.0 || ix > b.0 {
+            return None;
+        }
+        if prefs(cx).wrap {
+            return Some((0, usize::MAX));
+        }
+        Some((if ix == a.0 { a.1 } else { 0 }, if ix == b.0 { b.1 } else { usize::MAX }))
+    }
+
+    /// 鼠标横坐标对应的显示列；换行显示时没法按横坐标算，起点取行首、终点取行尾
+    fn col_at(&self, side: Option<bool>, x: Pixels, end: bool, cx: &App) -> usize {
+        if prefs(cx).wrap {
+            return if end { usize::MAX } else { 0 };
+        }
+        let left = self.code_left.get()[(side == Some(false)) as usize];
+        ((f32::from(x) - left + self.scroll_x) / self.char_w).round().max(0.) as usize
+    }
+
+    fn press(&mut self, ix: usize, side: Option<bool>, x: Pixels, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus, cx);
+        let col = self.col_at(side, x, false, cx);
+        self.text_sel = Some(TextSel { side, anchor: (ix, col), head: (ix, col) });
+        self.dragging = true;
+        cx.notify();
+    }
+
+    fn drag(&mut self, ix: usize, side: Option<bool>, x: Pixels, cx: &mut Context<Self>) {
+        let col = self.col_at(side, x, true, cx);
+        if let Some(s) = self.text_sel.as_mut().filter(|s| s.side == side) {
+            if s.head != (ix, col) {
+                s.head = (ix, col);
+                cx.notify();
+            }
+        }
+    }
+
+    /// 复制选中的原文：制表符和空格是真实字符，不是显示用的箭头和点
+    fn copy(&self, cx: &mut App) {
+        let Some(s) = self.text_sel else { return };
+        let (a, b) = (s.anchor.0.min(s.head.0), s.anchor.0.max(s.head.0));
+        let lines: Vec<&str> = (a..=b)
+            .filter_map(|ix| {
+                let (c0, c1) = self.sel_cols(ix, s.side, cx)?;
+                let text = self.line_at(ix, s.side)?.text.as_str();
+                let start = byte_at(text, c0);
+                Some(&text[start..byte_at(text, c1).max(start)])
+            })
+            .collect();
+        if !lines.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(lines.join("\n")));
+        }
+    }
+
     fn label(&self, h: usize, cx: &App) -> String {
         let t = t(cx);
         let n = self.picked(h).len();
@@ -456,7 +564,7 @@ impl DiffView {
 }
 
 /// 一行代码：行号、增删记号、正文。`old`：并排时左栏只显示旧行号
-fn code_line(this: &Entity<DiffView>, v: &DiffView, h: usize, i: usize, half: Option<bool>, p: &Palette, cx: &App) -> AnyElement {
+fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usize, half: Option<bool>, p: &Palette, cx: &App) -> AnyElement {
     let d = v.diff().unwrap();
     let line = &d.hunks[h].lines[i];
     let prefs = prefs(cx);
@@ -474,11 +582,35 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, h: usize, i: usize, half: Op
     let wrap = prefs.wrap;
     let shift = if wrap { 0. } else { v.scroll_x };
     let group: gpui::SharedString = format!("line-{h}-{i}-{}", half.map_or(2, |b| b as u8)).into();
+    // 选中的文字底下垫一块强调色；等宽字体按列算位置
+    let highlight = v.sel_cols(ix, half, cx).map(|(c0, c1)| {
+        let cols = columns(&line.text);
+        let (a, b) = (c0.min(cols), c1.min(cols));
+        let w = (b.saturating_sub(a) as f32 + if c1 > cols { 0.5 } else { 0. }) * v.char_w;
+        div().absolute().top_0().bottom_0().bg(alpha(p.accent, 0.35)).when(wrap, |s| s.left_0().right_0()).when(!wrap, |s| s.left(px(a as f32 * v.char_w - shift)).w(px(w)))
+    });
+    let left = v.code_left.clone();
+    let side = (half == Some(false)) as usize;
     let code = div()
+        .relative()
         .flex_1()
         .min_w_0()
         .overflow_hidden()
+        .cursor_text()
         .when(line.kind == '\\', |s| s.text_color(p.muted))
+        .child(
+            gpui::canvas(
+                move |b, _, _| {
+                    let mut l = left.get();
+                    l[side] = f32::from(b.origin.x);
+                    left.set(l);
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        )
+        .children(highlight)
         .child(div().ml(px(-shift)).when(!wrap, |s| s.whitespace_nowrap()).child(StyledText::new(text).with_highlights(styles)));
     let mut row = div()
         .id(gpui::ElementId::Name(group.clone()))
@@ -507,9 +639,26 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, h: usize, i: usize, half: Op
                 .bg(if selected { p.accent } else { bar })
                 .when(editable && !selected, |s| s.group_hover(group, |s| s.bg(p.border_strong))),
         );
+    let (t1, t2) = (this.clone(), this.clone());
+    row = row
+        .on_mouse_down(MouseButton::Left, move |e, window, cx| t1.update(cx, |v, cx| v.press(ix, half, e.position.x, window, cx)))
+        .on_mouse_move(move |e, _, cx| {
+            t2.update(cx, |v, cx| {
+                if v.dragging && e.pressed_button == Some(MouseButton::Left) {
+                    v.drag(ix, half, e.position.x, cx);
+                }
+            })
+        });
     if editable {
         let this = this.clone();
-        row = row.cursor_pointer().on_click(move |_, _, cx| this.update(cx, |v, cx| v.toggle(h, i, cx)));
+        // 拖出了一段文字是在选字，不切换这一行的暂存选择
+        row = row.cursor_pointer().on_click(move |_, _, cx| {
+            this.update(cx, |v, cx| {
+                if v.text_sel.is_none_or(|s| s.anchor == s.head) {
+                    v.toggle(h, i, cx)
+                }
+            })
+        });
     }
     row.into_any_element()
 }
@@ -550,11 +699,11 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             }
             bar.font_family(crate::theme::UI).into_any_element()
         }
-        Item::Line(h, i) => code_line(this, v, h, i, None, &p, cx),
+        Item::Line(h, i) => code_line(this, v, ix, h, i, None, &p, cx),
         Item::Split(h, l, r) => {
             let ratio = prefs(cx).split_ratio;
             let half = |side: Option<usize>, old: bool| match side {
-                Some(i) => code_line(this, v, h, i, Some(old), &p, cx),
+                Some(i) => code_line(this, v, ix, h, i, Some(old), &p, cx),
                 None => div().size_full().min_h(px(LINE_H)).bg(p.hover).into_any_element(),
             };
             // 两栏按比例占满视窗，不随内容变宽；右栏左边一条分隔线
@@ -573,6 +722,8 @@ impl Render for DiffView {
         let p = palette(cx).clone();
         let t = t(cx);
         let dp = prefs(cx).clone();
+        let font = window.text_system().resolve_font(&gpui::font(MONO));
+        self.char_w = window.text_system().advance(font, FS_SM, '0').map_or(7.2, |s| f32::from(s.width));
         let step = CONTEXT_STEPS.iter().position(|&c| c == dp.context).unwrap_or(2);
         let has_hunks = self.diff().is_some_and(|d| !d.hunks.is_empty());
         let tool = |id: &'static str, icn: Icon, tip: String, on: bool| btn(id).small().quiet().icon_size(icn, px(14.)).on(on).tip(tip);
@@ -679,6 +830,14 @@ impl Render for DiffView {
                     .relative()
                     .flex_1()
                     .min_h_0()
+                    .track_focus(&self.focus)
+                    .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                        if e.keystroke.modifiers.control && e.keystroke.key == "c" {
+                            this.copy(cx);
+                            cx.stop_propagation();
+                        }
+                    }))
+                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.dragging = false))
                     .child(measure)
                     .child(lines)
                     .on_scroll_wheel(cx.listener(|this, e: &ScrollWheelEvent, window, cx| {
@@ -689,13 +848,49 @@ impl Render for DiffView {
                         let delta = e.delta.pixel_delta(window.line_height());
                         let dx = if e.shift { delta.y } else { delta.x };
                         if f32::from(dx) != 0. {
-                            let em = 7.2;
-                            let max = (this.widest as f32 * em + 80. - this.width.get() * if prefs(cx).side_by_side { prefs(cx).split_ratio.min(1. - prefs(cx).split_ratio) } else { 1. }).max(0.);
+                            let max = this.max_scroll(cx);
                             this.scroll_x = (this.scroll_x - f32::from(dx)).clamp(0., max);
                             cx.stop_propagation();
                             cx.notify();
                         }
                     }));
+                // 不换行且有超出的长行时，底部一条横向滚动条，可拖动；并排时两栏一起滚
+                let max = self.max_scroll(cx);
+                if !dp.wrap && max > 0. {
+                    let width = self.width.get();
+                    let view = width * if dp.side_by_side { dp.split_ratio.min(1. - dp.split_ratio) } else { 1. };
+                    let thumb = (width * view / (view + max)).max(24.);
+                    let (from, me) = (self.scroll_x, cx.entity());
+                    body = body.child(
+                        div().absolute().left_0().right_0().bottom_0().h(px(10.)).bg(alpha(p.panel, 0.85)).border_t_1().border_color(p.border).child(
+                            div()
+                                .id("hscroll")
+                                .absolute()
+                                .top(px(2.))
+                                .bottom(px(2.))
+                                .left(px((width - thumb) * from / max))
+                                .w(px(thumb))
+                                .rounded(px(3.))
+                                .bg(p.border_strong)
+                                .hover(|s| s.bg(p.muted))
+                                .on_mouse_down(gpui::MouseButton::Left, move |e, _, cx| {
+                                    cx.stop_propagation();
+                                    let me = me.clone();
+                                    layout::start(
+                                        e.position,
+                                        true,
+                                        move |delta, cx| {
+                                            me.update(cx, |v, cx| {
+                                                v.scroll_x = (from + delta * max / (width - thumb).max(1.)).clamp(0., max);
+                                                cx.notify();
+                                            })
+                                        },
+                                        cx,
+                                    );
+                                }),
+                        ),
+                    );
+                }
                 if dp.side_by_side {
                     let ratio = dp.split_ratio;
                     let width = self.width.get();
@@ -753,6 +948,7 @@ fn data_image(src: &str) -> Option<Arc<gpui::Image>> {
         "image/bmp" => gpui::ImageFormat::Bmp,
         "image/svg+xml" => gpui::ImageFormat::Svg,
         "image/tiff" => gpui::ImageFormat::Tiff,
+        "image/x-icon" | "image/vnd.microsoft.icon" => gpui::ImageFormat::Ico,
         _ => return None,
     };
     let bytes = base64::engine::general_purpose::STANDARD.decode(data).ok()?;
@@ -786,5 +982,19 @@ mod tests {
     #[test]
     fn columns_count_wide_chars() {
         assert_eq!(columns("a\t中"), 1 + 4 + 2);
+    }
+
+    #[test]
+    fn selection_columns_map_to_bytes() {
+        // a 占第 0 列，制表符补到第 4 列，中占 4、5 两列
+        let s = "a\t中b";
+        assert_eq!(byte_at(s, 0), 0);
+        assert_eq!(byte_at(s, 1), 1);
+        assert_eq!(byte_at(s, 2), 1);
+        assert_eq!(byte_at(s, 3), 2);
+        assert_eq!(byte_at(s, 4), 2);
+        assert_eq!(byte_at(s, 5), 2);
+        assert_eq!(byte_at(s, 6), 5);
+        assert_eq!(byte_at(s, usize::MAX), s.len());
     }
 }

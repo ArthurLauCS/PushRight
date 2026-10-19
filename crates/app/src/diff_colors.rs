@@ -24,6 +24,12 @@ pub fn hex(value: &str) -> Option<Hsla> {
     is_diff_color(value).then(|| rgb(u32::from_str_radix(&value[1..], 16).unwrap()).into())
 }
 
+pub fn to_hex(color: Hsla) -> String {
+    let c = color.to_rgb();
+    let b = |x: f32| (x.clamp(0., 1.) * 255.).round() as u8;
+    format!("#{:02x}{:02x}{:02x}", b(c.r), b(c.g), b(c.b))
+}
+
 impl DiffColors {
     pub fn hsla(&self) -> Option<(Hsla, Hsla)> {
         Some((hex(&self.added)?, hex(&self.deleted)?))
@@ -42,5 +48,6 @@ mod tests {
         assert!(!is_diff_color("#0072b"));
         assert!(!is_diff_color("#0072bz"));
         assert!(DiffColors { added: "#000000".into(), deleted: "red".into() }.hsla().is_none());
+        assert_eq!(to_hex(hex("#0072b2").unwrap()), "#0072b2");
     }
 }

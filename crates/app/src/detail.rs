@@ -53,6 +53,8 @@ pub struct DetailView {
     review_key: String,
     /// 版本比较里不显示作者、提交号这些
     pub comparison: bool,
+    /// 嵌在仓库工具里（变基预览）：父提交只显示不跳转，跳到提交图会离开仓库工具
+    pub embedded: bool,
     request: usize,
     _subs: Vec<Subscription>,
 }
@@ -83,6 +85,7 @@ impl DetailView {
             reviewed: Vec::new(),
             review_key: String::new(),
             comparison: false,
+            embedded: false,
             request: 0,
             _subs: subs,
         }
@@ -200,7 +203,8 @@ impl DetailView {
                         this.open(next, cx);
                     }))
                     .on_mouse_down(MouseButton::Right, cx.listener(move |this, e: &MouseDownEvent, window, cx| {
-                        let Some(id) = this.detail.as_ref().map(|d| d.id.clone()) else { return };
+                        // 文件菜单按单个提交取补丁，和比较的两端对不上
+                        let Some(id) = this.detail.as_ref().filter(|_| !this.comparison).map(|d| d.id.clone()) else { return };
                         let (at, file) = (e.position, p3.clone());
                         let _ = this.repo.update(cx, |r, cx| r.commit_file_menu(at, id, file, gone, window, cx));
                     }))
@@ -290,7 +294,7 @@ impl Render for DetailView {
                 info = info.child(div().max_w(px(72. * 8.)).mb(px(16.)).font_family(PROSE).text_size(FS_MD).line_height(relative(LH_BODY)).child(body.to_owned()));
             }
             if !self.comparison {
-                let row = |k: &str, v: gpui::AnyElement| div().flex().gap(px(16.)).child(div().w(px(56.)).flex_none().text_color(p.muted).child(k.to_owned())).child(div().flex_1().min_w_0().child(v));
+                let row = |k: &str, v: gpui::AnyElement| div().flex().gap(px(16.)).child(div().w(px(72.)).flex_none().text_color(p.muted).child(k.to_owned())).child(div().flex_1().min_w_0().child(v));
                 let mut dl = div().flex().flex_col().gap(px(4.)).pt(px(12.)).border_t_1().border_color(p.border).text_size(FS_SM);
                 dl = dl.child(row(t.col_commit, div().font_family(MONO).child(detail.id.clone()).into_any_element()));
                 dl = dl.child(row(
@@ -310,15 +314,17 @@ impl Render for DetailView {
                     let parents = div().flex().gap(px(8.)).children(detail.parents.iter().map(|parent| {
                         let id = parent.clone();
                         let repo = self.repo.clone();
+                        let embedded = self.embedded;
                         div()
                             .id(SharedString::from(format!("parent-{parent}")))
                             .font_family(MONO)
-                            .text_color(p.accent)
-                            .cursor_pointer()
-                            .hover(|s| s.underline())
+                            .text_color(if embedded { p.muted } else { p.accent })
+                            .when(!embedded, |s| s.cursor_pointer().hover(|s| s.underline()))
                             .child(parent[..8.min(parent.len())].to_owned())
                             .on_click(move |_, _, cx| {
-                                let _ = repo.update(cx, |r, cx| r.jump(&id, cx));
+                                if !embedded {
+                                    let _ = repo.update(cx, |r, cx| r.jump(&id, cx));
+                                }
                             })
                     }));
                     dl = dl.child(row(t.parents, parents.into_any_element()));

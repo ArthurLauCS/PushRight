@@ -15,7 +15,7 @@ pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoEleme
     // 列宽按比例：文件夹、分支、改动、同步、最后提交、操作
     let cols = |cells: [gpui::AnyElement; 6]| {
         let widths = [1.3, 1.0, 0.0, 0.0, 1.4, 0.0];
-        let fixed = [None, None, Some(96.), Some(160.), None, Some(168.)];
+        let fixed = [None, None, Some(136.), Some(160.), None, Some(168.)];
         let mins = [160., 120., 0., 0., 160., 0.];
         div().flex().items_center().gap(px(16.)).children(cells.into_iter().enumerate().map(move |(i, c)| {
             let cell = div().min_w_0().overflow_hidden();
@@ -42,8 +42,8 @@ pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoEleme
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(div().px(px(8.)).py(px(2.)).rounded(R_SM).text_color(p.accent).bg(p.accent_soft).text_size(FS_SM).font_weight(FontWeight::SEMIBOLD).truncate().child(w.branch.as_deref().map(short).unwrap_or(t.detached).to_owned()))
-            .when(w.current, |s| s.child(small(t.wt_current.into())))
+            .child(div().min_w_0().px(px(8.)).py(px(2.)).rounded(R_SM).text_color(p.accent).bg(p.accent_soft).text_size(FS_SM).font_weight(FontWeight::SEMIBOLD).truncate().child(w.branch.as_deref().map(short).unwrap_or(t.detached).to_owned()))
+            .when(w.current, |s| s.child(small(t.wt_current.into()).flex_none()))
             .into_any_element();
         let changes = div().when(w.changes > 0, |s| s.text_color(p.yellow)).child(if w.changes > 0 { (t.wt_dirty)(w.changes) } else { t.wt_clean.into() }).into_any_element();
         let sync = match w.ahead_behind {

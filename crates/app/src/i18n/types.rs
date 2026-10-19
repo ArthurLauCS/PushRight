@@ -5,18 +5,12 @@ use super::{Dict, Explain};
 
 pub struct DiffColors {
     pub title: &'static str,
-    pub preset: &'static str,
     pub r#default: &'static str,
-    pub custom: &'static str,
-    pub blue_orange: &'static str,
-    pub purple_gold: &'static str,
-    pub cyan_rose: &'static str,
     pub added: &'static str,
     pub deleted: &'static str,
     pub preview: &'static str,
     pub hint: &'static str,
     pub editor_hint: &'static str,
-    pub invalid: &'static str,
     pub same: &'static str,
 }
 
@@ -31,6 +25,50 @@ pub struct AutoFf {
     pub dirty: fn(&str) -> String,
     pub elsewhere: fn(&str) -> String,
     pub failed: fn(&str) -> String,
+}
+
+/// 页签右键菜单
+pub struct TabMenu {
+    pub rename: &'static str,
+    pub rename_hint: &'static str,
+    pub name: &'static str,
+    pub copy_path: &'static str,
+    pub close_others: &'static str,
+}
+
+/// GitHub 拉取请求
+pub struct PullRequests {
+    pub nav: &'static str,
+    pub refresh: &'static str,
+    pub empty: &'static str,
+    pub create_menu: &'static str,
+    pub create_title: fn(&str) -> String,
+    pub create: &'static str,
+    pub base: &'static str,
+    pub title: &'static str,
+    pub body: &'static str,
+    pub draft: &'static str,
+    pub push_first: fn(&str) -> String,
+    pub no_base: &'static str,
+    pub open: &'static str,
+    pub open_number: fn(u64) -> String,
+    pub checkout: &'static str,
+    pub merge_menu: &'static str,
+    pub merge_title: fn(u64) -> String,
+    pub merge: &'static str,
+    pub method: &'static str,
+    pub merge_commit: &'static str,
+    pub squash: &'static str,
+    pub rebase: &'static str,
+    pub checks_failed: &'static str,
+    pub copy_link: &'static str,
+    pub draft_mark: &'static str,
+    pub approved: &'static str,
+    pub changes_requested: &'static str,
+    pub review_required: &'static str,
+    pub checks_success: &'static str,
+    pub checks_failure: &'static str,
+    pub checks_pending: &'static str,
 }
 
 pub struct FileMenu {
@@ -343,6 +381,8 @@ pub struct Messages {
     pub auto_fetch_failed: &'static str,
     pub fast_forward_to: fn(&str) -> String,
     pub auto_ff: AutoFf,
+    pub tabs: TabMenu,
+    pub pr: PullRequests,
     pub file_menu: FileMenu,
     pub external_tools: ExternalTools,
     pub copy_name: &'static str,

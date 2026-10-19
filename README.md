@@ -77,7 +77,7 @@ Open a local repository, or pass its path when launching:
 
 ### Diff colors
 
-The toolbar’s **Diff Colors** dialog offers Blue / Orange, Purple / Gold and Cyan / Rose presets, or independent added/deleted HEX colors. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
+The toolbar’s **Diff Colors** dialog has a color picker each for added and deleted lines, with the theme colors and Blue / Orange, Purple / Gold and Cyan / Rose swatches, and previews the result as you pick. Preferences persist locally; **Restore original colors** follows the app theme again. Diff lines retain + / − markers and colored borders.
 
 ### Commit and push
 
@@ -122,8 +122,9 @@ Measurements on a local Linux repository with 1.48 million commits and a 128 MiB
 
 ### Included features
 
-- Multiple repository tabs, recent repositories and session restoration.
-- Virtualized graph, branches, tags, commit details and file diffs.
+- Repository tabs on their own row, sharing its width; drag to reorder, double-click or right-click to rename (handy for several worktrees of one repository). Each tab shows the checked-out branch. Recent repositories and session restoration.
+- GitHub pull requests: the sidebar lists open pull requests with review and check status; create one from a branch (pushed first when needed), check one out, or merge it on GitHub (merge commit, squash or rebase). Uses [GitHub CLI](https://cli.github.com/); when `gh` is not signed in, the GitHub sign-in saved by Git Credential Manager is used.
+- Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`.
 - Stage, unstage, commit and amend; file, hunk and selected-line operations.
 - Create, switch, rename and delete branches; merge, rebase, cherry-pick, revert, reset and tags.
 - Fetch, explicit Pull mode, destination-aware Push and stashes.
@@ -156,12 +157,11 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, PR / Issue integra
 
 ## Current limits
 
-- PR / Issue and hosting-provider collaboration are not delivered yet.
+- GitLab merge requests and issues are not supported yet.
 - Visible rows are virtualized, but complete history is still read in the background.
 - Large patches offer read-only pages that rescan the Git stream; Git may still consume time and memory before producing output. Partial staging/discard remains limited to 4 MiB patches.
 - The graph has at most 24 lanes, reduced by available width. Highly parallel histories can omit connections.
 - No automatic updates or macOS / Linux installers yet.
-- Diff text cannot be selected or copied with the mouse yet.
 - Undo covers some local operations, not every Git action. Check prompts before destructive operations.
 
 ## Development
