@@ -11,6 +11,7 @@ use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
 use gpui::prelude::*;
 use gpui::{div, img, list, px, AnyElement, App, Context, Entity, FontStyle, Global, HighlightStyle, ListAlignment, ListOffset, ListState, ScrollWheelEvent, StyledText, Task, Window};
+use gpui_component::scroll::ScrollableElement;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -317,11 +318,10 @@ impl DiffView {
         }
         self.widest = widest;
         self.items = Rc::new(items);
-        if reset_scroll {
-            self.list.reset(self.items.len());
-        } else {
-            let top = self.list.logical_scroll_top();
-            self.list.reset(self.items.len());
+        // 没画过的行按一行高估算，滚动条从一开始就按整份 diff 的长度算
+        let top = self.list.logical_scroll_top();
+        self.list.reset_with_uniform_height(self.items.len(), px(LINE_H));
+        if !reset_scroll {
             self.list.scroll_to(top);
         }
         self.recolor(cx);
@@ -695,7 +695,8 @@ impl Render for DiffView {
                             cx.stop_propagation();
                             cx.notify();
                         }
-                    }));
+                    }))
+                    .vertical_scrollbar(&self.list);
                 if dp.side_by_side {
                     let ratio = dp.split_ratio;
                     let width = self.width.get();
