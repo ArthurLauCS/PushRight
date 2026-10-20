@@ -1074,7 +1074,7 @@ impl RepoView {
         self.then(rx, window, cx, move |this, _, _, cx| this.exec_detached(op, cx));
     }
 
-    fn head(&self) -> Option<String> {
+    pub(crate) fn head(&self) -> Option<String> {
         self.refs.head.as_deref().and_then(|h| h.strip_prefix("refs/heads/")).map(str::to_owned)
     }
 

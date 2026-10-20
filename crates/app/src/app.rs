@@ -336,25 +336,29 @@ impl PushRight {
             let id = tab.id;
             let active = self.active == Some(id);
             let name = tab.path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(&tab.path).to_owned();
+            let branch = tab.view.read(cx).head();
             let group: SharedString = format!("tab-{id}").into();
             nav = nav.child(
                 div()
                     .id(("tab", id))
                     .group(group.clone())
+                    .relative()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .justify_center()
+                    .gap(px(6.))
                     .h(px(32.))
                     .min_w_0()
-                    .max_w(px(220.))
-                    .pl(px(16.))
-                    .pr(px(8.))
+                    .max_w(px(320.))
+                    // 左右留出一样宽的位置，关闭按钮浮在右边，仓库名和分支名在标签正中
+                    .px(px(32.))
                     .mb(px(-1.))
                     .border_1()
                     .border_b_0()
                     .rounded_t(R_MD)
                     .font_family(DISPLAY)
-                    .when(active, |s| s.bg(p.panel).border_color(p.border).text_color(p.text).font_weight(FontWeight::BOLD))
+                    .font_weight(FontWeight::BOLD)
+                    .when(active, |s| s.bg(p.panel).border_color(p.border).text_color(p.text))
                     .when(!active, |s| s.border_color(theme::alpha(p.border, 0.)).text_color(p.muted).hover(|s| s.bg(p.hover).text_color(p.text)))
                     .tooltip({
                         let path: SharedString = tab.path.clone().into();
@@ -366,9 +370,12 @@ impl PushRight {
                     }))
                     .on_mouse_down(MouseButton::Middle, cx.listener(move |this, _, _, cx| this.close(id, cx)))
                     .child(div().min_w_0().truncate().child(name))
+                    .when_some(branch, |s, b| s.child(icon(Icon::Branch, px(12.), p.muted)).child(div().min_w_0().truncate().text_color(if active { p.accent } else { p.muted }).child(b)))
                     .child(
                         div()
                             .id(("close", id))
+                            .absolute()
+                            .right(px(6.))
                             .flex()
                             .flex_none()
                             .items_center()
