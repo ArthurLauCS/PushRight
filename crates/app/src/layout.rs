@@ -4,7 +4,7 @@
 use crate::store;
 use crate::theme::palette;
 use gpui::prelude::*;
-use gpui::{div, px, App, ElementId, Global, MouseButton, MouseMoveEvent, Pixels, Window};
+use gpui::{div, px, App, ElementId, Global, KeyDownEvent, MouseButton, MouseMoveEvent, Pixels, Window};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -100,7 +100,7 @@ fn slot(l: &mut Layout, key: Key) -> &mut f32 {
     }
 }
 
-/// 改布局里一项的分隔条。`invert`：被调整的栏位在分隔条的右侧或下方，拖动方向与尺寸变化相反。双击恢复默认
+/// 改布局里一项的分隔条。`invert`：被调整的栏位在分隔条的右侧或下方，拖动方向与尺寸变化相反。双击或 Home 恢复默认
 pub fn splitter(id: impl Into<ElementId>, key: Key, horizontal: bool, min: f32, max: f32, invert: bool, cx: &App) -> impl IntoElement {
     bar(
         id,
@@ -118,18 +118,29 @@ pub fn splitter(id: impl Into<ElementId>, key: Key, horizontal: bool, min: f32, 
             cx.set_global(l);
             store::set(cx, "layout", l);
         },
+        move |delta, cx| {
+            let mut l = layout(cx);
+            let v = slot(&mut l, key);
+            *v = (*v + if invert { -delta } else { delta }).clamp(min, max).round();
+            cx.set_global(l);
+            store::set(cx, "layout", l);
+        },
         cx,
     )
 }
 
-/// 看得见的是 1px 的线，能抓住的是它两侧各 4px；悬停时线变成强调色
+/// 看得见的是 1px 的线，能抓住的是它两侧各 4px；悬停时线变成强调色。
+/// 点过或用 Tab 聚焦后方向键每次挪 10px（按住 Shift 40px），交给 `on_key`；Home 同双击
 pub fn bar(
     id: impl Into<ElementId>,
     horizontal: bool,
     on_down: impl Fn(gpui::Point<Pixels>, &mut App) + 'static,
     on_reset: impl Fn(&mut App) + 'static,
+    on_key: impl Fn(f32, &mut App) + 'static,
     cx: &App,
 ) -> impl IntoElement {
+    let on_reset = Rc::new(on_reset);
+    let reset = on_reset.clone();
     let p = palette(cx);
     let accent = p.accent;
     let line = div()
@@ -142,6 +153,19 @@ pub fn bar(
         .absolute()
         .when(horizontal, |s| s.top_0().bottom_0().left(px(-4.)).w(px(9.)).cursor_col_resize())
         .when(!horizontal, |s| s.left_0().right_0().top(px(-4.)).h(px(9.)).cursor_row_resize())
+        .focusable()
+        .focus_visible(move |s| s.bg(crate::theme::alpha(accent, 0.5)))
+        .on_key_down(move |e: &KeyDownEvent, window, cx| {
+            let step = if e.keystroke.modifiers.shift { 40. } else { 10. };
+            match (e.keystroke.key.as_str(), horizontal) {
+                ("left", true) | ("up", false) => on_key(-step, cx),
+                ("right", true) | ("down", false) => on_key(step, cx),
+                ("home", _) => reset(cx),
+                _ => return,
+            }
+            cx.stop_propagation();
+            window.refresh();
+        })
         .on_mouse_down(MouseButton::Left, move |e, _, cx| {
             cx.stop_propagation();
             if e.click_count == 2 {

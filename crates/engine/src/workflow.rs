@@ -152,6 +152,10 @@ pub fn launch(repo: &Repo, kind: &str, tool: &str, mode: &str, id: &str, path: &
         args.extend(["-c".into(), format!("{command}.pushright.cmd={tool}"), "-c".into(), format!("{command}.pushright.trustExitCode=true")]);
         "pushright"
     } else {
+        // git mergetool 是 shell 脚本，光启动就可能超过下面等报错的 1.5 秒；工具名先在这里核对，写错立刻报错
+        if !known_tool(repo, &command, tool) {
+            return Err(format!("{command}.{tool}.cmd not set for tool '{tool}'"));
+        }
         tool
     };
     args.extend([command, "-y".into(), "-t".into(), name.to_owned()]);
@@ -178,6 +182,16 @@ pub fn launch(repo: &Repo, kind: &str, tool: &str, mode: &str, id: &str, path: &
         }
     }
     Ok(())
+}
+
+/// Git 自带的工具（exec-path 下 mergetools 里有同名脚本，bc3、bc4 这类带版本号的算 bc），或配置里写了命令的
+fn known_tool(repo: &Repo, command: &str, tool: &str) -> bool {
+    let builtin = repo.git(&["--exec-path"]).is_ok_and(|out| {
+        let dir = std::path::PathBuf::from(decode(&out).trim()).join("mergetools");
+        dir.join(tool).is_file() || dir.join(tool.trim_end_matches(|c: char| c.is_ascii_digit())).is_file()
+    });
+    // difftool 没配命令时会用同名 mergetool 的
+    builtin || [command, "mergetool"].iter().any(|c| repo.git(&["config", "--get", &format!("{c}.{tool}.cmd")]).is_ok())
 }
 
 #[cfg(test)]

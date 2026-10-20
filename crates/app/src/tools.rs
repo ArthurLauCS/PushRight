@@ -96,6 +96,7 @@ impl Tools {
         let compare_detail = detail(window, cx);
         compare_detail.update(cx, |d, _| d.comparison = true);
         let preview_detail = detail(window, cx);
+        preview_detail.update(cx, |d, _| d.embedded = true);
         let input = |window: &mut Window, cx: &mut Context<Self>| cx.new(|cx| InputState::new(window, cx));
         let pattern = input(window, cx);
         let lock_path = input(window, cx);
@@ -427,7 +428,7 @@ impl Tools {
             .child(btn("compare").primary().text(t.tools.compare).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.run_compare(cx))));
         let mut out = vec![form.into_any_element()];
         if self.comparison.is_some() {
-            out.push(div().flex().flex_col().min_h(px(300.)).h(px(520.)).child(self.compare_detail.clone()).into_any_element());
+            out.push(div().flex().flex_col().flex_1().min_h(px(300.)).child(self.compare_detail.clone()).into_any_element());
         }
         out
     }
@@ -486,7 +487,7 @@ impl Tools {
             })).into_any_element());
         }
         let stale = head_id.as_deref() != Some(&plan.head);
-        out.push(div().child(btn("apply-plan").primary().text(t.tools.apply_plan).disabled(busy || n == 0 || in_progress || stale).on_click(cx.listener(|this, _, window, cx| this.apply_plan(window, cx)))).into_any_element());
+        out.push(div().flex().child(btn("apply-plan").primary().text(t.tools.apply_plan).disabled(busy || n == 0 || in_progress || stale).on_click(cx.listener(|this, _, window, cx| this.apply_plan(window, cx)))).into_any_element());
         out
     }
 
@@ -508,7 +509,7 @@ impl Tools {
                     cx.notify();
                 })).into_any_element());
                 let empty = self.patch.read(cx).value().trim().is_empty();
-                out.push(div().child(btn("apply-patch").primary().text(r.patch_apply).disabled(busy || empty).on_click(cx.listener(|this, _, window, cx| {
+                out.push(div().flex().child(btn("apply-patch").primary().text(r.patch_apply).disabled(busy || empty).on_click(cx.listener(|this, _, window, cx| {
                     let text = this.patch.read(cx).value().to_string();
                     let run = this.extra(Op::ApplyPatch { text, index: this.index }, cx);
                     cx.spawn_in(window, async move |this, cx| {
@@ -536,7 +537,7 @@ impl Tools {
                     }
                     (Some(_), Some((id, subject))) => {
                         out.push(div().text_color(p.green).child((r.bisect_found)(&id[..12.min(id.len())], &subject)).into_any_element());
-                        out.push(div().child(btn("bisect-reset").primary().text(r.bisect_reset).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.extra(Op::BisectReset, cx).detach()))).into_any_element());
+                        out.push(div().flex().child(btn("bisect-reset").primary().text(r.bisect_reset).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.extra(Op::BisectReset, cx).detach()))).into_any_element());
                     }
                     (Some(_), None) => {
                         let head = self.repo.upgrade().and_then(|r| r.read(cx).refs.head_id.clone()).unwrap_or_default();
@@ -556,7 +557,7 @@ impl Tools {
                     }
                 }
                 if let Some(log) = &self.bisecting {
-                    out.push(div().child(div().text_color(p.muted).mb(px(8.)).child(r.bisect_log)).child(pre(log, &p)).into_any_element());
+                    out.push(div().child(div().text_color(p.muted).mb(px(8.)).child(r.bisect_log)).child(pre("bisect-log", log, &p)).into_any_element());
                 }
             }
             Section::Submodules => {
@@ -626,6 +627,7 @@ impl Tools {
                                         .id(SharedString::from(format!("month-{}", m.name)))
                                         .flex_1()
                                         .min_w(px(1.))
+                                        .max_w(px(48.))
                                         .min_h(px(1.))
                                         .h(relative(m.count as f32 / peak_n as f32))
                                         .bg(p.accent)
@@ -739,13 +741,13 @@ impl Tools {
                         .into_any_element(),
                 );
                 if let Some(locks) = &self.locks {
-                    out.push(pre(if locks.is_empty() { r.lfs_no_locks } else { locks }, &p).into_any_element());
+                    out.push(pre("lfs-locks", if locks.is_empty() { r.lfs_no_locks } else { locks }, &p).into_any_element());
                 }
             }
             _ => {}
         }
         if let Some(log) = self.last.as_ref().filter(|l| !l.output.is_empty() && (self.section != Section::Patch || !l.ok)) {
-            out.push(pre(&log.output, &p).when(!log.ok, |s| s.text_color(p.red)).into_any_element());
+            out.push(pre("last-output", &log.output, &p).when(!log.ok, |s| s.text_color(p.red)).into_any_element());
         }
         out
     }
@@ -756,8 +758,9 @@ fn prose(text: &str, cx: &App) -> AnyElement {
     div().max_w(px(72. * 8.)).text_color(p.muted).line_height(relative(LH_BODY)).child(text.to_owned()).into_any_element()
 }
 
-fn pre(text: &str, p: &crate::theme::Palette) -> gpui::Div {
-    div().px(px(16.)).py(px(12.)).max_h(px(320.)).bg(p.panel).border_1().border_color(p.border).rounded(R_MD).font_family(MONO).text_size(FS_SM).child(text.to_owned())
+/// 命令输出：超过 320px 高时在框里滚动
+fn pre(id: &'static str, text: &str, p: &crate::theme::Palette) -> gpui::Stateful<gpui::Div> {
+    div().id(id).overflow_y_scroll().px(px(16.)).py(px(12.)).max_h(px(320.)).bg(p.panel).border_1().border_color(p.border).rounded(R_MD).font_family(MONO).text_size(FS_SM).child(text.to_owned())
 }
 
 impl Render for Tools {
@@ -777,7 +780,7 @@ impl Render for Tools {
             }
             nav = nav.child(row);
         }
-        let mut page = div().id("toolbox").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().px(px(32.)).py(px(24.)).gap(px(16.)).text_size(FS_MD).child(nav);
+        let mut page = div().id("toolbox").flex().flex_col().flex_1().min_w_0().min_h_0().overflow_y_scroll().px(px(32.)).py(px(24.)).gap(px(16.)).text_size(FS_MD).child(nav);
         if !self.error.is_empty() {
             page = page.child(div().text_color(p.red).child(self.error.clone()));
         }
@@ -785,7 +788,7 @@ impl Render for Tools {
             Section::Compare => self.render_compare(cx),
             Section::Rebase => self.render_rebase(cx),
             Section::Remotes => {
-                let mut out = vec![div().child(btn("add-remote").text(t.tools.add_remote).disabled(busy).on_click(cx.listener(|this, _, window, cx| this.remote("add", None, window, cx)))).into_any_element()];
+                let mut out = vec![div().flex().child(btn("add-remote").text(t.tools.add_remote).disabled(busy).on_click(cx.listener(|this, _, window, cx| this.remote("add", None, window, cx)))).into_any_element()];
                 for item in self.remotes.clone() {
                     let dl = |k: &str, v: &str| div().flex().gap(px(16.)).child(div().w(px(80.)).flex_none().text_color(p.muted).child(k.to_owned())).child(div().flex_1().min_w_0().font_family(MONO).child(v.to_owned()));
                     let mut actions = div().flex().flex_wrap().gap(px(8.)).mt(px(12.));
@@ -810,7 +813,7 @@ impl Render for Tools {
                 out
             }
             Section::Reflog => {
-                let mut out = vec![div().child(btn("reflog-refresh").text(t.tools.refresh).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.load_logs(false, cx)))).into_any_element()];
+                let mut out = vec![div().flex().child(btn("reflog-refresh").text(t.tools.refresh).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.load_logs(false, cx)))).into_any_element()];
                 // Reflog 是一张表：行高和提交图一致，不再一条记录一张卡片
                 let mut table = div().bg(p.panel).border_1().border_color(p.border).rounded(R_MD).overflow_hidden();
                 if self.logs.is_empty() {
@@ -832,13 +835,13 @@ impl Render for Tools {
                             .text_size(FS_SM)
                             .hover(|s| s.bg(p.hover))
                             .child(div().flex_none().font_family(MONO).text_color(p.muted).child(entry.id[..12.min(entry.id.len())].to_owned()))
-                            .child(div().flex().flex_1().min_w_0().truncate().child(div().mr(px(12.)).font_family(MONO).text_color(p.accent).child(entry.selector.clone())).child(entry.subject.clone()))
+                            .child(div().flex().flex_1().min_w_0().child(div().flex_none().mr(px(12.)).font_family(MONO).text_color(p.accent).child(entry.selector.clone())).child(div().min_w_0().truncate().child(entry.subject.clone())))
                             .child(btn(("recover", i)).small().text(t.tools.recover).disabled(busy).on_click(cx.listener(move |this, _, window, cx| this.recover(e.clone(), window, cx)))),
                     );
                 }
                 out.push(table.into_any_element());
                 if self.more_logs {
-                    out.push(div().child(btn("reflog-more").text(t.tools.load_more).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.load_logs(true, cx)))).into_any_element());
+                    out.push(div().flex().child(btn("reflog-more").text(t.tools.load_more).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.load_logs(true, cx)))).into_any_element());
                 }
                 out
             }

@@ -324,13 +324,14 @@ impl WorkingCopy {
     }
 
     /// 拖动两栏之间的分隔线：只在相邻的两个展开栏之间分配
-    fn start_resize(&mut self, index: usize, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
-        let Some(next) = self.next_open(index) else { return };
+    /// 从当前实际高度出发，把第 index 栏加高 delta、下一个展开的栏相应变矮；拖动和方向键共用
+    fn resizer(&self, index: usize, cx: &mut Context<Self>) -> Option<impl Fn(f32, &mut App) + 'static> {
+        let next = self.next_open(index)?;
         // 起点按实际高度算（扣掉各栏的 80px 底），窗口缩放后也不跳动
         let heights = *self.heights.borrow();
         let drag: Vec<f32> = (0..3).map(|i| if self.folded[i] { self.sizes[i] } else { (heights[i] - 80.).max(1.) }).collect();
         let me = cx.entity().downgrade();
-        layout::start(at, false, move |delta, cx| {
+        Some(move |delta: f32, cx: &mut App| {
             let total = drag[index] + drag[next];
             let first = (drag[index] + delta).clamp(1., total - 1.);
             let _ = me.update(cx, |this, cx| {
@@ -339,7 +340,13 @@ impl WorkingCopy {
                 }
                 cx.notify();
             });
-        }, cx);
+        })
+    }
+
+    fn start_resize(&mut self, index: usize, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        if let Some(apply) = self.resizer(index, cx) {
+            layout::start(at, false, apply, cx);
+        }
     }
 
     fn render_item(&mut self, e: &Entry, depth: Option<usize>, staged: bool, cx: &mut Context<Self>) -> impl IntoElement {
@@ -414,15 +421,16 @@ impl WorkingCopy {
         ))
     }
 
-    fn render_group(&mut self, index: usize, title: &str, hint: &str, items: Vec<Entry>, total: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    /// `all`：整组文件的路径，「全部暂存 / 取消」不受筛选影响
+    fn render_group(&mut self, index: usize, title: &str, hint: &str, items: Vec<Entry>, all: Vec<String>, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx).clone();
         let t = t(cx);
         let staged = index == 1;
         let folded = self.folded[index];
         let disabled = self.disabled(cx);
         let filtering = !self.filter.read(cx).value().trim().is_empty();
+        let total = all.len();
         let count = if filtering { (t.file_list.shown)(items.len(), total) } else { total.to_string() };
-        let all: Vec<String> = items.iter().map(|e| e.path.clone()).collect();
         let mut title_row = div()
             .flex()
             .flex_none()
@@ -454,10 +462,10 @@ impl WorkingCopy {
                         cx.notify();
                     }))
                     .child(icon(if folded { Icon::Right } else { Icon::Down }, px(12.), p.text))
-                    .child(div().min_w_0().truncate().flex().child(label(title, false)).child(div().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(count)).child(div().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(hint.to_owned()))),
+                    .child(div().min_w_0().flex().child(div().flex_none().child(label(title, false))).child(div().flex_none().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(count)).child(div().min_w_0().truncate().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(hint.to_owned()))),
             );
         if !staged {
-            title_row = title_row.child(btn("discard-all").small().quiet().danger().text(t.discard_all).no_cmd().disabled(disabled || items.is_empty()).tip(t.discard_all).on_click(cx.listener(|this, _, window, cx| {
+            title_row = title_row.child(btn("discard-all").small().quiet().danger().text(t.discard_all).no_cmd().disabled(disabled || total == 0).tip(t.discard_all).on_click(cx.listener(|this, _, window, cx| {
                 let _ = this.repo.update(cx, |r, cx| r.discard(Vec::new(), window, cx));
             })));
         }
@@ -467,7 +475,7 @@ impl WorkingCopy {
                 .small()
                 .text(if staged { t.unstage_all } else { t.stage_all })
                 .no_cmd()
-                .disabled(disabled || items.is_empty())
+                .disabled(disabled || total == 0)
                 .tip(if staged { t.unstage_all } else { t.stage_all })
                 .on_click(cx.listener(move |this, _, _, cx| this.stage(all2.clone(), staged, cx))),
         );
@@ -549,7 +557,7 @@ impl WorkingCopy {
             return None;
         }
         let me = cx.entity().downgrade();
-        let me2 = me.clone();
+        let (me2, me3) = (me.clone(), me.clone());
         Some(
             layout::bar(
                 ("wc-divider", index),
@@ -562,6 +570,12 @@ impl WorkingCopy {
                         this.sizes = DEFAULT_SIZES;
                         cx.notify();
                     });
+                },
+                move |delta, cx| {
+                    // 先取出调整函数再调用：它自己会更新这个视图，不能嵌在 update 里
+                    if let Some(apply) = me3.update(cx, |this, cx| this.resizer(index, cx)).ok().flatten() {
+                        apply(delta, cx);
+                    }
                 },
                 cx,
             )
@@ -588,7 +602,6 @@ impl Render for WorkingCopy {
         let shown = |list: Vec<Entry>| -> Vec<Entry> { list.into_iter().filter(|e| query.is_empty() || e.path.to_lowercase().contains(&query)).collect() };
         let unstaged_all: Vec<Entry> = entries.iter().filter(|e| e.unstaged.is_some()).cloned().collect();
         let staged_all: Vec<Entry> = entries.iter().filter(|e| e.staged.is_some()).cloned().collect();
-        let (n_unstaged, n_staged) = (unstaged_all.len(), staged_all.len());
         let l = layout(cx);
 
         let mut left = div().id("working-left").relative().flex().flex_col().flex_none().w(px(l.changes)).max_w(relative(0.5)).min_h_0().bg(p.panel);
@@ -626,7 +639,7 @@ impl Render for WorkingCopy {
                             this.load(cx);
                             cx.notify();
                         }))
-                        .child(div().flex_none().w(px(16.)).flex().justify_center().font_family(MONO).font_weight(FontWeight::SEMIBOLD).text_size(FS_SM).text_color(if ok { p.diff_added } else { p.red }).child(if ok { "✓" } else { "!" }))
+                        .child(div().id("mark").flex_none().w(px(16.)).flex().justify_center().font_family(MONO).font_weight(FontWeight::SEMIBOLD).text_size(FS_SM).text_color(if ok { p.diff_added } else { p.red }).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(if ok { t.conflict_resolved } else { t.conflict_open }).build(window, cx)).child(if ok { "✓" } else { "!" }))
                         .child(file_icon(&path, px(14.), cx))
                         .child(div().flex().flex_1().min_w_0().truncate().child(base).child(div().ml(px(8.)).text_size(FS_SM).text_color(p.muted).child(dir))),
                 );
@@ -645,8 +658,10 @@ impl Render for WorkingCopy {
             });
         };
         left = left.child(file_list_bar(&self.filter, fold, cx));
-        let g0 = self.render_group(0, t.unstaged, t.unstaged_hint, shown(unstaged_all), n_unstaged, cx);
-        let g1 = self.render_group(1, t.staged, t.staged_hint, shown(staged_all), n_staged, cx);
+        let paths = |list: &[Entry]| list.iter().map(|e| e.path.clone()).collect::<Vec<_>>();
+        let (all0, all1) = (paths(&unstaged_all), paths(&staged_all));
+        let g0 = self.render_group(0, t.unstaged, t.unstaged_hint, shown(unstaged_all), all0, cx);
+        let g1 = self.render_group(1, t.staged, t.staged_hint, shown(staged_all), all1, cx);
         left = left.child(g0).children(self.divider(0, cx)).child(g1).children(self.divider(1, cx));
 
         // 新提交：作者、最近的提交信息、提交框、提交前检查、修改上一个提交

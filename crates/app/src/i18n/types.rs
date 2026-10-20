@@ -5,18 +5,12 @@ use super::{Dict, Explain};
 
 pub struct DiffColors {
     pub title: &'static str,
-    pub preset: &'static str,
     pub r#default: &'static str,
-    pub custom: &'static str,
-    pub blue_orange: &'static str,
-    pub purple_gold: &'static str,
-    pub cyan_rose: &'static str,
     pub added: &'static str,
     pub deleted: &'static str,
     pub preview: &'static str,
     pub hint: &'static str,
     pub editor_hint: &'static str,
-    pub invalid: &'static str,
     pub same: &'static str,
 }
 
@@ -31,6 +25,15 @@ pub struct AutoFf {
     pub dirty: fn(&str) -> String,
     pub elsewhere: fn(&str) -> String,
     pub failed: fn(&str) -> String,
+}
+
+/// 页签右键菜单
+pub struct TabMenu {
+    pub rename: &'static str,
+    pub rename_hint: &'static str,
+    pub name: &'static str,
+    pub copy_path: &'static str,
+    pub close_others: &'static str,
 }
 
 pub struct FileMenu {
@@ -406,6 +409,7 @@ pub struct Messages {
     pub auto_fetch_failed: &'static str,
     pub fast_forward_to: fn(&str) -> String,
     pub auto_ff: AutoFf,
+    pub tabs: TabMenu,
     pub file_menu: FileMenu,
     pub external_tools: ExternalTools,
     pub copy_name: &'static str,
