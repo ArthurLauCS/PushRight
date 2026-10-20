@@ -93,6 +93,10 @@ impl DetailView {
         }
     }
 
+    pub fn file_count(&self) -> usize {
+        self.detail.as_ref().map_or(0, |d| d.files.len())
+    }
+
     pub fn set(&mut self, detail: Option<Detail>, source: Source, review_key: String, cx: &mut Context<Self>) {
         self.reviewed = store::get(cx, &review_key).unwrap_or_default();
         self.review_key = review_key;

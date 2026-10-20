@@ -15,6 +15,7 @@ use crate::menu::{Item, Menu};
 use crate::rules::{branch_name_ok, graph_key, short, split_upstream};
 use crate::store;
 use crate::theme::{alpha, palette, DISPLAY, FS_LG, FS_MD, FS_SM, MONO, PROSE, R_LG};
+use crate::requests::Requests;
 use crate::tools::Tools;
 use crate::ui::{btn, name_only, sep};
 use crate::working_copy::WorkingCopy;
@@ -40,6 +41,7 @@ pub enum View {
     Changes,
     Worktrees,
     Tools,
+    Requests,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -89,6 +91,7 @@ pub struct RepoView {
     pub working: Entity<WorkingCopy>,
     search: Entity<CommitSearch>,
     tools: Option<Entity<Tools>>,
+    requests: Option<Entity<Requests>>,
 
     /// 提交图只显示这些引用可达的提交，空表示全部；以 ^ 开头的是「相比」的基准。按仓库路径记住
     pub scope: Vec<String>,
@@ -258,6 +261,7 @@ impl RepoView {
             working,
             search,
             tools: None,
+            requests: None,
             scope,
             auto_ff_skipped: Vec::new(),
             count,
@@ -644,8 +648,20 @@ impl RepoView {
         if view == View::Tools && self.tools.is_none() {
             return self.open_tools(window, cx);
         }
+        if view == View::Requests && self.requests.is_none() {
+            let (session, me) = (self.session.clone(), cx.entity().downgrade());
+            self.requests = Some(cx.new(|cx| Requests::new(session, me, window, cx)));
+        }
         self.view = view;
         cx.notify();
+    }
+
+    /// 分支右键「创建拉取 / 合并请求」：切到那一页再弹新建框
+    fn create_request(&mut self, branch: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_view(View::Requests, window, cx);
+        if let Some(r) = self.requests.clone() {
+            r.update(cx, |r, cx| r.create(branch, window, cx));
+        }
     }
 
     pub fn show_log_panel(&mut self, cx: &mut Context<Self>) {
@@ -935,22 +951,23 @@ impl RepoView {
     fn repository_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let session = self.session.clone();
         cx.spawn_in(window, async move |this, cx| {
-            let fresh = cx.background_spawn(async move { (engine::refs::list(&session.repo), engine::workflow::read(&session.repo)) }).await;
+            let fresh = cx.background_spawn(async move { (engine::refs::list(&session.repo), engine::workflow::read(&session.repo), engine::forge::settings(&session.repo)) }).await;
             let Ok(rx) = this.update_in(cx, |this, window, cx| {
+                let forge = fresh.2.clone();
                 match fresh {
-                    (Ok(refs), workflow) => {
+                    (Ok(refs), workflow, _) => {
                         this.refs = refs;
                         if let Ok(w) = workflow {
                             this.workflow = w;
                         }
                     }
-                    (Err(e), _) => {
+                    (Err(e), _, _) => {
                         this.error = e;
                         return None;
                     }
                 }
                 let t = t(cx);
-                Some(this.ask(
+                Some((this.ask(
                     Spec::new(format!("{} · {}", t.repository_settings, this.path)).message(t.revert_scope).fields([
                         Field::checkbox("disabled", t.disable_revert, this.refs.revert_disabled),
                         Field::text("check", t.check.command).optional().value(this.workflow.check_command.clone()),
@@ -958,20 +975,31 @@ impl RepoView {
                         Field::textarea("template", t.commit_template).optional().value(this.workflow.template.clone()),
                         Field::text("diffTool", t.external_tools.diff_setting).optional().value(this.external_tools.diff.clone()),
                         Field::text("mergeTool", t.external_tools.merge_setting).optional().value(this.external_tools.merge.clone()),
+                        Field::select("forge", t.requests.forge, vec![(String::new(), t.requests.forge_auto.into()), ("github".into(), "GitHub".into()), ("gitlab".into(), "GitLab".into())]).value(forge.0.clone()),
+                        Field::text("forgeUrl", t.requests.forge_url).optional().value(forge.1.clone()),
                     ]),
                     window,
                     cx,
-                ))
+                ), forge))
             }) else { return };
-            let Some(rx) = rx else { return };
+            let Some((rx, forge)) = rx else { return };
             let Ok(Some(v)) = rx.await else { return };
             let Ok(session) = this.update(cx, |this, _| this.session.clone()) else { return };
+            let new_forge = (v.text("forge"), v.text("forgeUrl"));
+            let forge_changed = new_forge != forge;
             let tools = ExternalTools { diff: v.text("diffTool"), merge: v.text("mergeTool") };
             let settings = Settings { template: v.text("template"), check_command: v.text("check"), check_before_commit: v.bool("auto") };
-            let saved = cx.background_spawn(async move { engine::workflow::set_tools(&session.repo, &tools).and_then(|_| engine::workflow::write(&session.repo, &settings)) }).await;
-            let _ = this.update(cx, |this, cx| {
+            let saved = cx.background_spawn(async move { engine::workflow::set_tools(&session.repo, &tools).and_then(|_| engine::workflow::write(&session.repo, &settings)).and_then(|_| engine::forge::set_settings(&session.repo, &new_forge.0, &new_forge.1)) }).await;
+            let _ = this.update_in(cx, |this, window, cx| {
                 if let Err(e) = saved {
                     this.error = e;
+                }
+                // 换了平台或网页地址：拉取 / 合并请求页按新设置重新识别
+                if forge_changed {
+                    this.requests = None;
+                    if this.view == View::Requests {
+                        this.set_view(View::Requests, window, cx);
+                    }
                 }
                 // 只有这一项会进命令日志和撤销列表，没改就不执行
                 if v.bool("disabled") != this.refs.revert_disabled {
@@ -1557,6 +1585,8 @@ impl RepoView {
             }
             let s1 = s.clone();
             items.push(Item::new(t.push_branch, self.act(cx, move |this, window, cx| this.push(Some(s1.clone()), window, cx))).hint(ex.push.short));
+            let s1 = s.clone();
+            items.push(Item::new(t.requests.create_menu, self.act(cx, move |this, window, cx| this.create_request(s1.clone(), window, cx))));
             if !current {
                 let s1 = s.clone();
                 manage.push(Item::new(t.open_in_worktree, self.act(cx, move |this, window, cx| this.add_worktree(s1.clone(), true, window, cx))).hint(ex.worktree.short));
@@ -2066,6 +2096,7 @@ impl Render for RepoView {
             View::Changes => self.working.clone().into_any_element(),
             View::Worktrees => worktrees::render(self, cx).into_any_element(),
             View::Tools => self.tools.clone().map_or_else(|| div().into_any_element(), |t| t.into_any_element()),
+            View::Requests => self.requests.clone().map_or_else(|| div().into_any_element(), |r| r.into_any_element()),
         };
         div()
             .flex()

@@ -121,6 +121,7 @@ pub fn render(this: &mut RepoView, _window: &mut Window, cx: &mut Context<RepoVi
         .child(nav_button("nav-changes", Icon::Changes, t.changes, view == View::Changes, (changes > 0).then_some((changes, false)), &p).on_click(cx.listener(|this, _, window, cx| this.set_view(View::Changes, window, cx))))
         .child(nav_button("nav-history", Icon::History, t.history, view == View::History, None, &p).on_click(cx.listener(|this, _, window, cx| this.set_view(View::History, window, cx))))
         .child(nav_button("nav-worktrees", Icon::Folders, t.worktrees_nav, view == View::Worktrees, (worktrees > 1).then_some((worktrees, true)), &p).on_click(cx.listener(|this, _, window, cx| this.set_view(View::Worktrees, window, cx))))
+        .child(nav_button("nav-requests", Icon::Request, t.requests.nav, view == View::Requests, None, &p).on_click(cx.listener(|this, _, window, cx| this.set_view(View::Requests, window, cx))))
         .child(nav_button("nav-tools", Icon::Tools, t.tools.nav, view == View::Tools, None, &p).on_click(cx.listener(|this, _, window, cx| this.set_view(View::Tools, window, cx))));
 
     let search = div().mx(px(8.)).mb(px(8.)).child(Input::new(&this.sidebar.filter).small().prefix(icon(Icon::Search, px(14.), p.muted)).text_size(FS_SM).cleanable(true));

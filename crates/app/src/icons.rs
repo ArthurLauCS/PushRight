@@ -26,6 +26,7 @@ icons! {
     Push "push" "M12 21V9m-5 5 5-5 5 5M5 3h14",
     Stash "stash" "M3 6h18v5H3zM5 11v9h14v-9M10 15h4",
     Branch "branch" "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
+    Request "request" "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM13 6h3a2 2 0 0 1 2 2v7M6 9v12",
     Log "log" "m4 17 6-5-6-5M12 19h8",
     Help "help" "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
     Settings "settings" "M4 7h16M4 17h16M9 4v6M15 14v6",

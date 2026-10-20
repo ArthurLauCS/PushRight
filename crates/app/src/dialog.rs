@@ -35,11 +35,17 @@ pub struct Field {
     checked: bool,
     /// 文本框是否允许留空
     optional: bool,
+    /// 文本框显示成圆点（令牌、密码）
+    masked: bool,
 }
 
 impl Field {
     fn new(key: impl Into<String>, label: impl Into<String>, kind: Kind) -> Field {
-        Field { key: key.into(), label: label.into(), kind, text: String::new(), checked: false, optional: false }
+        Field { key: key.into(), label: label.into(), kind, text: String::new(), checked: false, optional: false, masked: false }
+    }
+    pub fn masked(mut self) -> Field {
+        self.masked = true;
+        self
     }
     pub fn text(key: impl Into<String>, label: impl Into<String>) -> Field {
         Field::new(key, label, Kind::Text(None))
@@ -188,7 +194,7 @@ impl Dialog {
                 Kind::Text(_) => {
                     let value = f.text.clone();
                     let state = cx.new(|cx| {
-                        let mut s = InputState::new(window, cx);
+                        let mut s = InputState::new(window, cx).masked(f.masked);
                         s.set_value(value, window, cx);
                         s
                     });
