@@ -25,6 +25,8 @@ The extension updates automatically when installed from VS Code Marketplace. The
 
 ## This release
 
+Version **1.3.0** adds a Pull / merge requests page for GitHub and GitLab, including self-hosted servers: filter the list, read the description, checks, reviews, commits and changed files, then check out, merge, approve, close or create one from a branch. Long branch and file lists render only their visible rows, so repositories with tens of thousands of commits and a thousand branches stay smooth. Scrollbars stay visible, the horizontal diff scrollbar no longer covers the last line, and tabs show the repository and branch centered in bold. See the [release notes](docs/RELEASE_1.3.0.md).
+
 Version **1.2.1** puts repository tabs on their own row, sharing its width: drag to reorder, double-click or right-click to rename, and each tab shows its branch, so several worktrees of one repository are easy to tell apart. The sidebar lists GitHub pull requests with review and check status; create, check out and merge them from the app. Diff text can be selected and copied, and Diff Colors has color pickers with a live preview. See the [release notes](docs/RELEASE_1.2.1.md).
 
 Version **1.2.0** rewrites the desktop app in Rust with a native GPU-rendered interface, replacing the Tauri web view. The look, layout, features and both languages stay the same. On the same machine, a repository opens in about 0.5–0.7 s using one process and about 124 MB of memory, down from 7 processes and about 415 MB. WebView2 is no longer required. See the [release notes](docs/RELEASE_1.2.0.md).
@@ -37,24 +39,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.2.1 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.3.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 ![PushRight 1.2.0: commit graph, branches and file differences](docs/images/desktop-1.2.0.png)
 
 Screenshots show the actual 1.2.0 desktop app with a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.1.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.1.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.1/PushRight-Setup-1.2.1.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.1/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/PushRight-Setup-1.3.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.2.1.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.1) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.3.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.3.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.2.1.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.3.0.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
@@ -125,8 +127,8 @@ Measurements on a local Linux repository with 1.48 million commits and a 128 MiB
 ### Included features
 
 - Repository tabs on their own row, sharing its width; drag to reorder, double-click or right-click to rename (handy for several worktrees of one repository). Each tab shows the checked-out branch. Recent repositories and session restoration.
-- GitHub pull requests: the sidebar lists open pull requests with review and check status; create one from a branch (pushed first when needed), check one out, or merge it on GitHub (merge commit, squash or rebase). Uses [GitHub CLI](https://cli.github.com/); when `gh` is not signed in, the GitHub sign-in saved by Git Credential Manager is used.
 - Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`.
+- Pull / merge requests for GitHub and GitLab (including self-hosted servers): list, details with checks, reviews, commits and changed files; check out, merge, approve, close and create. Tokens come from environment variables, `gh` or Git credentials, or are pasted once and kept in Windows Credential Manager.
 - Stage, unstage, commit and amend; file, hunk and selected-line operations.
 - Create, switch, rename and delete branches; merge, rebase, cherry-pick, revert, reset and tags.
 - Fetch, explicit Pull mode, destination-aware Push and stashes.
@@ -155,11 +157,11 @@ code --install-extension extension/pushright-win32-x64-1.2.0.vsix
 - **History**: file history that follows the active editor, line history for a selection, previous / next revision (`Alt+,` / `Alt+.`), compare with any branch, tag or commit, and commit search by message, author, file, changed text or ID.
 - **Commit graph**: "PushRight: Open Commit Graph" and "Show in Commit Graph" open the repository in the PushRight desktop app (an already running instance switches to it). Set `pushright.desktopPath` if the app is not installed in the default location.
 
-Not included yet: macOS, Linux and remote (WSL / SSH) builds, PR / Issue integration. Submodules must already be initialized.
+Not included yet: macOS, Linux and remote (WSL / SSH) builds, issue integration. Submodules must already be initialized.
 
 ## Current limits
 
-- GitLab merge requests and issues are not supported yet.
+- Pull / merge requests show descriptions as plain Markdown text; inline review comments, labels, milestones, reviewer editing and creating from forks are not supported yet. Issues are not integrated.
 - Visible rows are virtualized, but complete history is still read in the background.
 - Large patches offer read-only pages that rescan the Git stream; Git may still consume time and memory before producing output. Partial staging/discard remains limited to 4 MiB patches.
 - The graph has at most 24 lanes, reduced by available width. Highly parallel histories can omit connections.

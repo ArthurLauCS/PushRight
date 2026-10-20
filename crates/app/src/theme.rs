@@ -195,6 +195,8 @@ pub fn apply(dark: bool, diff: Option<(Hsla, Hsla)>, window: Option<&mut Window>
     theme.mono_font_size = FS_SM;
     theme.radius = R_MD;
     theme.radius_lg = R_LG;
+    // 滚动条常驻，长列表和长 diff 一眼看出能滚、滚到了哪
+    theme.scrollbar_mode = gpui_component::scroll::ScrollbarMode::Always;
     let k = &mut theme.colors;
     k.background = p.bg;
     k.foreground = p.text;

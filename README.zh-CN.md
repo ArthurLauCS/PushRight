@@ -23,6 +23,8 @@
 
 ## 本版更新
 
+**1.3.0** 新增「拉取 / 合并请求」页，支持 GitHub 和 GitLab（含自建服务器）：筛选列表，查看说明、CI 检查、审阅、提交和改动文件，再检出、合并、批准、关闭，或从分支新建。分支和文件等长列表只渲染看得见的行，几万个提交、上千个分支的仓库也流畅。滚动条常驻，差异底部的横向滚动条不再挡住最后一行，页签上的仓库名和分支名居中加粗。详见[发行说明](docs/RELEASE_1.3.0.md)。
+
 **1.2.1** 让仓库页签单独占一行、按数量平分宽度：可拖动排序，双击或右键可自定义名字，页签上显示当前分支，同一仓库开多个工作树时一眼分清。侧栏列出 GitHub 拉取请求及审阅、检查状态，可在应用里创建、检出和合并。差异文本可以选中复制，差异配色改为取色器并实时预览。详见[发行说明](docs/RELEASE_1.2.1.md)。
 
 **1.2.0 正式版**用 Rust 重写桌面版，界面改由 GPU 直接绘制，不再使用 Tauri 网页内核；外观、布局、功能和中英双语保持不变。同一台机器上打开仓库约 0.5–0.7 秒，只占 1 个进程、约 124 MB 内存（原来 7 个进程、约 415 MB），也不再需要 WebView2。详见[发行说明](docs/RELEASE_1.2.0.md)。
@@ -35,23 +37,23 @@ VS Code／Cursor 中的 **PushRight: 打开提交图** 和 **在提交图中定�
 
 桌面应用每分钟刷新所有已打开的仓库，打开仓库时及之后每十分钟自动 fetch，后台页签也生效。两项默认开启，可在语言选择框旁的“自动刷新与获取”中分别关闭。仓库忙碌时延后执行，失败写入命令日志并按周期重试；后台 fetch 保留 `FETCH_HEAD`、暂存区和工作区文件。强制推送增加 `--force-if-includes` 检查，防止覆盖后台刚获取但未在本地整合的远端提交。应用退出后不执行定时任务，扩展版不启用这些定时器。
 
-当前版本为 **v1.2.1 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
+当前版本为 **v1.3.0 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
 
 ![PushRight 1.2.0：提交图、分支与文件差异](docs/images/desktop-1.2.0.png)
 
 截图来自 1.2.0 桌面程序，使用虚构作者和本地示例仓库。
 
-本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.1.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.2.1.tar.gz)。
+本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.tar.gz)。
 
 ## 下载与安装
 
-**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.1/PushRight-Setup-1.2.1.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.1/SHA256SUMS.txt)
+**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/PushRight-Setup-1.3.0.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/SHA256SUMS.txt)
 
-从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.1) 下载 `PushRight-Setup-1.2.1.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
+从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.3.0) 下载 `PushRight-Setup-1.3.0.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
 
 - 支持 Windows 10 / 11 x64；本次发布在 Windows x64 上构建和验证。
 - 需要安装 [Git for Windows](https://git-scm.com/downloads/win)，并确保 `git` 在 PATH 中可用。
-- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.2.1.exe -Algorithm SHA256` 核对文件。
+- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.3.0.exe -Algorithm SHA256` 核对文件。
 
 安装器支持英文和简体中文，应用语言独立选择。从 1.1.x 升级时会自动卸载旧版。偏好保存在 `%APPDATA%\PushRight\settings.json`；1.1.x 的语言、主题、时区、差异配色、作者样式和最近仓库不会迁移，需要重新设置一次。
 
@@ -122,8 +124,8 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 ### 已提供的功能
 
 - 仓库页签单独一行、按数量平分宽度；可拖动排序，双击或右键可自定义名字（同一仓库开多个工作树时好区分），页签上显示当前分支。最近仓库与会话恢复。
-- GitHub 拉取请求：侧栏列出打开着的拉取请求及审阅、检查状态；可从分支创建（需要时先推送）、检出到本地、在 GitHub 上合并（合并提交、压缩或变基）。需要 [GitHub CLI](https://cli.github.com/)；`gh` 未登录时使用 Git 凭据管理器里保存的 GitHub 登录。
 - 虚拟滚动提交图、分支和标签标记、提交详情及文件差异；差异文本可拖动选中，`Ctrl+C` 复制。
+- GitHub 拉取请求和 GitLab 合并请求（含自建服务器）：列表，详情里看 CI 检查、审阅、提交和改动文件；检出、合并、批准、关闭和新建。令牌从环境变量、`gh` 或 Git 凭据里找，也可粘贴一次，存进 Windows 凭据管理器。
 - 暂存、取消暂存、提交、修改上次提交；按文件、差异块或选中行处理变更。
 - 分支创建、切换、重命名与删除；合并、变基、cherry-pick、revert、reset 和标签操作。
 - Fetch、明确选择变基或合并的 Pull、明确选择目标的 Push，以及 stash 操作。
@@ -150,11 +152,11 @@ code --install-extension extension/pushright-win32-x64-1.2.0.vsix
 - **历史**：跟随当前文件的文件历史、选中行的行历史、上一版 / 下一版对比（`Alt+,` / `Alt+.`）、与任意分支、标签或提交对比，以及按提交说明、作者、文件、改动内容或提交号搜索提交。
 - **提交图**：「PushRight: 打开提交图」和「在提交图中定位」会在 PushRight 桌面版里打开这个仓库（桌面版已经开着时直接切过去）。桌面版没装在默认位置时，在设置 `pushright.desktopPath` 里指定它。
 
-尚未包含：macOS、Linux 和远程开发（WSL / SSH）版本，PR / Issue 集成。子模块需要先初始化。
+尚未包含：macOS、Linux 和远程开发（WSL / SSH）版本，Issue 集成。子模块需要先初始化。
 
 ## 当前边界
 
-- 尚不支持 GitLab 合并请求和 Issue。
+- 拉取 / 合并请求的说明按 Markdown 原文显示；还不支持代码行内评论、标签、里程碑、编辑审阅人和从 fork 新建。Issue 尚未集成。
 - 提交列表只渲染可见行，但完整历史仍会在后台读取；超大仓库的时间和内存开销需要进一步实测优化。
 - 大补丁按页只读预览，分页会重新扫描补丁；Git 子进程在输出前仍可能消耗较多时间和内存。部分暂存/丢弃继续限制为 4 MiB。
 - 提交图最多显示 24 条轨道，实际数量随面板宽度变化；高度并行的复杂历史可能无法显示所有连线。

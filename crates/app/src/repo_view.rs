@@ -15,6 +15,7 @@ use crate::menu::{Item, Menu};
 use crate::rules::{branch_name_ok, graph_key, short, split_upstream};
 use crate::store;
 use crate::theme::{alpha, palette, DISPLAY, FS_LG, FS_MD, FS_SM, MONO, PROSE, R_LG};
+use crate::requests::Requests;
 use crate::tools::Tools;
 use crate::ui::{btn, name_only, sep};
 use crate::working_copy::WorkingCopy;
@@ -40,6 +41,7 @@ pub enum View {
     Changes,
     Worktrees,
     Tools,
+    Requests,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -89,6 +91,7 @@ pub struct RepoView {
     pub working: Entity<WorkingCopy>,
     search: Entity<CommitSearch>,
     tools: Option<Entity<Tools>>,
+    requests: Option<Entity<Requests>>,
 
     /// 提交图只显示这些引用可达的提交，空表示全部；以 ^ 开头的是「相比」的基准。按仓库路径记住
     pub scope: Vec<String>,
@@ -111,12 +114,6 @@ pub struct RepoView {
     pub stashes: Vec<Stash>,
     pub worktrees: Vec<Worktree>,
     pub entries: Vec<Entry>,
-    /// 拉取请求所在的 GitHub 远程；不是 GitHub 仓库时为 None，侧栏不显示拉取请求
-    pub github: Option<engine::github::Remote>,
-    /// 打开着的拉取请求，打开页签时和点刷新时从 GitHub 读
-    pub prs: Vec<engine::github::Pr>,
-    pub pr_error: String,
-    prs_loading: bool,
     pub identity: Option<Identity>,
     /// 进行中的操作在 Git 里记下的信息；没有进行中的操作时为 None
     pub operation: Option<Operation>,
@@ -264,6 +261,7 @@ impl RepoView {
             working,
             search,
             tools: None,
+            requests: None,
             scope,
             auto_ff_skipped: Vec::new(),
             count,
@@ -278,10 +276,6 @@ impl RepoView {
             stashes: Vec::new(),
             worktrees: Vec::new(),
             entries: Vec::new(),
-            github: None,
-            prs: Vec::new(),
-            pr_error: String::new(),
-            prs_loading: false,
             identity: None,
             operation: None,
             workflow: Settings::default(),
@@ -320,7 +314,6 @@ impl RepoView {
         }
         self.started = true;
         self.initializing = true;
-        self.load_prs(cx);
         cx.spawn_in(window, async move |this, cx| {
             let Ok(load) = this.update(cx, |this, cx| this.load_sidebar(cx)) else { return };
             load.await;
@@ -655,8 +648,20 @@ impl RepoView {
         if view == View::Tools && self.tools.is_none() {
             return self.open_tools(window, cx);
         }
+        if view == View::Requests && self.requests.is_none() {
+            let (session, me) = (self.session.clone(), cx.entity().downgrade());
+            self.requests = Some(cx.new(|cx| Requests::new(session, me, window, cx)));
+        }
         self.view = view;
         cx.notify();
+    }
+
+    /// 分支右键「创建拉取 / 合并请求」：切到那一页再弹新建框
+    fn create_request(&mut self, branch: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_view(View::Requests, window, cx);
+        if let Some(r) = self.requests.clone() {
+            r.update(cx, |r, cx| r.create(branch, window, cx));
+        }
     }
 
     pub fn show_log_panel(&mut self, cx: &mut Context<Self>) {
@@ -946,22 +951,23 @@ impl RepoView {
     fn repository_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let session = self.session.clone();
         cx.spawn_in(window, async move |this, cx| {
-            let fresh = cx.background_spawn(async move { (engine::refs::list(&session.repo), engine::workflow::read(&session.repo)) }).await;
+            let fresh = cx.background_spawn(async move { (engine::refs::list(&session.repo), engine::workflow::read(&session.repo), engine::forge::settings(&session.repo)) }).await;
             let Ok(rx) = this.update_in(cx, |this, window, cx| {
+                let forge = fresh.2.clone();
                 match fresh {
-                    (Ok(refs), workflow) => {
+                    (Ok(refs), workflow, _) => {
                         this.refs = refs;
                         if let Ok(w) = workflow {
                             this.workflow = w;
                         }
                     }
-                    (Err(e), _) => {
+                    (Err(e), _, _) => {
                         this.error = e;
                         return None;
                     }
                 }
                 let t = t(cx);
-                Some(this.ask(
+                Some((this.ask(
                     Spec::new(format!("{} · {}", t.repository_settings, this.path)).message(t.revert_scope).fields([
                         Field::checkbox("disabled", t.disable_revert, this.refs.revert_disabled),
                         Field::text("check", t.check.command).optional().value(this.workflow.check_command.clone()),
@@ -969,20 +975,31 @@ impl RepoView {
                         Field::textarea("template", t.commit_template).optional().value(this.workflow.template.clone()),
                         Field::text("diffTool", t.external_tools.diff_setting).optional().value(this.external_tools.diff.clone()),
                         Field::text("mergeTool", t.external_tools.merge_setting).optional().value(this.external_tools.merge.clone()),
+                        Field::select("forge", t.requests.forge, vec![(String::new(), t.requests.forge_auto.into()), ("github".into(), "GitHub".into()), ("gitlab".into(), "GitLab".into())]).value(forge.0.clone()),
+                        Field::text("forgeUrl", t.requests.forge_url).optional().value(forge.1.clone()),
                     ]),
                     window,
                     cx,
-                ))
+                ), forge))
             }) else { return };
-            let Some(rx) = rx else { return };
+            let Some((rx, forge)) = rx else { return };
             let Ok(Some(v)) = rx.await else { return };
             let Ok(session) = this.update(cx, |this, _| this.session.clone()) else { return };
+            let new_forge = (v.text("forge"), v.text("forgeUrl"));
+            let forge_changed = new_forge != forge;
             let tools = ExternalTools { diff: v.text("diffTool"), merge: v.text("mergeTool") };
             let settings = Settings { template: v.text("template"), check_command: v.text("check"), check_before_commit: v.bool("auto") };
-            let saved = cx.background_spawn(async move { engine::workflow::set_tools(&session.repo, &tools).and_then(|_| engine::workflow::write(&session.repo, &settings)) }).await;
-            let _ = this.update(cx, |this, cx| {
+            let saved = cx.background_spawn(async move { engine::workflow::set_tools(&session.repo, &tools).and_then(|_| engine::workflow::write(&session.repo, &settings)).and_then(|_| engine::forge::set_settings(&session.repo, &new_forge.0, &new_forge.1)) }).await;
+            let _ = this.update_in(cx, |this, window, cx| {
                 if let Err(e) = saved {
                     this.error = e;
+                }
+                // 换了平台或网页地址：拉取 / 合并请求页按新设置重新识别
+                if forge_changed {
+                    this.requests = None;
+                    if this.view == View::Requests {
+                        this.set_view(View::Requests, window, cx);
+                    }
                 }
                 // 只有这一项会进命令日志和撤销列表，没改就不执行
                 if v.bool("disabled") != this.refs.revert_disabled {
@@ -1085,7 +1102,7 @@ impl RepoView {
         self.then(rx, window, cx, move |this, _, _, cx| this.exec_detached(op, cx));
     }
 
-    fn head(&self) -> Option<String> {
+    pub(crate) fn head(&self) -> Option<String> {
         self.refs.head.as_deref().and_then(|h| h.strip_prefix("refs/heads/")).map(str::to_owned)
     }
 
@@ -1172,152 +1189,6 @@ impl RepoView {
             let _ = this.update(cx, |this, cx| this.exec_detached(op, cx));
         })
         .detach();
-    }
-
-    // ---------- GitHub 拉取请求 ----------
-
-    /// 重新读打开着的拉取请求；要联网，不跟着仓库刷新走
-    pub fn load_prs(&mut self, cx: &mut Context<Self>) {
-        if self.prs_loading {
-            return;
-        }
-        self.prs_loading = true;
-        let session = self.session.clone();
-        git::bg(
-            cx,
-            move || {
-                let remote = engine::github::remote(&session.repo).ok()?;
-                let list = engine::github::list(&session.repo, &remote);
-                Some((remote, list))
-            },
-            |this, r, cx| {
-                this.prs_loading = false;
-                this.github = r.as_ref().map(|(remote, _)| remote.clone());
-                match r.map(|(_, list)| list) {
-                    Some(Ok(list)) => {
-                        this.prs = list;
-                        this.pr_error.clear();
-                    }
-                    Some(Err(e)) => this.pr_error = e,
-                    None => this.prs.clear(),
-                }
-                cx.notify();
-            },
-        )
-        .detach();
-    }
-
-    /// 在后台跑一个 gh 操作；完成后重读拉取请求，`fetch` 时再获取一次让本地看到 GitHub 上的变化
-    fn run_pr(&mut self, work: impl FnOnce(&engine::Repo, &engine::github::Remote) -> engine::Result<()> + Send + 'static, fetch: bool, cx: &mut Context<Self>) {
-        let Some(remote) = self.github.clone() else { return };
-        if self.busy || self.working_busy {
-            return;
-        }
-        self.busy = true;
-        self.error.clear();
-        cx.notify();
-        let session = self.session.clone();
-        git::bg(cx, move || work(&session.repo, &remote), move |this, r, cx| {
-            this.busy = false;
-            this.load_prs(cx);
-            match r {
-                Err(e) => this.error = e,
-                Ok(()) if fetch => this.exec_detached(Op::Fetch { background: false }, cx),
-                Ok(()) => drop(this.refresh(false, cx)),
-            }
-            cx.notify();
-        })
-        .detach();
-    }
-
-    /// 从本地分支创建拉取请求；分支还没推送或有没推送的提交时先推送
-    pub fn create_pr(&mut self, branch: String, window: &mut Window, cx: &mut Context<Self>) {
-        let t = t(cx);
-        let Some(remote) = self.github.clone() else { return };
-        let prefix = format!("refs/remotes/{}/", remote.name);
-        let bases: Vec<String> = self.refs.refs.iter().filter_map(|r| r.name.strip_prefix(&prefix)).filter(|b| *b != "HEAD" && *b != branch).map(str::to_owned).collect();
-        if bases.is_empty() {
-            self.error = t.pr.no_base.into();
-            return cx.notify();
-        }
-        let base = ["main", "master", "develop"].into_iter().find(|b| bases.iter().any(|x| x == b)).map_or_else(|| bases[0].clone(), str::to_owned);
-        let full = format!("refs/heads/{branch}");
-        let upstream = self.refs.refs.iter().find(|r| r.name == full).and_then(|r| r.upstream.clone());
-        let ahead = self.tracks.get(&full).map_or(0, |t| t.ahead);
-        let push = upstream.as_deref() != Some(&format!("{prefix}{branch}")) || ahead > 0;
-        let session = self.session.clone();
-        let b = branch.clone();
-        cx.spawn_in(window, async move |this, cx| {
-            let title = cx.background_spawn(async move { engine::github::default_title(&session.repo, &b) }).await;
-            let Ok(rx) = this.update_in(cx, |this, window, cx| {
-                let options = bases.iter().map(|b| (b.clone(), format!("{}/{b}", remote.name))).collect();
-                let spec = Spec::new((t.pr.create_title)(&branch)).confirm(t.pr.create).fields([
-                    Field::select("base", t.pr.base, options).value(base),
-                    Field::text("title", t.pr.title).value(title),
-                    Field::textarea("body", t.pr.body).optional(),
-                    Field::checkbox("draft", t.pr.draft, false),
-                ]);
-                let spec = if push { spec.message((t.pr.push_first)(&format!("{}/{branch}", remote.name))) } else { spec };
-                this.ask(spec, window, cx)
-            }) else { return };
-            let Ok(Some(v)) = rx.await else { return };
-            if push {
-                let op = Op::Push { remote: remote.name.clone(), branch: branch.clone(), remote_branch: branch.clone(), force: false, set_upstream: upstream.is_none(), tags: false };
-                let Ok(run) = this.update(cx, |this, cx| this.exec(op, false, cx)) else { return };
-                if !run.await {
-                    return;
-                }
-            }
-            let (base, title, body, draft) = (v.text("base"), v.text("title"), v.text("body"), v.bool("draft"));
-            let _ = this.update(cx, |this, cx| this.run_pr(move |repo, remote| engine::github::create(repo, remote, &base, &branch, &title, &body, draft).map(drop), false, cx));
-        })
-        .detach();
-    }
-
-    fn merge_pr(&mut self, pr: &engine::github::Pr, window: &mut Window, cx: &mut Context<Self>) {
-        let t = t(cx);
-        let methods = vec![("merge".into(), t.pr.merge_commit.into()), ("squash".into(), t.pr.squash.into()), ("rebase".into(), t.pr.rebase.into())];
-        let rx = self.ask(
-            Spec::new((t.pr.merge_title)(pr.number))
-                .message(format!("{}\n{} → {}", pr.title, pr.head, pr.base))
-                .maybe_warning((pr.checks == "failure").then(|| t.pr.checks_failed.to_owned()))
-                .confirm(t.pr.merge)
-                .field(Field::radio("method", t.pr.method, methods).value("merge")),
-            window,
-            cx,
-        );
-        let n = pr.number;
-        self.then(rx, window, cx, move |this, v, _, cx| {
-            let method = v.text("method");
-            this.run_pr(move |repo, remote| engine::github::merge(repo, remote, n, &method), true, cx)
-        });
-    }
-
-    pub fn checkout_pr(&mut self, number: u64, cx: &mut Context<Self>) {
-        self.run_pr(move |repo, remote| engine::github::checkout(repo, remote, number), false, cx);
-    }
-
-    /// 在提交图里定位到拉取请求的分支：本地有就用本地的，否则用远程的
-    pub fn jump_pr(&mut self, head: &str, cx: &mut Context<Self>) {
-        let remote = self.github.as_ref().map(|r| format!("refs/remotes/{}/{head}", r.name)).unwrap_or_default();
-        let local = format!("refs/heads/{head}");
-        let id = self.refs.refs.iter().find(|r| r.name == local).or_else(|| self.refs.refs.iter().find(|r| r.name == remote)).map(|r| r.id.clone());
-        if let Some(id) = id {
-            self.jump(&id, cx);
-        }
-    }
-
-    pub fn pr_menu(&mut self, at: Point<Pixels>, pr: &engine::github::Pr, window: &mut Window, cx: &mut Context<Self>) {
-        let t = t(cx);
-        let (url, link, n, p) = (pr.url.clone(), pr.url.clone(), pr.number, pr.clone());
-        let items = vec![
-            Item::new(t.pr.open, move |_, cx| cx.open_url(&url)),
-            Item::new(t.pr.checkout, self.act(cx, move |this, _, cx| this.checkout_pr(n, cx))),
-            Item::new(t.pr.merge_menu, self.act(cx, move |this, window, cx| this.merge_pr(&p, window, cx))).disabled(pr.draft),
-            Item::Sep,
-            Item::new(t.pr.copy_link, move |_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()))),
-        ];
-        self.show_menu(at, items, window, cx);
     }
 
     fn pull(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1714,18 +1585,8 @@ impl RepoView {
             }
             let s1 = s.clone();
             items.push(Item::new(t.push_branch, self.act(cx, move |this, window, cx| this.push(Some(s1.clone()), window, cx))).hint(ex.push.short));
-            if self.github.is_some() {
-                match self.prs.iter().find(|p| p.head == s) {
-                    Some(pr) => {
-                        let url = pr.url.clone();
-                        items.push(Item::new((t.pr.open_number)(pr.number), move |_, cx| cx.open_url(&url)));
-                    }
-                    None => {
-                        let s1 = s.clone();
-                        items.push(Item::new(t.pr.create_menu, self.act(cx, move |this, window, cx| this.create_pr(s1.clone(), window, cx))));
-                    }
-                }
-            }
+            let s1 = s.clone();
+            items.push(Item::new(t.requests.create_menu, self.act(cx, move |this, window, cx| this.create_request(s1.clone(), window, cx))));
             if !current {
                 let s1 = s.clone();
                 manage.push(Item::new(t.open_in_worktree, self.act(cx, move |this, window, cx| this.add_worktree(s1.clone(), true, window, cx))).hint(ex.worktree.short));
@@ -2235,6 +2096,7 @@ impl Render for RepoView {
             View::Changes => self.working.clone().into_any_element(),
             View::Worktrees => worktrees::render(self, cx).into_any_element(),
             View::Tools => self.tools.clone().map_or_else(|| div().into_any_element(), |t| t.into_any_element()),
+            View::Requests => self.requests.clone().map_or_else(|| div().into_any_element(), |r| r.into_any_element()),
         };
         div()
             .flex()

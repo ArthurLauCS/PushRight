@@ -11,6 +11,7 @@ use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
 use gpui::prelude::*;
 use gpui::{div, img, list, px, AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
+use gpui_component::scroll::ScrollableElement;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -351,11 +352,10 @@ impl DiffView {
         }
         self.widest = widest;
         self.items = Rc::new(items);
-        if reset_scroll {
-            self.list.reset(self.items.len());
-        } else {
-            let top = self.list.logical_scroll_top();
-            self.list.reset(self.items.len());
+        // 没画过的行按一行高估算，滚动条从一开始就按整份 diff 的长度算
+        let top = self.list.logical_scroll_top();
+        self.list.reset_with_uniform_height(self.items.len(), px(LINE_H));
+        if !reset_scroll {
             self.list.scroll_to(top);
         }
         self.recolor(cx);
@@ -853,15 +853,17 @@ impl Render for DiffView {
                             cx.stop_propagation();
                             cx.notify();
                         }
-                    }));
-                // 不换行且有超出的长行时，底部一条横向滚动条，可拖动；并排时两栏一起滚
+                    }))
+                    .vertical_scrollbar(&self.list);
+                // 不换行且有超出的长行时，底部一条横向滚动条，可拖动；并排时两栏一起滚。
+                // 底部留出滚动条的高度，滚到底时最后一行不被它挡住
                 let max = self.max_scroll(cx);
                 if !dp.wrap && max > 0. {
                     let width = self.width.get();
                     let view = width * if dp.side_by_side { dp.split_ratio.min(1. - dp.split_ratio) } else { 1. };
                     let thumb = (width * view / (view + max)).max(24.);
                     let (from, me) = (self.scroll_x, cx.entity());
-                    body = body.child(
+                    body = body.pb(px(10.)).child(
                         div().absolute().left_0().right_0().bottom_0().h(px(10.)).bg(alpha(p.panel, 0.85)).border_t_1().border_color(p.border).child(
                             div()
                                 .id("hscroll")

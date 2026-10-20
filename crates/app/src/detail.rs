@@ -2,7 +2,7 @@
 
 use crate::author::author_color;
 use crate::diff_view::{self, DiffPrefs, DiffView, Mode, Pager};
-use crate::file_tree::{file_icon, file_list_bar, filter_input, folder_row, indent, tree_rows};
+use crate::file_tree::{file_icon, file_list_bar, filter_input, folder_row, indent, tree_rows, TreeRow};
 use crate::git::{self, Session};
 use crate::i18n::{error_text, lookup, t};
 use crate::layout::{self, layout, Key};
@@ -12,10 +12,13 @@ use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE};
 use crate::time::fmt_time;
 use engine::detail::{Detail, FileChange};
 use gpui::prelude::*;
-use gpui::{div, px, relative, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, WeakEntity, Window};
+use gpui::{div, px, relative, uniform_list, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{InputEvent, InputState};
+use gpui_component::scroll::ScrollableElement;
 use std::collections::HashSet;
+use std::ops::Range;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// diff 从哪里取
@@ -49,6 +52,7 @@ pub struct DetailView {
     error: String,
     filter: Entity<InputState>,
     closed: HashSet<String>,
+    scroll: UniformListScrollHandle,
     reviewed: Vec<String>,
     review_key: String,
     /// 版本比较里不显示作者、提交号这些
@@ -82,6 +86,7 @@ impl DetailView {
             error: String::new(),
             filter,
             closed: HashSet::new(),
+            scroll: UniformListScrollHandle::new(),
             reviewed: Vec::new(),
             review_key: String::new(),
             comparison: false,
@@ -89,6 +94,10 @@ impl DetailView {
             request: 0,
             _subs: subs,
         }
+    }
+
+    pub fn file_count(&self) -> usize {
+        self.detail.as_ref().map_or(0, |d| d.files.len())
     }
 
     pub fn set(&mut self, detail: Option<Detail>, source: Source, review_key: String, cx: &mut Context<Self>) {
@@ -182,6 +191,7 @@ impl DetailView {
         div()
             .flex()
             .items_center()
+            .w_full()
             .pl(depth.map_or(px(8.), |d| indent(d) - px(20.)))
             .child(Checkbox::new(SharedString::from(format!("reviewed-{path}"))).checked(self.reviewed.contains(&path)).tooltip(t.tools.reviewed).on_click(cx.listener(move |this, _, _, cx| this.review(&p1, cx))))
             .child(
@@ -243,35 +253,50 @@ impl Render for DetailView {
                 });
             }
         };
-        let mut list = div()
-            .id("detail-files")
+        // 只渲染看得见的行，上千个文件的提交和分支对比也不拖慢每一帧
+        let tree = diff_view::prefs(cx).tree;
+        let rows = Rc::new(if tree {
+            tree_rows(&files, |f| &f.path, &self.closed)
+        } else {
+            files.into_iter().map(|f| TreeRow { key: f.path.clone(), depth: 0, name: String::new(), item: Some(f), items: Vec::new(), open: false }).collect()
+        });
+        let rows = uniform_list(
+            "detail-files",
+            rows.len(),
+            cx.processor(move |this: &mut DetailView, range: Range<usize>, _window: &mut Window, cx: &mut Context<DetailView>| {
+                range
+                    .map(|ix| {
+                        let row = &rows[ix];
+                        match &row.item {
+                            Some(f) => this.file_row(f, tree.then_some(row.depth), cx).into_any_element(),
+                            None => {
+                                let key = row.key.clone();
+                                folder_row(format!("folder-{}", row.key).into(), &row.key, &row.name, row.items.len(), row.open, row.depth, true, cx)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if !this.closed.remove(&key) {
+                                            this.closed.insert(key.clone());
+                                        }
+                                        cx.notify();
+                                    }))
+                                    .into_any_element()
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            }),
+        )
+        .track_scroll(&self.scroll)
+        .size_full();
+        let list = div()
+            .flex()
+            .flex_col()
             .flex_none()
             .w(px(l.files))
             .max_w(relative(0.45))
-            .overflow_y_scroll()
             .py(px(12.))
             .child(div().mx(px(12.)).mb(px(8.)).text_size(FS_SM).text_color(p.muted).child((t.files)(detail.files.len())))
-            .child(file_list_bar(&self.filter, fold, cx));
-        if diff_view::prefs(cx).tree {
-            for row in tree_rows(&files, |f| &f.path, &self.closed) {
-                list = match &row.item {
-                    Some(f) => list.child(self.file_row(f, Some(row.depth), cx)),
-                    None => {
-                        let key = row.key.clone();
-                        list.child(folder_row(format!("folder-{}", row.key).into(), &row.key, &row.name, row.items.len(), row.open, row.depth, true, cx).on_click(cx.listener(move |this, _, _, cx| {
-                            if !this.closed.remove(&key) {
-                                this.closed.insert(key.clone());
-                            }
-                            cx.notify();
-                        })))
-                    }
-                };
-            }
-        } else {
-            for f in &files {
-                list = list.child(self.file_row(f, None, cx));
-            }
-        }
+            .child(file_list_bar(&self.filter, fold, cx))
+            .child(div().relative().flex_1().min_h_0().child(rows).vertical_scrollbar(&self.scroll));
 
         let right = if self.file.is_some() {
             if self.error.is_empty() {

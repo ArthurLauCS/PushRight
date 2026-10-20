@@ -1,7 +1,7 @@
 pub mod conflict;
 pub mod detail;
 pub mod diff;
-pub mod github;
+pub mod forge;
 pub mod graph;
 pub mod history;
 pub mod identity;
