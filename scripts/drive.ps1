@@ -1,6 +1,7 @@
 param([string]$Exe, [string]$Arguments = '', [string]$Steps, [string]$OutDir, [int]$Width = 1440, [int]$Height = 860)
 # Launch the app and run steps against its window with posted messages (the real mouse is not moved).
 # Steps, separated by ';':  wait <ms> | click <x> <y> | dbl <x> <y> | right <x> <y> | move <x> <y> | key <vk> [ctrl] | text <chars> | shot <name>
+#   | wheel <x> <y> <delta> [count] | cpu <label> (CPU time and wall time since the last cpu step) | ping <label> (time until the UI thread answers)
 # Coordinates are client coordinates of the main window.
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -11,7 +12,10 @@ public static class D {
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint t, out IntPtr r);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 }
 "@
 $p = if ($Arguments) { Start-Process $Exe -ArgumentList $Arguments -PassThru } else { Start-Process $Exe -PassThru }
@@ -22,6 +26,7 @@ $h = $p.MainWindowHandle
 [void][D]::SetForegroundWindow($h)
 function MakeLParam($x, $y) { [IntPtr](([int]$y -shl 16) -bor ([int]$x -band 0xffff)) }
 function Post($m, $w, $l) { [void][D]::PostMessage($h, $m, [IntPtr]$w, $l) }
+$mark = @{ Cpu = $p.TotalProcessorTime; Wall = $sw.ElapsedMilliseconds }
 foreach ($step in $Steps.Split(';')) {
   $a = $step.Trim().Split(' ')
   switch ($a[0]) {
@@ -38,6 +43,19 @@ foreach ($step in $Steps.Split(';')) {
       Start-Sleep -Milliseconds 300
     }
     'text' { foreach ($c in $a[1].ToCharArray()) { Post 0x102 ([int]$c) 0 }; Start-Sleep -Milliseconds 300 }
+    'wheel' {
+      # WM_MOUSEWHEEL takes screen coordinates; the delta is the high word of wParam (120 = one notch, negative scrolls down)
+      $pt = New-Object D+POINT; $pt.X = [int]$a[1]; $pt.Y = [int]$a[2]; [void][D]::ClientToScreen($h, [ref]$pt)
+      $n = if ($a.Length -gt 4) { [int]$a[4] } else { 1 }
+      Post 0x200 0 (MakeLParam $a[1] $a[2])
+      for ($i = 0; $i -lt $n; $i++) { Post 0x20A ([int]$a[3] -shl 16) (MakeLParam $pt.X $pt.Y); Start-Sleep -Milliseconds 16 }
+    }
+    'cpu' {
+      $p.Refresh()
+      "{0}: cpu {1:N0} ms, wall {2} ms" -f $a[1], ($p.TotalProcessorTime - $mark.Cpu).TotalMilliseconds, ($sw.ElapsedMilliseconds - $mark.Wall)
+      $mark = @{ Cpu = $p.TotalProcessorTime; Wall = $sw.ElapsedMilliseconds }
+    }
+    'ping' { $t0 = $sw.ElapsedMilliseconds; $r = [IntPtr]::Zero; [void][D]::SendMessageTimeout($h, 0, [IntPtr]::Zero, [IntPtr]::Zero, 2, 20000, [ref]$r); "{0}: ui answered after {1} ms" -f $a[1], ($sw.ElapsedMilliseconds - $t0) }
     'shot' {
       $r = New-Object D+RECT
       [void][D]::GetWindowRect($h, [ref]$r)

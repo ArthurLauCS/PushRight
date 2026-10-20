@@ -2,7 +2,7 @@
 
 use crate::conflict_view::{ConflictEvent, ConflictView};
 use crate::diff_view::{self, Apply, DiffPrefs, DiffView, Mode, Pager};
-use crate::file_tree::{file_icon, file_list_bar, filter_input, folder_row, indent, tree_rows};
+use crate::file_tree::{file_icon, file_list_bar, filter_input, folder_row, indent, tree_rows, TreeRow};
 use crate::git::{self, Session};
 use crate::i18n::{error_text, lookup, t};
 use crate::icons::{icon, Icon};
@@ -13,11 +13,13 @@ use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, ROW};
 use crate::ui::{btn, label};
 use engine::status::Entry;
 use gpui::prelude::*;
-use gpui::{canvas, div, px, relative, App, BoxShadow, Context, Entity, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Subscription, Task, WeakEntity, Window};
+use gpui::{canvas, div, px, relative, uniform_list, App, BoxShadow, Context, Entity, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Subscription, Task, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputEvent, InputState, TextareaState};
+use gpui_component::scroll::ScrollableElement;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -37,6 +39,7 @@ pub struct WorkingCopy {
     filled: String,
     filter: Entity<InputState>,
     closed: [HashSet<String>; 2],
+    scrolls: [UniformListScrollHandle; 2],
     folded: [bool; 3],
     sizes: [f32; 3],
     /// 各栏上一次布局时的实际高度，拖动起点用
@@ -96,6 +99,7 @@ impl WorkingCopy {
             filled: String::new(),
             filter,
             closed: [HashSet::new(), HashSet::new()],
+            scrolls: [UniformListScrollHandle::new(), UniformListScrollHandle::new()],
             folded: [false; 3],
             sizes: DEFAULT_SIZES,
             heights: Rc::new(RefCell::new(DEFAULT_SIZES)),
@@ -366,6 +370,7 @@ impl WorkingCopy {
             .flex()
             .items_center()
             .gap(px(8.))
+            .w_full()
             .h(ROW)
             .pl(depth.map_or(px(12.), indent))
             .pr(px(8.))
@@ -466,43 +471,57 @@ impl WorkingCopy {
                 .tip(if staged { t.unstage_all } else { t.stage_all })
                 .on_click(cx.listener(move |this, _, _, cx| this.stage(all2.clone(), staged, cx))),
         );
-        let mut list = div().id(("items", index)).flex_1().min_h_0().overflow_y_scroll();
-        if !folded {
-            if diff_view::prefs(cx).tree {
-                for row in tree_rows(&items, |e| &e.path, &self.closed[index]) {
-                    list = match &row.item {
-                        Some(e) => list.child(self.render_item(e, Some(row.depth), staged, cx)),
-                        None => {
-                            let key = row.key.clone();
-                            let paths: Vec<String> = row.items.iter().map(|e| e.path.clone()).collect();
-                            // 空列表在丢弃里表示「全部」，文件夹里没有可丢弃的文件时必须禁用
-                            let discardable: Vec<String> = row.items.iter().filter(|e| !e.conflicted).map(|e| e.path.clone()).collect();
-                            let group: SharedString = format!("folder-{index}-{}", row.key).into();
-                            let show = move |b: crate::ui::Btn, g: SharedString| div().invisible().group_hover(g, |s| s.visible()).child(b);
-                            let mut f = folder_row(group.clone(), &row.key, &row.name, row.items.len(), row.open, row.depth, false, cx).on_click(cx.listener(move |this, _, _, cx| {
-                                if !this.closed[index].remove(&key) {
-                                    this.closed[index].insert(key.clone());
-                                }
-                                cx.notify();
-                            }));
-                            if !staged {
-                                f = f.child(show(btn(SharedString::from(format!("discard-dir-{}", row.key))).small().quiet().danger().icon_size(Icon::Undo, px(14.)).disabled(disabled || discardable.is_empty()).tip(t.file_list.discard_folder).on_click(cx.listener(move |this, _, window, cx| {
-                                    let d = discardable.clone();
-                                    let _ = this.repo.update(cx, |r, cx| r.discard(d, window, cx));
-                                })), group.clone()));
-                            }
-                            f = f.child(show(btn(SharedString::from(format!("stage-dir-{}", row.key))).small().quiet().icon_size(if staged { Icon::Minus } else { Icon::Plus }, px(14.)).disabled(disabled).tip(if staged { t.file_list.unstage_folder } else { t.file_list.stage_folder }).on_click(cx.listener(move |this, _, _, cx| this.stage(paths.clone(), staged, cx))), group));
-                            list.child(f)
-                        }
-                    };
-                }
-            } else {
-                for e in &items {
-                    list = list.child(self.render_item(e, None, staged, cx));
-                }
-            }
-        }
+        // 只渲染看得见的行：几百个改动文件时每一帧不再把整张列表排一遍
+        let tree = diff_view::prefs(cx).tree;
+        let rows = Rc::new(if folded {
+            Vec::new()
+        } else if tree {
+            tree_rows(&items, |e| &e.path, &self.closed[index])
+        } else {
+            items.into_iter().map(|e| TreeRow { key: e.path.clone(), depth: 0, name: String::new(), item: Some(e), items: Vec::new(), open: false }).collect()
+        });
+        let list = uniform_list(
+            ("items", index),
+            rows.len(),
+            cx.processor(move |this: &mut WorkingCopy, range: Range<usize>, _window: &mut Window, cx: &mut Context<WorkingCopy>| {
+                range
+                    .map(|ix| match &rows[ix].item {
+                        Some(e) => this.render_item(e, tree.then_some(rows[ix].depth), staged, cx).into_any_element(),
+                        None => this.render_folder(index, &rows[ix], cx),
+                    })
+                    .collect::<Vec<_>>()
+            }),
+        )
+        .track_scroll(&self.scrolls[index])
+        .size_full();
+        let list = div().relative().flex_1().min_h_0().child(list).vertical_scrollbar(&self.scrolls[index]);
         self.section(index, title_row, list.into_any_element(), cx)
+    }
+
+    fn render_folder(&mut self, index: usize, row: &TreeRow<Entry>, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let t = t(cx);
+        let staged = index == 1;
+        let disabled = self.disabled(cx);
+        let key = row.key.clone();
+        let paths: Vec<String> = row.items.iter().map(|e| e.path.clone()).collect();
+        // 空列表在丢弃里表示「全部」，文件夹里没有可丢弃的文件时必须禁用
+        let discardable: Vec<String> = row.items.iter().filter(|e| !e.conflicted).map(|e| e.path.clone()).collect();
+        let group: SharedString = format!("folder-{index}-{}", row.key).into();
+        let show = move |b: crate::ui::Btn, g: SharedString| div().invisible().group_hover(g, |s| s.visible()).child(b);
+        let mut f = folder_row(group.clone(), &row.key, &row.name, row.items.len(), row.open, row.depth, false, cx).on_click(cx.listener(move |this, _, _, cx| {
+            if !this.closed[index].remove(&key) {
+                this.closed[index].insert(key.clone());
+            }
+            cx.notify();
+        }));
+        if !staged {
+            f = f.child(show(btn(SharedString::from(format!("discard-dir-{}", row.key))).small().quiet().danger().icon_size(Icon::Undo, px(14.)).disabled(disabled || discardable.is_empty()).tip(t.file_list.discard_folder).on_click(cx.listener(move |this, _, window, cx| {
+                let d = discardable.clone();
+                let _ = this.repo.update(cx, |r, cx| r.discard(d, window, cx));
+            })), group.clone()));
+        }
+        f.child(show(btn(SharedString::from(format!("stage-dir-{}", row.key))).small().quiet().icon_size(if staged { Icon::Minus } else { Icon::Plus }, px(14.)).disabled(disabled).tip(if staged { t.file_list.unstage_folder } else { t.file_list.stage_folder }).on_click(cx.listener(move |this, _, _, cx| this.stage(paths.clone(), staged, cx))), group))
+            .into_any_element()
     }
 
     /// 一栏：标题加内容。展开时按比例分高度（至少 80px），折起来只剩标题

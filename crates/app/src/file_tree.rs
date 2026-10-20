@@ -112,6 +112,7 @@ pub fn folder_row(id: gpui::SharedString, row_key: &str, name: &str, count: usiz
         .flex()
         .items_center()
         .gap(px(4.))
+        .w_full()
         .h(if compact { px(24.) } else { crate::theme::ROW })
         .pl(px(12. + depth as f32 * 16.))
         .pr(px(8.))
