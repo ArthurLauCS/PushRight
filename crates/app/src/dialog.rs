@@ -13,7 +13,7 @@ use gpui_component::checkbox::Checkbox;
 use gpui_component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_component::radio::Radio;
-use gpui_component::select::{Select, SelectState};
+use gpui_component::select::{SearchableVec, Select, SelectState};
 use gpui_component::IndexPath;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -162,7 +162,8 @@ enum Control {
     Area(Entity<TextareaState>),
     Check(bool),
     Choice(Option<usize>),
-    Select(Entity<SelectState<Vec<Opt>>>),
+    /// `Vec` 不实现搜索，选项多时显示的搜索框不起作用，所以用 `SearchableVec`
+    Select(Entity<SelectState<SearchableVec<Opt>>>),
     Color(Entity<ColorPickerState>),
 }
 
@@ -236,7 +237,7 @@ impl Dialog {
                 Kind::Select(options) => {
                     let opts: Vec<Opt> = options.iter().map(|(v, l)| Opt::new(v.clone(), l.clone())).collect();
                     let selected = options.iter().position(|(v, _)| *v == f.text).unwrap_or(0);
-                    let state = cx.new(|cx| SelectState::new(opts, Some(IndexPath::new(selected)), window, cx).searchable(options.len() > 12));
+                    let state = cx.new(|cx| SelectState::new(SearchableVec::new(opts), Some(IndexPath::new(selected)), window, cx).searchable(options.len() > 12));
                     subs.push(cx.observe(&state, |_, _, cx| cx.notify()));
                     Control::Select(state)
                 }
