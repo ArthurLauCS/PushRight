@@ -1,6 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect x="0" y="0" width="1024" height="1024" rx="200" fill="#2a2927"/>
-  <path d="M300 200 V824" stroke="#f0eee6" stroke-width="130" stroke-linecap="round"/>
-  <path d="M300 720 C300 540 380 470 560 470 H700" fill="none" stroke="#e8896a" stroke-width="140" stroke-linecap="round"/>
-  <path d="M610 320 L800 470 L610 620" fill="none" stroke="#e8896a" stroke-width="140" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 小图标（16～32px）：同样的路牌，只留主干和分支两条粗线 -->
+  <path d="M4 7.5 H20 L28 16 L20 24.5 H4 Z" fill="#FACC15" stroke="#FACC15" stroke-width="4" stroke-linejoin="round"/>
+  <g fill="none" stroke="#2B2412" stroke-width="3" stroke-linecap="round">
+    <path d="M9.5 9.5 V22.5"/>
+    <path d="M9.5 20 C9.5 16 12 16 19 16"/>
+  </g>
 </svg>

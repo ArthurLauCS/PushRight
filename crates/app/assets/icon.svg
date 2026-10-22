@@ -1,22 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 应用图标（40px 及以上）：黄色向右的箭头路牌，上面一条深色主干，分支从主干弯出去指向箭头尖 -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3a3935"/>
-      <stop offset="1" stop-color="#1f1e1d"/>
-    </linearGradient>
-    <linearGradient id="clay" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0" stop-color="#d6714f"/>
-      <stop offset="1" stop-color="#ec9a7d"/>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="20" y1="36" x2="242" y2="220">
+      <stop offset="0" stop-color="#FFE45C"/>
+      <stop offset="0.55" stop-color="#FACC15"/>
+      <stop offset="1" stop-color="#E0A800"/>
     </linearGradient>
   </defs>
-  <rect x="48" y="48" width="928" height="928" rx="216" fill="url(#bg)"/>
-  <rect x="50" y="50" width="924" height="924" rx="214" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
-  <!-- 主干：一条竖直的提交线 -->
-  <path d="M332 236 V788" stroke="#f0eee6" stroke-width="60" stroke-linecap="round"/>
-  <!-- 分支：从主干上弯出去，向右推 -->
-  <path d="M332 700 C332 540 400 470 560 470 H700" fill="none" stroke="url(#clay)" stroke-width="64" stroke-linecap="round"/>
-  <path d="M628 352 L780 470 L628 588" fill="none" stroke="url(#clay)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 同色描边把五边形的角磨圆 -->
+  <path d="M36 52 H164 L226 128 L164 204 H36 Z" fill="url(#bg)" stroke="url(#bg)" stroke-width="32" stroke-linejoin="round"/>
+  <g fill="none" stroke="#2B2412" stroke-width="18" stroke-linecap="round">
+    <path d="M78 84 V172"/>
+    <path d="M78 158 C78 128 100 128 150 128"/>
+  </g>
   <!-- 提交节点 -->
-  <circle cx="332" cy="300" r="70" fill="#1f1e1d" stroke="#f0eee6" stroke-width="44"/>
-  <circle cx="332" cy="724" r="70" fill="#e08363" stroke="#f0eee6" stroke-width="44"/>
+  <g fill="#2B2412">
+    <circle cx="78" cy="80" r="17"/>
+    <circle cx="78" cy="176" r="17"/>
+    <circle cx="160" cy="128" r="17"/>
+  </g>
 </svg>
