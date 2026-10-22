@@ -2,6 +2,7 @@
 //! 令牌和请求体写进 curl 从 stdin 读的配置，不出现在命令行里；curl 用系统证书库和环境变量里的代理，
 //! 自建服务器用公司内部证书也能连。
 
+use crate::diff::Line;
 use crate::{decode, err, git_at, Repo, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -77,6 +78,41 @@ pub struct Status {
     pub squash: bool,
     pub remove_source: bool,
     pub base: String,
+    /// GitLab diff 的起点（start_sha），发行评论要用；GitHub 为空
+    pub start: String,
+}
+
+/// diff 里的一条行评论；所在行被后来的提交改掉了（已过时）的不算
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Note {
+    pub path: String,
+    /// 落在旧文件那一侧（删除行），否则是新文件
+    pub old: bool,
+    /// 多行评论是最后一行
+    pub line: u32,
+    pub author: String,
+    pub body: String,
+    /// ISO 8601
+    pub created: String,
+}
+
+/// diff 里的一行在新旧文件里的位置。增删行只在一侧有行号，另一侧记它插在哪（GitLab 的 line_code 要用）
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Spot {
+    /// '+' / '-' / ' '
+    pub kind: char,
+    pub old: u32,
+    pub new: u32,
+}
+
+/// 行评论落在哪：文件和起止两行，单行时两行相同
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Anchor {
+    pub path: String,
+    /// 改名前的路径，没改名时和 path 相同
+    pub old_path: String,
+    pub from: Spot,
+    pub to: Spot,
 }
 
 /// 创建表单要的项目信息
@@ -414,6 +450,7 @@ pub fn status(f: &Forge, token: &str, r: &Request) -> Result<Status> {
                 squash: false,
                 remove_source: repo["delete_branch_on_merge"].as_bool().unwrap_or(false),
                 base: s(&pr, "/base/sha"),
+                start: String::new(),
             })
         }
         Kind::GitLab => {
@@ -443,6 +480,7 @@ pub fn status(f: &Forge, token: &str, r: &Request) -> Result<Status> {
                 squash: mr["squash"].as_bool().unwrap_or(false),
                 remove_source: mr["force_remove_source_branch"].as_bool().unwrap_or(false),
                 base: s(&mr, "/diff_refs/base_sha"),
+                start: s(&mr, "/diff_refs/start_sha"),
             })
         }
     }
@@ -482,6 +520,84 @@ pub fn close(f: &Forge, token: &str, n: u64) -> Result<()> {
     match f.kind {
         Kind::GitHub => call(f, token, "PATCH", &path(f, &format!("/pulls/{n}")), Some(json!({ "state": "closed" })))?,
         Kind::GitLab => call(f, token, "PUT", &path(f, &format!("/merge_requests/{n}")), Some(json!({ "state_event": "close" })))?,
+    };
+    Ok(())
+}
+
+/// 行评论，最多取 100 条（GitLab 是 100 个讨论）
+pub fn notes(f: &Forge, token: &str, r: &Request) -> Result<Vec<Note>> {
+    let n = r.number;
+    let mut out = Vec::new();
+    match f.kind {
+        Kind::GitHub => {
+            let v = call(f, token, "GET", &path(f, &format!("/pulls/{n}/comments?per_page=100")), None)?;
+            for c in v.as_array().into_iter().flatten() {
+                // 已过时的没有 line
+                let Some(line) = c["line"].as_u64() else { continue };
+                out.push(Note { path: s(c, "/path"), old: s(c, "/side") == "LEFT", line: line as u32, author: s(c, "/user/login"), body: s(c, "/body"), created: s(c, "/created_at") });
+            }
+        }
+        Kind::GitLab => {
+            let v = call(f, token, "GET", &path(f, &format!("/merge_requests/{n}/discussions?per_page=100")), None)?;
+            for d in v.as_array().into_iter().flatten() {
+                let notes = d["notes"].as_array().map(Vec::as_slice).unwrap_or_default();
+                let Some(p) = notes.first().map(|x| &x["position"]) else { continue };
+                // 还对得上的评论服务器会挪到最新版本上，对不上的留在旧版本，算已过时
+                if p["position_type"] != "text" || s(p, "/head_sha") != r.head {
+                    continue;
+                }
+                let (old, line) = match (p["new_line"].as_u64(), p["old_line"].as_u64()) {
+                    (Some(l), _) => (false, l),
+                    (None, Some(l)) => (true, l),
+                    _ => continue,
+                };
+                for x in notes.iter().filter(|x| x["system"] != true) {
+                    out.push(Note { path: s(p, "/new_path"), old, line: line as u32, author: s(x, "/author/username"), body: s(x, "/body"), created: s(x, "/created_at") });
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// 区块里第 i 行的位置。另一侧照 GitLab 解析 diff 时的计数：前面最近一行的行号 + 1，前面没有取后面最近的，都没有是 0。
+/// 上下文为 0 行时，纯新增 / 纯删除区块的另一侧会和服务器算的不同，只影响 GitLab 多行范围的标记，评论照常发出
+pub fn spot(lines: &[Line], i: usize) -> Spot {
+    let at = |no: fn(&Line) -> Option<u32>| no(&lines[i]).or_else(|| lines[..i].iter().rev().find_map(no).map(|n| n + 1)).or_else(|| lines[i..].iter().find_map(no)).unwrap_or(0);
+    Spot { kind: lines[i].kind, old: at(|l| l.old_no), new: at(|l| l.new_no) }
+}
+
+/// 发一条行评论，立即可见
+pub fn comment(f: &Forge, token: &str, r: &Request, st: &Status, a: &Anchor, body: &str) -> Result<()> {
+    let n = r.number;
+    match f.kind {
+        Kind::GitHub => {
+            // 删除行在旧文件（LEFT），其余在新文件（RIGHT）
+            let side = |p: &Spot| if p.kind == '-' { ("LEFT", p.old) } else { ("RIGHT", p.new) };
+            let (to_side, to_line) = side(&a.to);
+            let mut b = json!({ "body": body, "commit_id": r.head, "path": a.path, "side": to_side, "line": to_line });
+            if a.from != a.to {
+                let (from_side, from_line) = side(&a.from);
+                b["start_side"] = from_side.into();
+                b["start_line"] = from_line.into();
+            }
+            call(f, token, "POST", &path(f, &format!("/pulls/{n}/comments")), Some(b))?
+        }
+        Kind::GitLab => {
+            // 新增行只给新行号，删除行只给旧行号，上下文行两个都给
+            let old_line = |p: &Spot| (p.kind != '+').then_some(p.old);
+            let new_line = |p: &Spot| (p.kind != '-').then_some(p.new);
+            let mut position = json!({ "position_type": "text", "base_sha": st.base, "start_sha": st.start, "head_sha": r.head, "old_path": a.old_path, "new_path": a.path, "old_line": old_line(&a.to), "new_line": new_line(&a.to) });
+            if a.from != a.to {
+                // line_code 是「路径的 SHA-1_旧位置_新位置」
+                let mut h = gix::hash::hasher(gix::hash::Kind::Sha1);
+                h.update(a.path.as_bytes());
+                let file = h.try_finalize().map(|id| id.to_string()).unwrap_or_default();
+                let end = |p: &Spot| json!({ "line_code": format!("{file}_{}_{}", p.old, p.new), "type": if p.kind == '+' { "new" } else { "old" }, "old_line": old_line(p), "new_line": new_line(p) });
+                position["line_range"] = json!({ "start": end(&a.from), "end": end(&a.to) });
+            }
+            call(f, token, "POST", &path(f, &format!("/merge_requests/{n}/discussions")), Some(json!({ "body": body, "position": position })))?
+        }
     };
     Ok(())
 }
@@ -548,5 +664,19 @@ mod tests {
         assert_eq!(guess("gitlab.example.com"), Some(Kind::GitLab));
         assert_eq!(guess("git.example.com"), None);
         assert_eq!(encoded("group/sub proj"), "group%2Fsub%20proj");
+    }
+
+    #[test]
+    fn spots_count_the_other_side_like_gitlab() {
+        let l = |kind: char, old_no: Option<u32>, new_no: Option<u32>| Line { kind, text: String::new(), old_no, new_no };
+        let hunk = [l(' ', Some(1), Some(1)), l('-', Some(2), None), l('+', None, Some(2)), l('+', None, Some(3)), l(' ', Some(3), Some(4))];
+        let at = |i| { let p = spot(&hunk, i); (p.kind, p.old, p.new) };
+        assert_eq!(at(1), ('-', 2, 2));
+        assert_eq!(at(2), ('+', 3, 2));
+        assert_eq!(at(3), ('+', 3, 3));
+        assert_eq!(at(4), (' ', 3, 4));
+        // 区块开头就是新增：取后面第一个旧行号；新文件没有旧行，是 0
+        assert_eq!(spot(&[l('+', None, Some(1)), l(' ', Some(1), Some(2))], 0), Spot { kind: '+', old: 1, new: 1 });
+        assert_eq!(spot(&[l('+', None, Some(1))], 0), Spot { kind: '+', old: 0, new: 1 });
     }
 }

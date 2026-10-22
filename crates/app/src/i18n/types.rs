@@ -200,6 +200,7 @@ pub struct DiffTools {
     pub more: fn(usize) -> String,
     pub whole: &'static str,
     pub side_by_side: &'static str,
+    pub zen: &'static str,
     pub previous: &'static str,
     pub next: &'static str,
     pub filtered: &'static str,
@@ -277,6 +278,13 @@ pub struct Requests {
     pub body: &'static str,
     pub draft: &'static str,
     pub push_first: fn(&str) -> String,
+    pub approve_title: fn(u64) -> String,
+    /// 编号、审核者
+    pub not_reviewer: fn(u64, &str) -> String,
+    pub comment: &'static str,
+    /// 起止行号
+    pub comment_title: fn(u32, u32) -> String,
+    pub comment_body: &'static str,
 }
 
 pub struct RepoTools {

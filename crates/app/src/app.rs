@@ -2,6 +2,7 @@
 
 use crate::diff_colors::{to_hex, DiffColors, PRESETS};
 use crate::dialog::{Dialog, Field, Spec, Values};
+use crate::diff_view;
 use crate::git::{self, Session};
 use crate::help::Help;
 use crate::menu::{Item, Menu};
@@ -122,6 +123,13 @@ impl PushRight {
         });
         let mut subscriptions = subscriptions;
         subscriptions.push(activation);
+        // 禅模式按 Esc 退出。用按键观察器：弹窗、菜单关掉后焦点落空，根节点收不到按键，观察器仍收得到；
+        // 弹窗、菜单自己处理的 Esc 会阻止冒泡，不会传到这里
+        subscriptions.push(cx.observe_keystrokes(|_, e, window, cx| {
+            if e.keystroke.key == "escape" && e.action.is_none() && diff_view::zen(cx).is_some() {
+                diff_view::set_zen(None, window, cx);
+            }
+        }));
         let mut this = PushRight {
             dialog: cx.new(Dialog::new),
             menu: cx.new(Menu::new),
@@ -621,9 +629,13 @@ impl Render for PushRight {
         let p = palette(cx).clone();
         let _ = window;
         let body = div().flex_1().min_h_0().relative().flex().flex_col();
-        let body = match self.active.and_then(|id| self.tabs.iter().find(|t| t.id == id)) {
-            Some(tab) => body.child(tab.view.clone()),
-            None => body.child(self.render_welcome(cx)),
+        // 禅模式只画那个 diff 视图，顶栏和页签都不要
+        let zen = diff_view::zen(cx);
+        let chrome = zen.is_none().then(|| (self.render_settings(cx).into_any_element(), self.render_tabs(cx).into_any_element()));
+        let body = match (zen, self.active.and_then(|id| self.tabs.iter().find(|t| t.id == id))) {
+            (Some(view), _) => body.child(view),
+            (None, Some(tab)) => body.child(tab.view.clone()),
+            (None, None) => body.child(self.render_welcome(cx)),
         };
         div()
             .id("pushright")
@@ -651,8 +663,7 @@ impl Render for PushRight {
             .font_family(theme::UI)
             .text_size(theme::FS_MD)
             .line_height(gpui::relative(1.5))
-            .child(self.render_settings(cx))
-            .child(self.render_tabs(cx))
+            .when_some(chrome, |s, (settings, tabs)| s.child(settings).child(tabs))
             .child(body)
             .child(self.help.clone())
             .child(self.dialog.clone())

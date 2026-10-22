@@ -1,16 +1,19 @@
 //! 一个文件的 diff：上方一条工具栏（上一处 / 下一处、忽略空白、隐藏字符、换行、上下文行数、整个文件、并排），
-//! 下面按区块显示；本地更改里可以按区块、按行暂存或丢弃。只渲染看得见的行，几千行的 diff 滚动也不卡。
+//! 下面按区块显示；本地更改里可以按区块、按行暂存或丢弃，PR 里在行号上拖选几行发评论、已有的行评论显示在所在行下面。
+//! 带文件列表的 diff 可以进禅模式：只剩文件列表和 diff 铺满窗口。只渲染看得见的行，几千行的 diff 滚动也不卡。
 
 use crate::highlight::{highlight_hunk, Spans, Token};
 use crate::i18n::{error_text, t};
-use crate::icons::Icon;
+use crate::icons::{icon, Icon};
 use crate::layout;
 use crate::store;
-use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, MONO, PROSE};
+use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
+use crate::time::fmt_time;
 use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
+use engine::forge::{spot, Note, Spot};
 use gpui::prelude::*;
-use gpui::{div, img, list, px, AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
+use gpui::{div, img, list, px, AnyElement, AnyView, AnyWeakView, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
 use gpui_component::scroll::ScrollableElement;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -207,6 +210,21 @@ fn display(text: &str, spans: Option<&Spans>, hidden: bool, p: &Palette) -> (Str
     (out, merged)
 }
 
+/// 禅模式：铺满窗口的视图（文件列表 + diff），其余界面都不画；Esc 退出
+pub struct Zen(pub Option<AnyView>);
+
+impl Global for Zen {}
+
+pub fn zen(cx: &App) -> Option<AnyView> {
+    cx.try_global::<Zen>().and_then(|z| z.0.clone())
+}
+
+/// 进入（给出视图）或退出禅模式
+pub fn set_zen(view: Option<AnyView>, window: &mut Window, cx: &mut App) {
+    cx.set_global(Zen(view));
+    window.refresh();
+}
+
 /// 鼠标选中的文字：起点和终点都是（行在 items 里的下标，显示列）；并排时只在一栏里选，`side` 同 `code_line` 的 `half`
 #[derive(Clone, Copy, PartialEq)]
 struct TextSel {
@@ -229,12 +247,16 @@ enum Item {
     Line(usize, usize),
     /// 并排的一行：左右各是区块里的行下标
     Split(usize, Option<usize>, Option<usize>),
+    /// 挂在上一行下面的评论：notes 里的下标
+    Note(usize),
 }
 
 /// 分页预览：给出从第几行开始取的后台任务
 pub type Pager = Rc<dyn Fn(usize) -> Box<dyn FnOnce() -> engine::Result<Diff> + Send>>;
 /// 按区块 / 按行暂存或丢弃：区块下标、区块标题、选中的行下标
 pub type Apply = Rc<dyn Fn(usize, String, Vec<usize>, &mut Window, &mut App)>;
+/// 对选中的行发评论：起止两行
+pub type Comment = Rc<dyn Fn(Spot, Spot, &mut Window, &mut App)>;
 
 pub struct DiffView {
     source: Option<Arc<Diff>>,
@@ -258,6 +280,14 @@ pub struct DiffView {
     pager: Option<Pager>,
     on_apply: Option<Apply>,
     on_discard: Option<Apply>,
+    /// 这个文件的行评论，在 `set` 之前给
+    pub notes: Vec<Note>,
+    /// 给了就能在行号上拖选几行发评论（PR 改动的文件），在 `set` 之前给
+    pub on_comment: Option<Comment>,
+    /// 在行号上按住拖选要评论的行：（区块，起点行）
+    picking: Option<(usize, usize)>,
+    /// 给了就在工具栏放禅模式按钮，铺满窗口的是这个视图
+    pub zen: Option<Rc<AnyWeakView>>,
     _colors: Option<Task<()>>,
     /// 上一次布局时的宽度，算并排分隔条的位置
     width: Rc<std::cell::Cell<f32>>,
@@ -291,6 +321,10 @@ impl DiffView {
             pager: None,
             on_apply: None,
             on_discard: None,
+            notes: Vec::new(),
+            on_comment: None,
+            picking: None,
+            zen: None,
             _colors: None,
             width: Rc::new(std::cell::Cell::new(800.)),
             text_sel: None,
@@ -316,6 +350,13 @@ impl DiffView {
         self.loading = false;
         self.request += 1;
         self.rebuild(!same_file, cx);
+        self.recolor(cx);
+    }
+
+    /// 只换评论：停在原处，不重新着色
+    pub fn set_notes(&mut self, notes: Vec<Note>, cx: &mut Context<Self>) {
+        self.notes = notes;
+        self.rebuild(false, cx);
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
@@ -326,15 +367,18 @@ impl DiffView {
         self.page.as_ref().or(self.source.as_ref())
     }
 
-    /// 内容或显示方式变了：重排行、清掉选择、后台重新着色
+    /// 内容、评论或显示方式变了：重排行、清掉选择；内容变了的由调用方再重新着色
     fn rebuild(&mut self, reset_scroll: bool, cx: &mut Context<Self>) {
         self.selected.clear();
+        self.picking = None;
         self.text_sel = None;
         self.scroll_x = 0.;
         let side = prefs(cx).side_by_side;
         let mut items = Vec::new();
         let mut budget = MAX_LINES;
         let mut widest = 0;
+        // 评论挂在它那一侧行号相同的行下面
+        let notes_at = |items: &mut Vec<Item>, line: &Line| items.extend(self.notes.iter().enumerate().filter(|(_, n)| (if n.old { line.old_no } else { line.new_no }) == Some(n.line)).map(|(k, _)| Item::Note(k)));
         if let Some(d) = self.diff().filter(|d| !d.binary && !d.too_large) {
             for (h, hunk) in d.hunks.iter().enumerate() {
                 items.push(Item::Hunk(h));
@@ -343,9 +387,16 @@ impl DiffView {
                 if side {
                     for (l, r) in split_rows(&hunk.lines[..n]) {
                         items.push(Item::Split(h, l, r));
+                        // 上下文行两栏是同一行，只挂一次
+                        for i in [l, r.filter(|&r| Some(r) != l)].into_iter().flatten() {
+                            notes_at(&mut items, &hunk.lines[i]);
+                        }
                     }
                 } else {
-                    items.extend((0..n).map(|i| Item::Line(h, i)));
+                    for i in 0..n {
+                        items.push(Item::Line(h, i));
+                        notes_at(&mut items, &hunk.lines[i]);
+                    }
                 }
                 widest = hunk.lines[..n].iter().map(|l| columns(&l.text)).fold(widest, usize::max);
             }
@@ -358,7 +409,6 @@ impl DiffView {
         if !reset_scroll {
             self.list.scroll_to(top);
         }
-        self.recolor(cx);
         cx.notify();
     }
 
@@ -414,6 +464,7 @@ impl DiffView {
                     this.page = Some(Arc::new(d));
                     this.offset = skip;
                     this.rebuild(true, cx);
+                    this.recolor(cx);
                 }
                 Err(e) => {
                     this.error = error_text(cx, &e);
@@ -445,6 +496,41 @@ impl DiffView {
         cx.notify();
     }
 
+    /// 在行号上按下：从这一行开始选要评论的行
+    fn pick_start(&mut self, h: usize, i: usize, cx: &mut Context<Self>) {
+        self.picking = Some((h, i));
+        self.selected = HashSet::from([(h, i)]);
+        self.text_sel = None;
+        cx.notify();
+    }
+
+    /// 拖到区块里第 i 行：选中起点到这里的整段，不跨出起点所在的区块；按键已经松开（松在了 diff 外面）就作废
+    fn pick_to(&mut self, h: usize, i: usize, pressed: bool, cx: &mut Context<Self>) {
+        let Some((ph, from)) = self.picking else { return };
+        if !pressed {
+            self.picking = None;
+            self.selected.clear();
+            return cx.notify();
+        }
+        let Some(lines) = self.diff().filter(|_| h == ph).map(|d| &d.hunks[h].lines) else { return };
+        let picked: HashSet<_> = (from.min(i)..=from.max(i)).filter(|&k| lines[k].kind != '\\').map(|k| (h, k)).collect();
+        if picked != self.selected {
+            self.selected = picked;
+            cx.notify();
+        }
+    }
+
+    /// 松开：对选中的整段发评论
+    fn pick_end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((h, _)) = self.picking.take() else { return };
+        let lines = self.picked(h);
+        self.selected.clear();
+        cx.notify();
+        let (Some(d), Some(on_comment), Some(&a), Some(&b)) = (self.diff(), self.on_comment.clone(), lines.first(), lines.last()) else { return };
+        let (from, to) = (spot(&d.hunks[h].lines, a), spot(&d.hunks[h].lines, b));
+        on_comment(from, to, window, cx);
+    }
+
     /// 没选行就是整个区块
     fn apply(&mut self, h: usize, discard: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = self.diff() else { return };
@@ -465,7 +551,7 @@ impl DiffView {
         let changed = |item: &Item| match item {
             Item::Line(h, i) => matches!(d.hunks[*h].lines[*i].kind, '+' | '-'),
             Item::Split(h, l, r) => [l, r].iter().any(|x| x.is_some_and(|i| matches!(d.hunks[*h].lines[i].kind, '+' | '-'))),
-            Item::Hunk(_) => false,
+            Item::Hunk(_) | Item::Note(_) => false,
         };
         let starts: Vec<usize> = (0..self.items.len()).filter(|&i| changed(&self.items[i]) && (i == 0 || !changed(&self.items[i - 1]))).collect();
         let top = self.list.logical_scroll_top().item_ix;
@@ -621,11 +707,24 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
         .min_h(px(LINE_H))
         .pl(px(3.))
         .bg(if selected { p.accent_soft } else { bg });
-    row = match half {
-        None => row.child(no(line.old_no)).child(no(line.new_no)),
-        Some(old) => row.child(no(if old { line.old_no } else { line.new_no })),
+    let numbers = match half {
+        None => vec![no(line.old_no), no(line.new_no)],
+        Some(old) => vec![no(if old { line.old_no } else { line.new_no })],
     };
+    // 能评论的行：悬停时行号上出现「+」，在行号上按住拖选几行，松开就评论；在正文上拖仍是选字
+    let mut gutter = div().relative().flex().flex_none().children(numbers);
+    if v.on_comment.is_some() && line.kind != '\\' {
+        let t3 = this.clone();
+        gutter = gutter
+            .cursor_pointer()
+            .child(div().absolute().left(px(4.)).top(px(2.)).size(px(16.)).rounded(px(4.)).flex().items_center().justify_center().bg(p.accent).opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)).child(icon(Icon::Plus, px(12.), p.on_accent)))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                cx.stop_propagation();
+                t3.update(cx, |v, cx| v.pick_start(h, i, cx));
+            });
+    }
     row = row
+        .child(gutter)
         .child(div().flex_none().w(px(24.)).flex().justify_center().text_color(sign_color).when(matches!(line.kind, '+' | '-'), |s| s.font_weight(gpui::FontWeight::BOLD)).child(line.kind.to_string()))
         .child(code)
         // 左边 3px 的竖条：增删色；可选的行悬停时加深，选中时是强调色
@@ -644,9 +743,11 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
         .on_mouse_down(MouseButton::Left, move |e, window, cx| t1.update(cx, |v, cx| v.press(ix, half, e.position.x, window, cx)))
         .on_mouse_move(move |e, _, cx| {
             t2.update(cx, |v, cx| {
-                if v.dragging && e.pressed_button == Some(MouseButton::Left) {
+                let pressed = e.pressed_button == Some(MouseButton::Left);
+                if v.dragging && pressed {
                     v.drag(ix, half, e.position.x, cx);
                 }
+                v.pick_to(h, i, pressed, cx);
             })
         });
     if editable {
@@ -698,6 +799,26 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
                 bar = bar.child(btn(("apply-hunk", h)).small().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
             }
             bar.font_family(crate::theme::UI).into_any_element()
+        }
+        Item::Note(k) => {
+            let n = &v.notes[k];
+            let time = n.created.parse::<jiff::Timestamp>().map(|t| fmt_time(cx, t.as_second())).unwrap_or_default();
+            div()
+                .py(px(4.))
+                .px(px(12.))
+                .font_family(crate::theme::UI)
+                .child(
+                    div()
+                        .px(px(12.))
+                        .py(px(8.))
+                        .rounded(R_MD)
+                        .border_1()
+                        .border_color(p.border)
+                        .bg(p.panel)
+                        .child(div().text_color(p.muted).child(format!("{} · {time}", n.author)))
+                        .child(div().font_family(PROSE).text_size(FS_MD).line_height(gpui::relative(LH_BODY)).child(n.body.clone())),
+                )
+                .into_any_element()
         }
         Item::Line(h, i) => code_line(this, v, ix, h, i, None, &p, cx),
         Item::Split(h, l, r) => {
@@ -756,6 +877,11 @@ impl Render for DiffView {
                 set_pref(cx, |p| p.side_by_side = !p.side_by_side);
                 this.prefs_changed(cx);
             })));
+        let in_zen = zen(cx).is_some();
+        let bar = match self.zen.clone() {
+            Some(view) => bar.child(sep(cx)).child(tool("zen", Icon::Maximize, t.diff_tools.zen.into(), in_zen).on_click(move |_, window, cx| set_zen(if in_zen { None } else { view.upgrade() }, window, cx))),
+            None => bar,
+        };
 
         let note = |text: String| div().py(px(48.)).px(px(24.)).flex().justify_center().text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(text);
         let mut area = div().relative().flex().flex_col().flex_1().min_h_0().bg(p.bg).font_family(MONO).text_size(FS_SM).line_height(px(LINE_H));
@@ -837,7 +963,13 @@ impl Render for DiffView {
                             cx.stop_propagation();
                         }
                     }))
-                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.dragging = false))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|this, _, window, cx| {
+                            this.dragging = false;
+                            this.pick_end(window, cx);
+                        }),
+                    )
                     .child(measure)
                     .child(lines)
                     .on_scroll_wheel(cx.listener(|this, e: &ScrollWheelEvent, window, cx| {
