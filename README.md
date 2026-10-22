@@ -25,6 +25,8 @@ The extension updates automatically when installed from VS Code Marketplace. The
 
 ## This release
 
+Version **1.4.0** adds line comments to pull / merge requests: drag over the line numbers of a diff to comment on those lines, and existing comments show under the lines they belong to. On GitLab, approving, commenting on, merging or closing a merge request whose reviewers do not include you shows a reminder first, and you can still go ahead. Zen mode fills the window with just the file list and the diff, and the pull / merge request list can be resized. See the [release notes](docs/RELEASE_1.4.0.md).
+
 Version **1.3.0** adds a Pull / merge requests page for GitHub and GitLab, including self-hosted servers: filter the list, read the description, checks, reviews, commits and changed files, then check out, merge, approve, close or create one from a branch. Long branch and file lists render only their visible rows, so repositories with tens of thousands of commits and a thousand branches stay smooth. Scrollbars stay visible, the horizontal diff scrollbar no longer covers the last line, and tabs show the repository and branch centered in bold. See the [release notes](docs/RELEASE_1.3.0.md).
 
 Version **1.2.1** puts repository tabs on their own row, sharing its width: drag to reorder, double-click or right-click to rename, and each tab shows its branch, so several worktrees of one repository are easy to tell apart. The sidebar lists GitHub pull requests with review and check status; create, check out and merge them from the app. Diff text can be selected and copied, and Diff Colors has color pickers with a live preview. See the [release notes](docs/RELEASE_1.2.1.md).
@@ -39,24 +41,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.3.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.4.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 ![PushRight 1.2.0: commit graph, branches and file differences](docs/images/desktop-1.2.0.png)
 
 Screenshots show the actual 1.2.0 desktop app with a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.3.0.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.4.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.4.0.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/PushRight-Setup-1.3.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.3.0/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.4.0/PushRight-Setup-1.4.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.4.0/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.3.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.3.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.4.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.4.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.3.0.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.4.0.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
@@ -127,8 +129,8 @@ Measurements on a local Linux repository with 1.48 million commits and a 128 MiB
 ### Included features
 
 - Repository tabs on their own row, sharing its width; drag to reorder, double-click or right-click to rename (handy for several worktrees of one repository). Each tab shows the checked-out branch. Recent repositories and session restoration.
-- Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`.
-- Pull / merge requests for GitHub and GitLab (including self-hosted servers): list, details with checks, reviews, commits and changed files; check out, merge, approve, close and create. Tokens come from environment variables, `gh` or Git credentials, or are pasted once and kept in Windows Credential Manager.
+- Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`; zen mode fills the window with the file list and the diff.
+- Pull / merge requests for GitHub and GitLab (including self-hosted servers): list, details with checks, reviews, commits and changed files; check out, merge, approve, close and create; comment on selected diff lines and read existing line comments. Tokens come from environment variables, `gh` or Git credentials, or are pasted once and kept in Windows Credential Manager.
 - Stage, unstage, commit and amend; file, hunk and selected-line operations.
 - Create, switch, rename and delete branches; merge, rebase, cherry-pick, revert, reset and tags.
 - Fetch, explicit Pull mode, destination-aware Push and stashes.
@@ -161,7 +163,7 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, issue integration.
 
 ## Current limits
 
-- Pull / merge requests show descriptions as plain Markdown text; inline review comments, labels, milestones, reviewer editing and creating from forks are not supported yet. Issues are not integrated.
+- Pull / merge requests show descriptions as plain Markdown text; line comments can be posted and read but not replied to, edited or resolved; labels, milestones, reviewer editing and creating from forks are not supported yet. Issues are not integrated.
 - Visible rows are virtualized, but complete history is still read in the background.
 - Large patches offer read-only pages that rescan the Git stream; Git may still consume time and memory before producing output. Partial staging/discard remains limited to 4 MiB patches.
 - The graph has at most 24 lanes, reduced by available width. Highly parallel histories can omit connections.
