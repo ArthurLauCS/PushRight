@@ -1,5 +1,6 @@
-//! 拉取请求（GitHub）/ 合并请求（GitLab）：左边列表，右边详情（说明、检查、审阅、提交、改动的文件）和操作。
+//! 拉取请求（GitHub）/ 合并请求（GitLab）：左边列表，右边详情（说明、检查、审阅、提交、改动的文件和行评论）和操作。
 //! 令牌先找凭据管理器里存过的，再找环境变量、gh、git 凭据，都用不了才请用户粘贴一个，验证通过后存进凭据管理器。
+//! GitLab 上指定了审核者、自己既不是审核者也不是作者时，批准、评论、合并、关闭都先提醒一下，仍然可以做。
 
 use crate::credential;
 use crate::detail::{DetailView, Source};
@@ -11,10 +12,10 @@ use crate::repo_view::{Kind as RefKind, RepoView};
 use crate::theme::{alpha, palette, Palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_LG};
 use crate::time::fmt_time;
 use crate::ui::btn;
-use engine::forge::{self, Commit, Forge, Kind, NewRequest, Request, Status};
+use engine::forge::{self, Anchor, Commit, Forge, Kind, NewRequest, Request, Spot, Status};
 use engine::ops::Op;
 use gpui::prelude::*;
-use gpui::{div, px, uniform_list, AnyElement, Context, Entity, FontWeight, Hsla, UniformListScrollHandle, WeakEntity, Window};
+use gpui::{div, px, uniform_list, AnyElement, App, Context, Entity, FontWeight, Hsla, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::scroll::ScrollableElement;
 use std::ops::Range;
 use std::rc::Rc;
@@ -79,7 +80,13 @@ fn dot(color: Hsla) -> impl IntoElement {
 impl Requests {
     pub fn new(session: Arc<Session>, repo: WeakEntity<RepoView>, window: &mut Window, cx: &mut Context<Self>) -> Requests {
         let files = cx.new(|cx| DetailView::new(session.clone(), repo.clone(), window, cx));
-        files.update(cx, |d, _| d.comparison = true);
+        let me = cx.weak_entity();
+        files.update(cx, |d, _| {
+            d.comparison = true;
+            d.on_comment = Some(Rc::new(move |a, window, cx| {
+                let _ = me.update(cx, |this, cx| this.comment(a, String::new(), None, window, cx));
+            }));
+        });
         let mut this = Requests {
             session,
             repo,
@@ -222,12 +229,13 @@ impl Requests {
             cx,
             move || {
                 let status = forge::status(&f, &token, &r);
+                let notes = forge::notes(&f, &token, &r);
                 let base = status.as_ref().map(|s| s.base.clone()).unwrap_or_default();
                 // 提交和文件在本地算，缺的提交先从远程取
                 let local = forge::fetch(&session.repo, &f, &r, &base).and_then(|(base, head)| Ok((forge::commits(&session.repo, &base, &head)?, engine::tools::compare(&session.repo, &base, &head, true)?)));
-                (r, status, local)
+                (r, status, notes, local)
             },
-            move |this, (r, status, local), cx| {
+            move |this, (r, status, notes, local), cx| {
                 if this.request != request {
                     return;
                 }
@@ -235,13 +243,20 @@ impl Requests {
                     Ok(s) => this.status = Some(s),
                     Err(e) => this.error = error_text(cx, &e),
                 }
+                let notes = notes.unwrap_or_else(|e| {
+                    this.error = error_text(cx, &e);
+                    Vec::new()
+                });
                 match local {
                     Ok((commits, c)) => {
                         this.commits = commits;
                         let detail = engine::detail::Detail { id: c.right.clone(), parents: vec![c.left.clone()], author: String::new(), author_email: String::new(), author_time: 0, committer: String::new(), committer_time: 0, message: r.title.clone(), files: c.files };
                         let path = this.repo.upgrade().map(|r| r.read(cx).path.clone()).unwrap_or_default();
                         let key = format!("review:{}", serde_json::to_string(&(&path, &c.left, &c.right)).unwrap());
-                        this.files.update(cx, |d, cx| d.set(Some(detail), Source::Compare(c.left, c.right), key, cx));
+                        this.files.update(cx, |d, cx| {
+                            d.notes = notes;
+                            d.set(Some(detail), Source::Compare(c.left, c.right), key, cx)
+                        });
                     }
                     Err(e) => this.files_error = error_text(cx, &e),
                 }
@@ -324,23 +339,71 @@ impl Requests {
             Kind::GitHub => vec![Field::radio("method", t.requests.method, s.methods.iter().map(|m| (m.clone(), lookup(t.requests.methods, m).unwrap_or(m).to_owned())).collect()).value(s.methods.first().cloned().unwrap_or_default())],
             Kind::GitLab => vec![Field::checkbox("squash", t.requests.squash, s.squash), Field::checkbox("remove", t.requests.remove_source, s.remove_source)],
         };
-        let spec = Spec::new((t.requests.merge_title)(r.number)).message(format!("{} → {}", r.source, r.target)).confirm(t.requests.merge).fields(fields);
+        let spec = Spec::new((t.requests.merge_title)(r.number)).message(format!("{} → {}", r.source, r.target)).maybe_warning(self.outsider(cx)).confirm(t.requests.merge).fields(fields);
         self.ask(spec, window, cx, move |this, v, _, cx| {
             let (method, squash, remove) = (v.text("method"), v.bool("squash"), v.bool("remove"));
             this.query(move |f, token| forge::merge(f, token, &r, &method, squash, remove), |this, _, cx| this.after_write(cx), cx);
         });
     }
 
-    fn approve(&mut self, cx: &mut Context<Self>) {
+    /// 不用确认，直接批准；要提醒时先问一下
+    fn approve(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(n) = self.sel.as_ref().map(|r| r.number) else { return };
-        self.query(move |f, token| forge::approve(f, token, n), |this, _, cx| this.after_write(cx), cx);
+        let run = move |this: &mut Self, cx: &mut Context<Self>| this.query(move |f, token| forge::approve(f, token, n), |this, _, cx| this.after_write(cx), cx);
+        match self.outsider(cx) {
+            Some(w) => {
+                let t = t(cx);
+                self.ask(Spec::new((t.requests.approve_title)(n)).warning(w).confirm(t.requests.approve), window, cx, move |this, _, _, cx| run(this, cx));
+            }
+            None => run(self, cx),
+        }
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(n) = self.sel.as_ref().map(|r| r.number) else { return };
         let t = t(cx);
-        let spec = Spec::new((t.requests.close_title)(n)).warning(t.requests.close_warning).confirm(t.requests.close).danger();
+        let warning = self.outsider(cx).map_or(t.requests.close_warning.to_owned(), |w| format!("{w}\n{}", t.requests.close_warning));
+        let spec = Spec::new((t.requests.close_title)(n)).warning(warning).confirm(t.requests.close).danger();
         self.ask(spec, window, cx, move |this, _, _, cx| this.query(move |f, token| forge::close(f, token, n), |this, _, cx| this.after_write(cx), cx));
+    }
+
+    /// 对选中的行发评论；发完只重取评论，diff 停在原处。没发出去就带着原文和原因重新弹出：禅模式里看不到页面上的错误
+    fn comment(&mut self, a: Anchor, body: String, failed: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(r), Some(st)) = (self.sel.clone(), self.status.clone()) else { return };
+        let t = t(cx);
+        // 标题里的行号：删除行是旧文件的，其余是新文件的
+        let no = |p: &Spot| if p.kind == '-' { p.old } else { p.new };
+        let warning = [failed, self.outsider(cx)].into_iter().flatten().collect::<Vec<_>>().join("\n");
+        let spec = Spec::new((t.requests.comment_title)(no(&a.from), no(&a.to))).message(a.path.clone()).maybe_warning(Some(warning).filter(|w| !w.is_empty())).field(Field::textarea("body", t.requests.comment_body).value(body)).confirm(t.requests.comment);
+        self.ask(spec, window, cx, move |this, v, window, cx| {
+            let Some(f) = this.forge.clone() else { return };
+            let (token, body) = (this.token.clone(), v.text("body"));
+            this.busy = true;
+            this.error.clear();
+            cx.notify();
+            cx.spawn_in(window, async move |this, cx| {
+                let (a2, b) = (a.clone(), body.clone());
+                // 发出去了才重取评论；重取失败不算没发出去，免得重发
+                let sent = cx.background_spawn(async move { forge::comment(&f, &token, &r, &st, &a2, &b).map(|_| forge::notes(&f, &token, &r)) }).await;
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.busy = false;
+                    match sent {
+                        Ok(Ok(notes)) => this.files.update(cx, |d, cx| d.set_notes(notes, cx)),
+                        Ok(Err(e)) => this.error = error_text(cx, &e),
+                        Err(e) => this.comment(a, body, Some(error_text(cx, &e)), window, cx),
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        });
+    }
+
+    /// GitLab 上指定了审核者、自己既不是审核者也不是作者时的提醒
+    fn outsider(&self, cx: &App) -> Option<String> {
+        let r = self.sel.as_ref()?;
+        let gitlab = self.forge.as_ref().is_some_and(|f| f.kind == Kind::GitLab);
+        (gitlab && !r.reviewers.is_empty() && !r.reviewers.contains(&self.me) && r.author != self.me).then(|| (t(cx).requests.not_reviewer)(r.number, &r.reviewers.join("、")))
     }
 
     /// 为分支新建：目标默认是仓库的默认分支；一个提交时标题用它的说明，多个时标题用分支名、说明里列出各提交。没推送的先推送
@@ -541,7 +604,7 @@ impl Requests {
             .gap(px(8.))
             .child(btn("request-checkout").small().text(t.requests.checkout).disabled(busy).on_click(cx.listener(|this, _, window, cx| this.checkout(window, cx))))
             .child(btn("request-merge").small().primary().text(t.requests.merge).disabled(busy || !open || self.status.is_none()).on_click(cx.listener(|this, _, window, cx| this.merge(window, cx))))
-            .child(btn("request-approve").small().text(t.requests.approve).disabled(busy || !open).on_click(cx.listener(|this, _, _, cx| this.approve(cx))))
+            .child(btn("request-approve").small().text(t.requests.approve).disabled(busy || !open).on_click(cx.listener(|this, _, window, cx| this.approve(window, cx))))
             .child(btn("request-close").small().danger().text(t.requests.close).disabled(busy || !open).on_click(cx.listener(|this, _, window, cx| this.close(window, cx))))
             .child(div().flex_1())
             .child(btn("request-browser").small().quiet().text(t.requests.browser).on_click(move |_, _, cx| cx.open_url(&url)))

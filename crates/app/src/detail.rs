@@ -1,4 +1,5 @@
-//! 提交详情（也用于贮藏详情和版本比较）：左边改动的文件，右边是提交说明，点了文件就换成它的 diff。
+//! 提交详情（也用于贮藏详情、版本比较和 PR 改动的文件）：左边改动的文件，右边是提交说明，点了文件就换成它的 diff。
+//! PR 的 diff 里显示行评论，也能选行发评论。
 
 use crate::author::author_color;
 use crate::diff_view::{self, DiffPrefs, DiffView, Mode, Pager};
@@ -11,8 +12,9 @@ use crate::store;
 use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE};
 use crate::time::fmt_time;
 use engine::detail::{Detail, FileChange};
+use engine::forge::{Anchor, Note};
 use gpui::prelude::*;
-use gpui::{div, px, relative, uniform_list, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, WeakEntity, Window};
+use gpui::{div, px, relative, uniform_list, App, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
@@ -59,6 +61,10 @@ pub struct DetailView {
     pub comparison: bool,
     /// 嵌在仓库工具里（变基预览）：父提交只显示不跳转，跳到提交图会离开仓库工具
     pub embedded: bool,
+    /// PR 所有文件的行评论
+    pub notes: Vec<Note>,
+    /// 给了就能在 diff 里选行发评论
+    pub on_comment: Option<Rc<dyn Fn(Anchor, &mut Window, &mut App)>>,
     request: usize,
     _subs: Vec<Subscription>,
 }
@@ -91,6 +97,8 @@ impl DetailView {
             review_key: String::new(),
             comparison: false,
             embedded: false,
+            notes: Vec::new(),
+            on_comment: None,
             request: 0,
             _subs: subs,
         }
@@ -111,6 +119,18 @@ impl DetailView {
         cx.notify();
     }
 
+    /// 当前文件的行评论
+    fn file_notes(&self) -> Vec<Note> {
+        self.notes.iter().filter(|n| self.file.as_ref() == Some(&n.path)).cloned().collect()
+    }
+
+    /// 只换评论（刚发了一条）：diff 停在原处
+    pub fn set_notes(&mut self, notes: Vec<Note>, cx: &mut Context<Self>) {
+        self.notes = notes;
+        let notes = self.file_notes();
+        self.diff.update(cx, |d, cx| d.set_notes(notes, cx));
+    }
+
     fn open(&mut self, path: Option<String>, cx: &mut Context<Self>) {
         self.file = path;
         self.diff.update(cx, |d, cx| d.clear(cx));
@@ -127,6 +147,7 @@ impl DetailView {
         let old_path = detail.files.iter().find(|f| f.path == file).and_then(|f| f.old_path.clone());
         let opts = diff_view::options(cx);
         let source = self.source.clone();
+        let anchor = Anchor { path: file.clone(), old_path: old_path.clone().unwrap_or_else(|| file.clone()), ..Default::default() };
         let (s, src, f, op, i) = (session.clone(), source.clone(), file.clone(), old_path.clone(), id.clone());
         let job = move || match &src {
             Source::Commit => engine::diff::commit_with(&s.repo, &i, &f, opts),
@@ -147,7 +168,13 @@ impl DetailView {
             match r {
                 Ok(d) => {
                     let path = this.file.clone().unwrap_or_default();
-                    this.diff.update(cx, |v, cx| v.set(Some(d), &path, Mode::Readonly, Some(pager), None, None, cx));
+                    let notes = this.file_notes();
+                    let on_comment = this.on_comment.clone().map(|f| Rc::new(move |from, to, window: &mut Window, cx: &mut App| f(Anchor { from, to, ..anchor.clone() }, window, cx)) as diff_view::Comment);
+                    this.diff.update(cx, |v, cx| {
+                        v.notes = notes;
+                        v.on_comment = on_comment;
+                        v.set(Some(d), &path, Mode::Readonly, Some(pager), None, None, cx)
+                    });
                 }
                 Err(e) => this.error = error_text(cx, &e),
             }

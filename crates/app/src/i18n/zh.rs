@@ -423,6 +423,11 @@ pub static MESSAGES: Messages = Messages {
             body: "说明",
             draft: "草稿",
             push_first: |dest| format!("先推送到 {dest}"),
+            approve_title: |n| format!("批准 #{n}"),
+            not_reviewer: |n, who| format!("你不是 #{n} 的审核者（审核者：{who}），仍然可以继续。"),
+            comment: "评论",
+            comment_title: |a, b| if a == b { format!("评论第 {a} 行") } else { format!("评论第 {a}–{b} 行") },
+            comment_body: "评论内容",
         },
         repo_tools: RepoTools {
         patch_hint: "把别人发来的补丁（diff 文本，或这里「复制为补丁」得到的内容）粘贴进来，改动会出现在「本地更改」里。有一处对不上就整体不生效，不会只改一半。",

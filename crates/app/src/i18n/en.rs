@@ -423,6 +423,11 @@ pub static MESSAGES: Messages = Messages {
             body: "Description",
             draft: "Draft",
             push_first: |dest| format!("Push to {dest} first"),
+            approve_title: |n| format!("Approve #{n}"),
+            not_reviewer: |n, who| format!("You are not a reviewer of #{n} (reviewers: {who}). You can still go ahead."),
+            comment: "Comment",
+            comment_title: |a, b| if a == b { format!("Comment on line {a}") } else { format!("Comment on lines {a}–{b}") },
+            comment_body: "Comment",
         },
         repo_tools: RepoTools {
         patch_hint: "Paste a patch someone sent you (diff text, or what \"Copy as patch\" produces here). The changes show up under Local changes. If any part does not match, nothing is applied at all.",
