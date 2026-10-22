@@ -1,6 +1,7 @@
 //! 拉取请求（GitHub）/ 合并请求（GitLab）：左边列表，右边详情（说明、检查、审阅、提交、改动的文件和行评论）和操作。
 //! 令牌先找凭据管理器里存过的，再找环境变量、gh、git 凭据，都用不了才请用户粘贴一个，验证通过后存进凭据管理器。
 //! GitLab 上指定了审核者、自己既不是审核者也不是作者时，批准、评论、合并、关闭都先提醒一下，仍然可以做。
+//! GitLab 新建时选指派人（默认自己）和审核者（默认上次指派的），之后可以改审核者；指派过的审核者按项目记在本地，排在选项前面。
 
 use crate::credential;
 use crate::detail::{DetailView, Source};
@@ -10,14 +11,16 @@ use crate::i18n::{error_text, lookup, t};
 use crate::icons::Icon;
 use crate::layout::{self, layout, Key};
 use crate::repo_view::{Kind as RefKind, RepoView};
+use crate::store;
 use crate::theme::{alpha, palette, Palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_LG};
 use crate::time::fmt_time;
 use crate::ui::btn;
-use engine::forge::{self, Anchor, Commit, Forge, Kind, NewRequest, Request, Spot, Status};
+use engine::forge::{self, Anchor, Commit, Forge, Kind, Member, NewRequest, Request, Spot, Status};
 use engine::ops::Op;
 use gpui::prelude::*;
 use gpui::{div, px, uniform_list, AnyElement, App, Context, Entity, FontWeight, Hsla, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::scroll::ScrollableElement;
+use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -76,6 +79,35 @@ fn state_color(state: &str, p: &Palette) -> Hsla {
 
 fn dot(color: Hsla) -> impl IntoElement {
     div().flex_none().size(px(8.)).rounded_full().bg(color)
+}
+
+/// 各项目指派过的审核者：键是 `主机/项目`，值是用户名，最近的在前
+const REVIEWERS: &str = "reviewers";
+
+fn recent(f: &Forge, cx: &App) -> Vec<String> {
+    store::get::<HashMap<String, Vec<String>>>(cx, REVIEWERS).and_then(|mut m| m.remove(&format!("{}/{}", f.host, f.project))).unwrap_or_default()
+}
+
+/// 记下这次指派的审核者，下次默认选他；选「无」不记
+fn remember(f: &Forge, members: &[Member], id: u64, cx: &mut App) {
+    let Some(m) = members.iter().find(|m| m.id == id) else { return };
+    let mut all = store::get::<HashMap<String, Vec<String>>>(cx, REVIEWERS).unwrap_or_default();
+    let list = all.entry(format!("{}/{}", f.host, f.project)).or_default();
+    list.retain(|n| *n != m.username);
+    list.insert(0, m.username.clone());
+    store::set(cx, REVIEWERS, all);
+}
+
+/// 用户名对应的选项值（用户 id），不是成员时是「无」
+fn id_of(members: &[Member], name: &str) -> String {
+    members.iter().find(|m| m.username == name).map_or("0".into(), |m| m.id.to_string())
+}
+
+/// 指派人、审核者的选项：「无」、指派过的审核者（最近的在前）、其余成员
+fn people(members: &[Member], recent: &[String], cx: &App) -> Vec<(String, String)> {
+    let mut sorted: Vec<&Member> = members.iter().collect();
+    sorted.sort_by_key(|m| recent.iter().position(|n| *n == m.username).unwrap_or(usize::MAX));
+    std::iter::once(("0".into(), t(cx).requests.nobody.into())).chain(sorted.into_iter().map(|m| (m.id.to_string(), format!("{} @{}", m.name, m.username)))).collect()
 }
 
 impl Requests {
@@ -360,6 +392,37 @@ impl Requests {
         }
     }
 
+    /// 取项目成员后弹单选，默认是现在的审核者；服务器没改（没有权限）时报错
+    fn change_reviewer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(r), Some(f)) = (self.sel.clone(), self.forge.clone()) else { return };
+        let token = self.token.clone();
+        self.busy = true;
+        self.error.clear();
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            let found = cx.background_spawn(async move { forge::members(&f, &token).map(|m| (f, m)) }).await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.busy = false;
+                let (f, members) = match found {
+                    Ok(v) => v,
+                    Err(e) => {
+                        this.error = error_text(cx, &e);
+                        return cx.notify();
+                    }
+                };
+                let t = t(cx);
+                let now = r.reviewers.first().map_or("0".into(), |n| id_of(&members, n));
+                let field = Field::select("reviewer", t.requests.reviewer, people(&members, &recent(&f, cx), cx)).value(now);
+                this.ask(Spec::new((t.requests.reviewer_title)(r.number)).field(field), window, cx, move |this, v, _, cx| {
+                    let (n, id) = (r.number, v.text("reviewer").parse().unwrap_or(0));
+                    remember(&f, &members, id, cx);
+                    this.query(move |f, token| forge::set_reviewer(f, token, n, id), |this, _, cx| this.after_write(cx), cx);
+                });
+            });
+        })
+        .detach();
+    }
+
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(n) = self.sel.as_ref().map(|r| r.number) else { return };
         let t = t(cx);
@@ -431,12 +494,13 @@ impl Requests {
                 .background_spawn(async move {
                     let p = forge::project(&f, &token)?;
                     let commits = forge::commits(&session.repo, &format!("refs/remotes/{}/{}", f.remote, p.default_branch), &format!("refs/heads/{b}")).unwrap_or_default();
-                    Ok::<_, String>((f, p, commits))
+                    let members = if f.kind == Kind::GitLab { forge::members(&f, &token)? } else { Vec::new() };
+                    Ok::<_, String>((f, p, commits, members))
                 })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.busy = false;
-                let (f, p, commits) = match found {
+                let (f, p, commits, members) = match found {
                     Ok(v) => v,
                     Err(e) => {
                         this.error = error_text(cx, &e);
@@ -458,6 +522,11 @@ impl Requests {
                     Field::checkbox("draft", t.requests.draft, false),
                 ];
                 if f.kind == Kind::GitLab {
+                    let recent = recent(&f, cx);
+                    let reviewer = recent.iter().map(|n| id_of(&members, n)).find(|id| id != "0").unwrap_or_else(|| "0".into());
+                    let options = people(&members, &recent, cx);
+                    fields.push(Field::select("assignee", t.requests.assignee, options.clone()).value(id_of(&members, &this.me)));
+                    fields.push(Field::select("reviewer", t.requests.reviewer, options).value(reviewer));
                     fields.push(Field::checkbox("remove", t.requests.remove_source, p.remove_source));
                     fields.push(Field::checkbox("squash", t.requests.squash, p.squash));
                 }
@@ -467,7 +536,8 @@ impl Requests {
                 let noun = if f.kind == Kind::GitHub { t.requests.pr } else { t.requests.mr };
                 let spec = Spec::new((t.requests.create_title)(noun, &branch)).confirm(t.requests.create).fields(fields);
                 this.ask(spec, window, cx, move |this, v, _, cx| {
-                    let n = NewRequest { source: branch.clone(), target: v.text("target"), title: v.text("title"), body: v.text("body"), draft: v.bool("draft"), remove_source: v.bool("remove"), squash: v.bool("squash") };
+                    let n = NewRequest { source: branch.clone(), target: v.text("target"), title: v.text("title"), body: v.text("body"), draft: v.bool("draft"), remove_source: v.bool("remove"), squash: v.bool("squash"), assignee: v.text("assignee").parse().unwrap_or(0), reviewer: v.text("reviewer").parse().unwrap_or(0) };
+                    remember(&f, &members, n.reviewer, cx);
                     let push = v.bool("push").then(|| Op::Push { remote: f.remote.clone(), branch: branch.clone(), remote_branch: branch.clone(), force: false, set_upstream: !tracked, tags: false });
                     let pushing = push.and_then(|op| this.repo.update(cx, |r, cx| r.exec(op, true, cx)).ok());
                     cx.spawn(async move |this, cx| {
@@ -606,6 +676,7 @@ impl Requests {
             .child(btn("request-checkout").small().text(t.requests.checkout).disabled(busy).on_click(cx.listener(|this, _, window, cx| this.checkout(window, cx))))
             .child(btn("request-merge").small().primary().text(t.requests.merge).disabled(busy || !open || self.status.is_none()).on_click(cx.listener(|this, _, window, cx| this.merge(window, cx))))
             .child(btn("request-approve").small().text(t.requests.approve).disabled(busy || !open).on_click(cx.listener(|this, _, window, cx| this.approve(window, cx))))
+            .when(self.forge.as_ref().is_some_and(|f| f.kind == Kind::GitLab), |d| d.child(btn("request-reviewer").small().text(t.requests.change_reviewer).disabled(busy || !open).on_click(cx.listener(|this, _, window, cx| this.change_reviewer(window, cx)))))
             .child(btn("request-close").small().danger().text(t.requests.close).disabled(busy || !open).on_click(cx.listener(|this, _, window, cx| this.close(window, cx))))
             .child(div().flex_1())
             .child(btn("request-browser").small().quiet().text(t.requests.browser).on_click(move |_, _, cx| cx.open_url(&url)))
@@ -680,6 +751,9 @@ impl Requests {
                     );
                 }
                 page = page.child(heading(t.requests.reviews.into()));
+                if !r.reviewers.is_empty() {
+                    page = page.child(div().child((t.requests.reviewer_is)(&r.reviewers.join("、"))));
+                }
                 if s.approved.is_empty() && s.changes_requested.is_empty() {
                     page = page.child(div().text_color(p.muted).child(t.requests.no_reviews));
                 }

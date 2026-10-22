@@ -133,6 +133,17 @@ pub struct NewRequest {
     pub draft: bool,
     pub remove_source: bool,
     pub squash: bool,
+    /// GitLab 的指派人、审核者的用户 id，0 是不指定；社区版各只能有一个
+    pub assignee: u64,
+    pub reviewer: u64,
+}
+
+/// 能访问项目的用户，选指派人和审核者用（只有 GitLab）
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Member {
+    pub id: u64,
+    pub username: String,
+    pub name: String,
 }
 
 /// 远程地址 → (网页根地址, 主机名, 项目路径)。认 `https://host[:port]/path`、`git@host:path`、`ssh://git@host[:port]/path`；
@@ -492,10 +503,39 @@ pub fn create(f: &Forge, token: &str, n: &NewRequest) -> Result<Request> {
         // GitLab 没有草稿参数，标题以 Draft: 开头就是草稿
         Kind::GitLab => {
             let title = if n.draft { format!("Draft: {}", n.title) } else { n.title.clone() };
-            call(f, token, "POST", &path(f, "/merge_requests"), Some(json!({ "source_branch": n.source, "target_branch": n.target, "title": title, "description": n.body, "remove_source_branch": n.remove_source, "squash": n.squash })))?
+            call(f, token, "POST", &path(f, "/merge_requests"), Some(json!({ "source_branch": n.source, "target_branch": n.target, "title": title, "description": n.body, "remove_source_branch": n.remove_source, "squash": n.squash, "assignee_ids": ids(n.assignee), "reviewer_ids": ids(n.reviewer) })))?
         }
     };
     Ok(request(f, &v))
+}
+
+/// GitLab 的用户 id 列表参数，0 是一个也不要
+fn ids(id: u64) -> Vec<u64> {
+    (id > 0).then_some(id).into_iter().collect()
+}
+
+/// 能访问 GitLab 项目的活跃用户，含从群组继承来的；一页最多 100 个，取到最后一页
+pub fn members(f: &Forge, token: &str) -> Result<Vec<Member>> {
+    let mut all = Vec::new();
+    for page in 1.. {
+        let v = call(f, token, "GET", &path(f, &format!("/users?per_page=100&page={page}")), None)?;
+        let a = v.as_array().map(Vec::as_slice).unwrap_or_default();
+        all.extend(a.iter().filter(|x| x["state"] == "active").map(|x| Member { id: x["id"].as_u64().unwrap_or(0), username: s(x, "/username"), name: s(x, "/name") }));
+        if a.len() < 100 {
+            break;
+        }
+    }
+    Ok(all)
+}
+
+/// 换掉 GitLab 合并请求的审核者，0 是去掉。没有权限时服务器不报错、原样返回，所以对比返回的审核者
+pub fn set_reviewer(f: &Forge, token: &str, n: u64, reviewer: u64) -> Result<()> {
+    let v = call(f, token, "PUT", &path(f, &format!("/merge_requests/{n}")), Some(json!({ "reviewer_ids": ids(reviewer) })))?;
+    let now: Vec<u64> = v["reviewers"].as_array().map(|a| a.iter().filter_map(|x| x["id"].as_u64()).collect()).unwrap_or_default();
+    if now != ids(reviewer) {
+        return Err("PR_FORGE_REVIEWER".into());
+    }
+    Ok(())
 }
 
 /// 带上看到的源分支提交：这期间有人推了新提交时服务器拒绝合并，不会合进没看过的代码

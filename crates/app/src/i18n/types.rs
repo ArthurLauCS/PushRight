@@ -278,6 +278,14 @@ pub struct Requests {
     pub body: &'static str,
     pub draft: &'static str,
     pub push_first: fn(&str) -> String,
+    pub assignee: &'static str,
+    pub reviewer: &'static str,
+    /// 指派人、审核者选项里的「不指定」
+    pub nobody: &'static str,
+    /// 概览里列出的审核者
+    pub reviewer_is: fn(&str) -> String,
+    pub change_reviewer: &'static str,
+    pub reviewer_title: fn(u64) -> String,
     pub approve_title: fn(u64) -> String,
     /// 编号、审核者
     pub not_reviewer: fn(u64, &str) -> String,
