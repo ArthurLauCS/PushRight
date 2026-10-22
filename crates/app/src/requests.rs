@@ -8,6 +8,7 @@ use crate::dialog::{Field, Spec, Values};
 use crate::git::Session;
 use crate::i18n::{error_text, lookup, t};
 use crate::icons::Icon;
+use crate::layout::{self, layout, Key};
 use crate::repo_view::{Kind as RefKind, RepoView};
 use crate::theme::{alpha, palette, Palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_LG};
 use crate::time::fmt_time;
@@ -582,7 +583,7 @@ impl Requests {
             .size_full();
             div().relative().flex_1().min_h_0().child(list).vertical_scrollbar(&self.scroll).into_any_element()
         };
-        div().flex().flex_col().flex_none().w(px(440.)).min_h_0().border_r_1().border_color(p.border).child(bar).child(body).into_any_element()
+        div().flex().flex_col().flex_none().w(px(layout(cx).requests)).min_h_0().child(bar).child(body).into_any_element()
     }
 
     fn render_detail(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -740,6 +741,6 @@ impl Render for Requests {
         }
         let list = self.render_list(cx);
         let detail = self.render_detail(cx);
-        page.child(list).child(div().flex().flex_col().flex_1().min_w_0().min_h_0().children(error).child(detail)).into_any_element()
+        page.child(list).child(layout::splitter("split-requests", Key::Requests, true, 280., 720., false, cx)).child(div().flex().flex_col().flex_1().min_w_0().min_h_0().children(error).child(detail)).into_any_element()
     }
 }

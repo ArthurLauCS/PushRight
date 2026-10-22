@@ -22,11 +22,13 @@ pub struct Layout {
     /// 提交图的作者列、日期列宽度
     pub author: f32,
     pub date: f32,
+    /// 拉取 / 合并请求页左侧列表宽度
+    pub requests: f32,
 }
 
 impl Default for Layout {
     fn default() -> Layout {
-        Layout { sidebar: 264., detail: 320., changes: 400., files: 340., author: 150., date: 136. }
+        Layout { sidebar: 264., detail: 320., changes: 400., files: 340., author: 150., date: 136., requests: 440. }
     }
 }
 
@@ -87,6 +89,7 @@ pub enum Key {
     Files,
     Author,
     Date,
+    Requests,
 }
 
 fn slot(l: &mut Layout, key: Key) -> &mut f32 {
@@ -97,6 +100,7 @@ fn slot(l: &mut Layout, key: Key) -> &mut f32 {
         Key::Files => &mut l.files,
         Key::Author => &mut l.author,
         Key::Date => &mut l.date,
+        Key::Requests => &mut l.requests,
     }
 }
 
