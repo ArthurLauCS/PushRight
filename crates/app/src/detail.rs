@@ -1,5 +1,5 @@
 //! 提交详情（也用于贮藏详情、版本比较和 PR 改动的文件）：左边改动的文件，右边是提交说明，点了文件就换成它的 diff。
-//! PR 的 diff 里显示行评论，也能选行发评论。
+//! PR 的 diff 里显示行评论，也能选行发评论。diff 工具栏能进禅模式，只留这个视图铺满窗口。
 
 use crate::author::author_color;
 use crate::diff_view::{self, DiffPrefs, DiffView, Mode, Pager};
@@ -14,7 +14,7 @@ use crate::time::fmt_time;
 use engine::detail::{Detail, FileChange};
 use engine::forge::{Anchor, Note};
 use gpui::prelude::*;
-use gpui::{div, px, relative, uniform_list, App, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, WeakEntity, Window};
+use gpui::{div, px, relative, uniform_list, AnyView, App, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{InputEvent, InputState};
 use gpui_component::scroll::ScrollableElement;
@@ -72,6 +72,8 @@ pub struct DetailView {
 impl DetailView {
     pub fn new(session: Arc<Session>, repo: WeakEntity<RepoView>, window: &mut Window, cx: &mut Context<Self>) -> DetailView {
         let diff = cx.new(DiffView::new);
+        let me: AnyView = cx.entity().into();
+        diff.update(cx, |d, _| d.zen = Some(Rc::new(me.downgrade())));
         let filter = filter_input(window, cx);
         let subs = vec![
             // 只换 diff 选项时留着旧内容等新结果，不先清空

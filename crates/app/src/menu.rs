@@ -112,6 +112,7 @@ impl Render for Menu {
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close(cx);
+                    cx.stop_propagation();
                 }
             }))
             .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close(cx)));

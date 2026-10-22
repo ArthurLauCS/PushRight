@@ -448,7 +448,10 @@ impl Render for Dialog {
             .justify_center()
             .bg(p.backdrop)
             .on_key_down(cx.listener(move |this, e: &KeyDownEvent, window, cx| match e.keystroke.key.as_str() {
-                "escape" => this.close(false, window, cx),
+                "escape" => {
+                    this.close(false, window, cx);
+                    cx.stop_propagation();
+                }
                 "enter" if !danger && this.focus.is_focused(window) => this.close(true, window, cx),
                 _ => {}
             }))

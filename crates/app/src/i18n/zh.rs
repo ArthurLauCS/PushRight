@@ -273,6 +273,7 @@ pub static MESSAGES: Messages = Messages {
             more: |n| format!("增加上下文行（当前 {n} 行）"),
             whole: "显示整个文件",
             side_by_side: "并排对比",
+            zen: "禅模式：只留文件列表和 diff 铺满窗口（Esc 退出）",
             previous: "上一处改动",
             next: "下一处改动",
             filtered: "忽略空白或上下文为 0 行时，这里显示的内容与真实补丁对不上，不能按行或按区块暂存、丢弃。",

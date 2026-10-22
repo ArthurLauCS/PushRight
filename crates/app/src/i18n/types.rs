@@ -200,6 +200,7 @@ pub struct DiffTools {
     pub more: fn(usize) -> String,
     pub whole: &'static str,
     pub side_by_side: &'static str,
+    pub zen: &'static str,
     pub previous: &'static str,
     pub next: &'static str,
     pub filtered: &'static str,

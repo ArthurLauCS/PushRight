@@ -273,6 +273,7 @@ pub static MESSAGES: Messages = Messages {
             more: |n| format!("More context lines (now {n})"),
             whole: "Show entire file",
             side_by_side: "Side by side",
+            zen: "Zen mode: only the file list and diff, filling the window (Esc to exit)",
             previous: "Previous change",
             next: "Next change",
             filtered: "With whitespace ignored or 0 context lines, this view no longer matches the real patch, so lines and hunks cannot be staged or discarded.",

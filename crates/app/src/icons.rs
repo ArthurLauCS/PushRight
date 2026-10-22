@@ -57,6 +57,7 @@ icons! {
     ContextMore "context-more" "M3 5h18M3 19h18M8 12h8M12 8v8",
     WholeFile "whole-file" "M3 4h18M3 20h18M12 8v8M9 11l3-3 3 3M9 13l3 3 3-3",
     Split "split" "M3 4h18v16H3zM12 4v16",
+    Maximize "maximize" "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
     Tree "tree" "M21 12h-8M21 6H8M21 18h-8M3 6v4a2 2 0 0 0 2 2h3M3 10v6a2 2 0 0 0 2 2h3",
     Expand "expand" "m7 15 5 5 5-5M7 9l5-5 5 5",
     Collapse "collapse" "m7 20 5-5 5 5M7 4l5 5 5-5",

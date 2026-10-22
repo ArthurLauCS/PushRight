@@ -1,6 +1,6 @@
 //! 一个文件的 diff：上方一条工具栏（上一处 / 下一处、忽略空白、隐藏字符、换行、上下文行数、整个文件、并排），
 //! 下面按区块显示；本地更改里可以按区块、按行暂存或丢弃，PR 里在行号上拖选几行发评论、已有的行评论显示在所在行下面。
-//! 只渲染看得见的行，几千行的 diff 滚动也不卡。
+//! 带文件列表的 diff 可以进禅模式：只剩文件列表和 diff 铺满窗口。只渲染看得见的行，几千行的 diff 滚动也不卡。
 
 use crate::highlight::{highlight_hunk, Spans, Token};
 use crate::i18n::{error_text, t};
@@ -13,7 +13,7 @@ use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
 use engine::forge::{spot, Note, Spot};
 use gpui::prelude::*;
-use gpui::{div, img, list, px, AnyElement, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
+use gpui::{div, img, list, px, AnyElement, AnyView, AnyWeakView, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
 use gpui_component::scroll::ScrollableElement;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -210,6 +210,21 @@ fn display(text: &str, spans: Option<&Spans>, hidden: bool, p: &Palette) -> (Str
     (out, merged)
 }
 
+/// 禅模式：铺满窗口的视图（文件列表 + diff），其余界面都不画；Esc 退出
+pub struct Zen(pub Option<AnyView>);
+
+impl Global for Zen {}
+
+pub fn zen(cx: &App) -> Option<AnyView> {
+    cx.try_global::<Zen>().and_then(|z| z.0.clone())
+}
+
+/// 进入（给出视图）或退出禅模式
+pub fn set_zen(view: Option<AnyView>, window: &mut Window, cx: &mut App) {
+    cx.set_global(Zen(view));
+    window.refresh();
+}
+
 /// 鼠标选中的文字：起点和终点都是（行在 items 里的下标，显示列）；并排时只在一栏里选，`side` 同 `code_line` 的 `half`
 #[derive(Clone, Copy, PartialEq)]
 struct TextSel {
@@ -271,6 +286,8 @@ pub struct DiffView {
     pub on_comment: Option<Comment>,
     /// 在行号上按住拖选要评论的行：（区块，起点行）
     picking: Option<(usize, usize)>,
+    /// 给了就在工具栏放禅模式按钮，铺满窗口的是这个视图
+    pub zen: Option<Rc<AnyWeakView>>,
     _colors: Option<Task<()>>,
     /// 上一次布局时的宽度，算并排分隔条的位置
     width: Rc<std::cell::Cell<f32>>,
@@ -307,6 +324,7 @@ impl DiffView {
             notes: Vec::new(),
             on_comment: None,
             picking: None,
+            zen: None,
             _colors: None,
             width: Rc::new(std::cell::Cell::new(800.)),
             text_sel: None,
@@ -859,6 +877,11 @@ impl Render for DiffView {
                 set_pref(cx, |p| p.side_by_side = !p.side_by_side);
                 this.prefs_changed(cx);
             })));
+        let in_zen = zen(cx).is_some();
+        let bar = match self.zen.clone() {
+            Some(view) => bar.child(sep(cx)).child(tool("zen", Icon::Maximize, t.diff_tools.zen.into(), in_zen).on_click(move |_, window, cx| set_zen(if in_zen { None } else { view.upgrade() }, window, cx))),
+            None => bar,
+        };
 
         let note = |text: String| div().py(px(48.)).px(px(24.)).flex().justify_center().text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(text);
         let mut area = div().relative().flex().flex_col().flex_1().min_h_0().bg(p.bg).font_family(MONO).text_size(FS_SM).line_height(px(LINE_H));
