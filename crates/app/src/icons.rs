@@ -1,7 +1,7 @@
 //! 24 网格的线性图标，只收用到的。gpui 按路径取图标，这里按名字现拼一个 SVG；
 //! 别的路径交给组件库自带的图标。
 
-use gpui::{svg, AssetSource, Hsla, IntoElement, Pixels, Result, SharedString, Styled};
+use gpui::{svg, AssetSource, Hsla, Pixels, Result, SharedString, Styled, Svg};
 use std::borrow::Cow;
 
 macro_rules! icons {
@@ -79,7 +79,7 @@ icons! {
 }
 
 /// 图标元素；颜色跟着传入的颜色走（相当于 CSS 的 currentColor）
-pub fn icon(name: Icon, size: Pixels, color: Hsla) -> impl IntoElement {
+pub fn icon(name: Icon, size: Pixels, color: Hsla) -> Svg {
     svg().path(name.file()).size(size).flex_none().text_color(color)
 }
 

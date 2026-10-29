@@ -6,7 +6,7 @@ use crate::git::{self, Session};
 use crate::i18n::{error_text, lookup, t};
 use crate::icons::{icon, Icon};
 use crate::repo_view::RepoView;
-use crate::theme::{palette, FS_SM, MONO};
+use crate::theme::{palette, CONTROL_SM, FS_SM, MONO, PROSE};
 use crate::time::fmt_time;
 use crate::ui::{btn, Opt};
 use engine::history::{Commit as HistoryCommit, SearchKind};
@@ -131,8 +131,9 @@ impl Render for CommitSearch {
             .py(px(4.))
             .text_color(p.muted)
             .child(icon(Icon::Search, px(14.), p.muted))
-            .child(div().flex_none().w(px(170.)).child(Select::new(&self.kind).small()))
-            .child(div().flex_1().min_w_0().child(Input::new(&self.query).small().text_size(FS_SM)))
+            .child(div().flex_none().w(px(170.)).child(Select::new(&self.kind).small().h(CONTROL_SM)))
+            // 输入框自带的 h() 只管多行，单行用最小高度撑到和按钮一样高
+            .child(div().flex_1().min_w_0().child(Input::new(&self.query).small().min_h(CONTROL_SM).text_size(FS_SM)))
             .when(showing, |s| s.child(btn("search-close").small().quiet().icon_size(Icon::Close, px(14.)).tip(t.search.close).on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))))
             .child(btn("tags").small().quiet().text(t.graph_view.tags).on(!hide_tags).tip(t.graph_view.tags_hint).on_click(cx.listener(|this, _, _, cx| {
                 let _ = this.repo.update(cx, |r, cx| r.set_graph_pref(false, cx));
@@ -152,7 +153,7 @@ impl Render for CommitSearch {
                 format!("{}{}", (t.search.results)(results.len()), if self.more { "+" } else { "" })
             };
             let head = if self.history.is_empty() { head } else { format!("{} · {head}", (t.search.file_history)(&self.history)) };
-            let mut list = div().id("search-results").min_h_0().overflow_y_scroll().border_t_1().border_color(p.border).bg(p.panel).child(note(head));
+            let mut list = div().id("search-results").min_h_0().overflow_y_scroll().border_t_1().border_color(p.border).bg(p.surface).child(note(head));
             for c in results {
                 let id = c.id.clone();
                 list = list.child(
@@ -173,7 +174,7 @@ impl Render for CommitSearch {
                             let _ = this.repo.update(cx, |r, cx| r.reveal(id, cx));
                         }))
                         .child(div().flex_none().font_family(MONO).text_color(p.muted).child(c.id[..8.min(c.id.len())].to_owned()))
-                        .child(div().flex_1().min_w_0().truncate().child(c.subject.clone()))
+                        .child(div().flex_1().min_w_0().truncate().font_family(PROSE).child(c.subject.clone()))
                         .child(div().flex_none().whitespace_nowrap().text_color(author_color(&c.author, cx)).child(c.author.clone()))
                         .child(div().flex_none().whitespace_nowrap().text_color(p.muted).child(fmt_time(cx, c.time))),
                 );

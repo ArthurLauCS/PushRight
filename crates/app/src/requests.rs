@@ -12,7 +12,7 @@ use crate::icons::Icon;
 use crate::layout::{self, layout, Key};
 use crate::repo_view::{Kind as RefKind, RepoView};
 use crate::store;
-use crate::theme::{alpha, palette, Palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_LG};
+use crate::theme::{alpha, palette, Palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use crate::time::fmt_time;
 use crate::ui::btn;
 use engine::forge::{self, Anchor, Commit, Forge, Kind, Member, NewRequest, Request, Spot, Status};
@@ -72,7 +72,7 @@ fn state_color(state: &str, p: &Palette) -> Hsla {
         "open" | "success" => p.green,
         "merged" => p.accent,
         "closed" | "failure" => p.red,
-        "pending" => p.yellow,
+        "pending" => p.orange,
         _ => p.muted,
     }
 }
@@ -581,7 +581,7 @@ impl Requests {
             .px(px(12.))
             .border_b_1()
             .border_color(p.border)
-            .when(on, |s| s.bg(p.accent_soft))
+            .when(on, |s| s.bg(p.selection))
             .when(!on, |s| s.hover(|s| s.bg(p.hover)))
             .on_click(cx.listener(move |this, _, _, cx| this.select(r2.clone(), cx)))
             .child(
@@ -590,7 +590,7 @@ impl Requests {
                     .items_center()
                     .gap(px(8.))
                     .child(dot(state_color(state(r), &p)))
-                    .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).child(r.title.clone()))
+                    .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::BOLD).child(r.title.clone()))
                     .child(div().flex_none().font_family(MONO).text_size(FS_SM).text_color(p.muted).child(format!("#{}", r.number))),
             )
             .child(
@@ -660,13 +660,13 @@ impl Requests {
         let p = palette(cx).clone();
         let t = t(cx);
         let Some(r) = self.sel.clone() else {
-            return div().flex_1().flex().items_center().justify_center().text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(t.requests.pick).into_any_element();
+            return div().flex_1().p(px(24.)).text_color(p.muted).font_family(PROSE).child(t.requests.pick).into_any_element();
         };
         let busy = self.busy;
         let open = r.state == "open";
         let st = state(&r).to_owned();
         let color = state_color(&st, &p);
-        let chip = div().px(px(8.)).rounded(R_LG).bg(alpha(color, 0.18)).text_color(color).child(lookup(t.requests.states, &st).unwrap_or(&st).to_owned());
+        let chip = div().px(px(8.)).rounded(R_MD).bg(alpha(color, 0.18)).text_color(color).child(lookup(t.requests.states, &st).unwrap_or(&st).to_owned());
         let (url, link) = (r.url.clone(), r.url.clone());
         let actions = div()
             .flex()
@@ -722,9 +722,9 @@ impl Requests {
     fn render_overview(&mut self, r: &Request, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx).clone();
         let t = t(cx);
-        let heading = |text: String| div().mt(px(20.)).mb(px(8.)).text_size(FS_SM).font_weight(FontWeight::SEMIBOLD).text_color(p.muted).child(text);
+        let heading = |text: String| div().mt(px(20.)).mb(px(8.)).text_size(FS_SM).font_weight(FontWeight::BOLD).text_color(p.muted).child(text);
         let description = if r.body.trim().is_empty() {
-            div().text_color(p.muted).child(t.requests.no_description)
+            div().text_color(p.muted).font_family(PROSE).child(t.requests.no_description)
         } else {
             div().max_w(px(72. * 9.)).font_family(PROSE).line_height(gpui::relative(LH_BODY)).child(r.body.clone())
         };
@@ -778,7 +778,7 @@ impl Requests {
                     .h(px(24.))
                     .text_size(FS_SM)
                     .child(div().flex_none().font_family(MONO).text_color(p.muted).child(c.id[..8.min(c.id.len())].to_owned()))
-                    .child(div().flex_1().min_w_0().truncate().child(c.subject.clone()))
+                    .child(div().flex_1().min_w_0().truncate().font_family(PROSE).child(c.subject.clone()))
                     .child(div().flex_none().text_color(p.muted).child(c.author.clone())),
             );
         }
@@ -790,10 +790,10 @@ impl Render for Requests {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx).clone();
         let t = t(cx);
-        let page = div().flex().flex_1().min_w_0().min_h_0().bg(p.panel).text_size(FS_MD);
+        let page = div().flex().flex_1().min_w_0().min_h_0().bg(p.surface).text_size(FS_MD);
         let error = (!self.error.is_empty()).then(|| div().px(px(24.)).py(px(8.)).text_color(p.red).child(self.error.clone()));
         // 还没连上：连接中、认不出平台，或者要用户给令牌
-        let notice = |title: &str, hint: String| div().flex().flex_col().gap(px(12.)).m_auto().max_w(px(560.)).child(div().font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(title.to_owned())).child(div().font_family(PROSE).text_color(p.muted).line_height(gpui::relative(LH_BODY)).child(hint));
+        let notice = |title: &str, hint: String| div().flex().flex_col().gap(px(12.)).m_auto().max_w(px(560.)).child(div().font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(title.to_owned())).child(div().text_color(p.muted).font_family(PROSE).line_height(gpui::relative(LH_BODY)).child(hint));
         let Some(f) = self.forge.clone() else {
             let body = if self.connecting {
                 notice(t.requests.connecting, String::new())

@@ -4,7 +4,7 @@ use crate::i18n::t;
 use crate::icons::{icon, Icon};
 use crate::repo_view::{Kind, RepoView, View};
 use crate::rules::{order_branches, short};
-use crate::theme::{palette, Palette, FS_SM, MONO, R_LG, R_MD, R_SM};
+use crate::theme::{palette, Palette, FS_SM, MONO, R_MD, R_SM};
 use crate::ui::{label, name_only};
 use gpui::prelude::*;
 use gpui::{div, px, uniform_list, AnyElement, ClickEvent, Context, Entity, FontWeight, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, Window};
@@ -51,9 +51,13 @@ enum Row {
 }
 
 const ROW_H: f32 = 26.;
+/// 侧栏左边两列：图标列放入口图标和当前分支的对钩，文字列放入口名、分组标题和条目名。
+/// 入口按钮的外边距 8 加内边距 8 落在图标列；图标 16 宽，再空 8 是文字列
+const ICON_X: f32 = 16.;
+const TEXT_X: f32 = ICON_X + 16. + 8.;
 
 fn nav_button(id: &'static str, icn: Icon, text: &str, on: bool, pill: Option<(usize, bool)>, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    let fg = if on { p.accent } else { p.text };
+    let fg = p.text;
     div()
         .id(id)
         .flex()
@@ -64,7 +68,7 @@ fn nav_button(id: &'static str, icn: Icon, text: &str, on: bool, pill: Option<(u
         .rounded(R_MD)
         .cursor_pointer()
         .text_color(fg)
-        .when(on, |s| s.bg(p.accent_soft).font_weight(FontWeight::SEMIBOLD))
+        .when(on, |s| s.bg(p.selection).shadow(crate::theme::select_bar(p)).font_weight(FontWeight::BOLD))
         .when(!on, |s| s.hover(|s| s.bg(p.hover)))
         .child(icon(icn, px(16.), fg))
         .child(div().flex_1().min_w_0().truncate().child(label(text, true)))
@@ -73,11 +77,11 @@ fn nav_button(id: &'static str, icn: Icon, text: &str, on: bool, pill: Option<(u
                 div()
                     .min_w(px(20.))
                     .px(px(4.))
-                    .rounded(R_LG)
-                    .bg(if quiet { p.raised } else { p.accent })
-                    .text_color(if quiet { p.muted } else { p.on_accent })
+                    .rounded(px(10.))
+                    .bg(p.raised)
+                    .text_color(if quiet { p.muted } else { p.text })
                     .text_size(FS_SM)
-                    .font_weight(FontWeight::SEMIBOLD)
+                    .font_weight(FontWeight::BOLD)
                     .line_height(px(20.))
                     .flex()
                     .justify_center()
@@ -171,7 +175,7 @@ pub fn render(this: &mut RepoView, _window: &mut Window, cx: &mut Context<RepoVi
     let scroll = div().relative().flex_1().min_h_0().child(list).vertical_scrollbar(&this.sidebar.scroll);
 
     let _ = name_only;
-    div().flex().flex_col().flex_1().min_h_0().bg(p.panel).child(nav).child(search).child(scroll).into_any_element() as AnyElement
+    div().flex().flex_col().flex_1().min_h_0().bg(p.surface).child(nav).child(search).child(scroll).into_any_element() as AnyElement
 }
 
 fn render_row(this: &mut RepoView, row: &Row, upstream: Option<&str>, elsewhere: &[String], cx: &mut Context<RepoView>) -> AnyElement {
@@ -186,11 +190,11 @@ fn render_row(this: &mut RepoView, row: &Row, upstream: Option<&str>, elsewhere:
             .gap(px(8.))
             .w_full()
             .h(px(ROW_H))
-            .pl(px(24.))
+            .pl(px(TEXT_X))
             .pr(px(12.))
-            .when(on, |s| s.bg(p.accent_soft))
+            .when(on, |s| s.bg(p.selection))
             .when(!on, |s| s.hover(|s| s.bg(p.hover)))
-            .when(head, |s| s.text_color(p.accent).font_weight(FontWeight::SEMIBOLD))
+            .when(head, |s| s.font_weight(FontWeight::BOLD))
     };
     match row {
         Row::Summary { i, title, count } => {
@@ -201,7 +205,8 @@ fn render_row(this: &mut RepoView, row: &Row, upstream: Option<&str>, elsewhere:
                 .items_center()
                 .w_full()
                 .h(px(ROW_H))
-                .px(px(12.))
+                .pl(px(TEXT_X))
+                .pr(px(12.))
                 .pt(px(4.))
                 .text_size(FS_SM)
                 .text_color(p.muted)
@@ -235,7 +240,7 @@ fn render_row(this: &mut RepoView, row: &Row, upstream: Option<&str>, elsewhere:
             let on = this.sidebar.selected == r.name;
             let row_id: SharedString = format!("ref-{}", r.name).into();
             let mut el = item(row_id.clone(), on, head)
-                .when(head, |s| s.child(div().w(px(16.)).ml(px(-16.)).mr(px(-8.)).child("✓")))
+                .when(head, |s| s.child(div().w(px(16.)).ml(px(ICON_X - TEXT_X)).flex().justify_center().child("✓")))
                 .child(div().min_w_0().truncate().child(r.label.clone()));
             if head {
                 if let Some(up) = upstream {

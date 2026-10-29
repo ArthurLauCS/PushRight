@@ -7,7 +7,7 @@ use crate::i18n::{error_text, t};
 use crate::icons::{icon, Icon};
 use crate::layout;
 use crate::store;
-use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
+use crate::theme::{alpha, palette, Palette, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use crate::time::fmt_time;
 use crate::ui::{btn, label, sep};
 use engine::diff::{Diff, Line, Options};
@@ -15,6 +15,7 @@ use engine::forge::{spot, Note, Spot};
 use gpui::prelude::*;
 use gpui::{div, img, list, px, AnyElement, AnyView, AnyWeakView, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
 use gpui_component::scroll::ScrollableElement;
+use gpui_component::ActiveTheme;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -657,8 +658,8 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
     let editable = v.editable(cx) && matches!(line.kind, '+' | '-');
     let selected = v.selected.contains(&(h, i));
     let (bar, bg) = match line.kind {
-        '+' => (p.diff_added, alpha(p.diff_added, 0.22)),
-        '-' => (p.diff_deleted, alpha(p.diff_deleted, 0.22)),
+        '+' => (p.diff_added, alpha(p.diff_added, 0.15)),
+        '-' => (p.diff_deleted, alpha(p.diff_deleted, 0.15)),
         _ => (alpha(p.bg, 0.), alpha(p.bg, 0.)),
     };
     let spans = v.colors.get(h).and_then(|c| c.as_ref()).and_then(|c| c.get(i));
@@ -668,12 +669,12 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
     let wrap = prefs.wrap;
     let shift = if wrap { 0. } else { v.scroll_x };
     let group: gpui::SharedString = format!("line-{h}-{i}-{}", half.map_or(2, |b| b as u8)).into();
-    // 选中的文字底下垫一块强调色；等宽字体按列算位置
+    // 选中的文字底下垫一块和输入框选区一样的颜色；等宽字体按列算位置
     let highlight = v.sel_cols(ix, half, cx).map(|(c0, c1)| {
         let cols = columns(&line.text);
         let (a, b) = (c0.min(cols), c1.min(cols));
         let w = (b.saturating_sub(a) as f32 + if c1 > cols { 0.5 } else { 0. }) * v.char_w;
-        div().absolute().top_0().bottom_0().bg(alpha(p.accent, 0.35)).when(wrap, |s| s.left_0().right_0()).when(!wrap, |s| s.left(px(a as f32 * v.char_w - shift)).w(px(w)))
+        div().absolute().top_0().bottom_0().bg(cx.theme().selection).when(wrap, |s| s.left_0().right_0()).when(!wrap, |s| s.left(px(a as f32 * v.char_w - shift)).w(px(w)))
     });
     let left = v.code_left.clone();
     let side = (half == Some(false)) as usize;
@@ -706,7 +707,7 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
         .w_full()
         .min_h(px(LINE_H))
         .pl(px(3.))
-        .bg(if selected { p.accent_soft } else { bg });
+        .bg(if selected { p.selection } else { bg });
     let numbers = match half {
         None => vec![no(line.old_no), no(line.new_no)],
         Some(old) => vec![no(if old { line.old_no } else { line.new_no })],
@@ -725,7 +726,7 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
     }
     row = row
         .child(gutter)
-        .child(div().flex_none().w(px(24.)).flex().justify_center().text_color(sign_color).when(matches!(line.kind, '+' | '-'), |s| s.font_weight(gpui::FontWeight::BOLD)).child(line.kind.to_string()))
+        .child(div().flex_none().w(px(24.)).flex().justify_center().text_color(sign_color).when(matches!(line.kind, '+' | '-'), |s| s.font_weight(gpui::FontWeight::SEMIBOLD)).child(line.kind.to_string()))
         .child(code)
         // 左边 3px 的竖条：增删色；可选的行悬停时加深，选中时是强调色
         .child(
@@ -736,7 +737,7 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
                 .bottom_0()
                 .w(px(3.))
                 .bg(if selected { p.accent } else { bar })
-                .when(editable && !selected, |s| s.group_hover(group, |s| s.bg(p.border_strong))),
+                .when(editable && !selected, |s| s.group_hover(group, |s| s.bg(p.border))),
         );
     let (t1, t2) = (this.clone(), this.clone());
     row = row
@@ -783,7 +784,7 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
                 .pl(px(12.))
                 .pr(px(8.))
                 .text_color(p.muted)
-                .bg(p.panel)
+                .bg(p.surface)
                 .border_t_1()
                 .border_b_1()
                 .border_color(p.border)
@@ -814,7 +815,7 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
                         .rounded(R_MD)
                         .border_1()
                         .border_color(p.border)
-                        .bg(p.panel)
+                        .bg(p.surface)
                         .child(div().text_color(p.muted).child(format!("{} · {time}", n.author)))
                         .child(div().font_family(PROSE).text_size(FS_MD).line_height(gpui::relative(LH_BODY)).child(n.body.clone())),
                 )
@@ -856,7 +857,7 @@ impl Render for DiffView {
             .gap(px(2.))
             .px(px(8.))
             .py(px(4.))
-            .bg(p.panel)
+            .bg(p.surface)
             .border_b_1()
             .border_color(p.border)
             .child(tool("prev", Icon::Up, t.diff_tools.previous.into(), false).disabled(!has_hunks).on_click(cx.listener(|this, _, _, cx| this.jump(false, cx))))
@@ -883,7 +884,7 @@ impl Render for DiffView {
             None => bar,
         };
 
-        let note = |text: String| div().py(px(48.)).px(px(24.)).flex().justify_center().text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(text);
+        let note = |text: String| div().p(px(16.)).font_family(PROSE).text_color(p.muted).text_size(FS_MD).child(text);
         let mut area = div().relative().flex().flex_col().flex_1().min_h_0().bg(p.bg).font_family(MONO).text_size(FS_SM).line_height(px(LINE_H));
         if !self.error.is_empty() {
             area = area.child(note(self.error.clone()));
@@ -899,7 +900,7 @@ impl Render for DiffView {
                     .gap(px(8.))
                     .h(px(32.))
                     .px(px(12.))
-                    .bg(p.panel)
+                    .bg(p.surface)
                     .border_b_1()
                     .border_color(p.border)
                     .text_color(p.muted)
@@ -916,7 +917,8 @@ impl Render for DiffView {
         let paged = self.pager.is_some();
         let paged_button = |cx: &mut Context<Self>| btn("paged").text(t.tools.paged_preview).disabled(self.loading).on_click(cx.listener(|this, _, _, cx| this.load_page(0, cx)));
         match self.diff().cloned() {
-            None => area = area.child(note(t.pick_file.into())),
+            // 还没选文件：提示放在整块区域的正中
+            None => area = area.child(note(t.pick_file.into()).flex_1().items_center()),
             Some(d) if d.binary => {
                 area = match &d.images {
                     Some(images) if images.iter().any(Option::is_some) => area.child(
@@ -944,7 +946,7 @@ impl Render for DiffView {
             Some(d) if d.hunks.is_empty() => area = area.child(note(t.no_diff.into())),
             Some(d) => {
                 if self.mode != Mode::Readonly && self.page.is_none() && partial_blocked(cx) {
-                    area = area.child(div().px(px(12.)).py(px(8.)).text_color(p.yellow).font_family(PROSE).text_size(FS_MD).child(t.diff_tools.filtered));
+                    area = area.child(div().px(px(12.)).py(px(8.)).text_color(p.orange).font_family(PROSE).text_size(FS_MD).child(t.diff_tools.filtered));
                 }
                 let this = cx.entity();
                 let width = self.width.clone();
@@ -996,7 +998,7 @@ impl Render for DiffView {
                     let thumb = (width * view / (view + max)).max(24.);
                     let (from, me) = (self.scroll_x, cx.entity());
                     body = body.pb(px(10.)).child(
-                        div().absolute().left_0().right_0().bottom_0().h(px(10.)).bg(alpha(p.panel, 0.85)).border_t_1().border_color(p.border).child(
+                        div().absolute().left_0().right_0().bottom_0().h(px(10.)).bg(alpha(p.surface, 0.85)).border_t_1().border_color(p.border).child(
                             div()
                                 .id("hscroll")
                                 .absolute()
@@ -1005,7 +1007,7 @@ impl Render for DiffView {
                                 .left(px((width - thumb) * from / max))
                                 .w(px(thumb))
                                 .rounded(px(3.))
-                                .bg(p.border_strong)
+                                .bg(p.border)
                                 .hover(|s| s.bg(p.muted))
                                 .on_mouse_down(gpui::MouseButton::Left, move |e, _, cx| {
                                     cx.stop_propagation();

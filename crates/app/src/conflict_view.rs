@@ -110,7 +110,7 @@ impl Render for ConflictView {
         let p = palette(cx).clone();
         let t = t(cx);
         let Some(conflict) = &self.conflict else {
-            return div().flex_1().flex().justify_center().py(px(48.)).px(px(24.)).text_color(p.muted).bg(p.bg).child(t.pick_file).into_any_element();
+            return div().flex_1().p(px(16.)).text_color(p.muted).bg(p.bg).child(t.pick_file).into_any_element();
         };
         let total = self.choices.len();
         let chosen = self.choices.iter().filter(|c| c.is_some()).count();
@@ -129,8 +129,8 @@ impl Render for ConflictView {
             .py(px(8.))
             .border_b_1()
             .border_color(p.border)
-            .bg(p.panel)
-            .child(div().w_full().text_color(p.yellow).font_family(PROSE).text_size(FS_MD).child(hint));
+            .bg(p.surface)
+            .child(div().w_full().text_color(p.orange).font_family(PROSE).text_size(FS_MD).child(hint));
         if !conflict.binary {
             header = header
                 .child(div().text_size(FS_SM).text_color(p.muted).whitespace_nowrap().child((t.conflict_chosen)(chosen, total)))
@@ -178,7 +178,7 @@ impl Render for ConflictView {
                         .border_t_1()
                         .border_b_1()
                         .border_color(p.border)
-                        .child(side(p.accent, dropped_ours).child(bar(t.ours, ours_label).child(pick("use-ours", t.use_this, matches!(choice, Some(Choice::Ours)), "ours", cx))).child(pre(&shown(ours)).when(dropped_ours, |s| s.line_through())))
+                        .child(side(p.blue, dropped_ours).child(bar(t.ours, ours_label).child(pick("use-ours", t.use_this, matches!(choice, Some(Choice::Ours)), "ours", cx))).child(pre(&shown(ours)).when(dropped_ours, |s| s.line_through())))
                         .child(
                             side(p.green, dropped_theirs)
                                 .child(
@@ -190,7 +190,7 @@ impl Render for ConflictView {
                                 .child(pre(&shown(theirs)).when(dropped_theirs, |s| s.line_through())),
                         );
                     if let Some(Choice::Custom(state)) = choice {
-                        section = section.child(side(p.yellow, false).child(bar(t.edit_result_label, "")).child(div().mx(px(16.)).mb(px(8.)).child(Textarea::new(state).font_family(MONO).text_size(FS_SM))));
+                        section = section.child(side(p.orange, false).child(bar(t.edit_result_label, "")).child(div().mx(px(16.)).mb(px(8.)).child(Textarea::new(state).font_family(MONO).text_size(FS_SM))));
                     }
                     body.child(section)
                 }

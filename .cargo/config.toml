@@ -1,0 +1,3 @@
+# Link the VC runtime statically and keep the UCRT dynamic, so the app runs without the VC++ Redistributable.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/NODEFAULTLIB:libucrt.lib", "-C", "link-arg=/DEFAULTLIB:ucrt.lib"]

@@ -7,7 +7,7 @@ use crate::rules::revision_options;
 use crate::theme::{palette, FS_SM, R_MD, R_SM};
 use crate::ui::btn;
 use gpui::prelude::*;
-use gpui::{anchored, canvas, deferred, div, point, px, BoxShadow, Context, Entity, KeyDownEvent, SharedString, Subscription, WeakEntity, Window};
+use gpui::{anchored, canvas, deferred, div, px, Context, Entity, KeyDownEvent, SharedString, Subscription, WeakEntity, Window};
 use gpui_component::input::{Input, InputEvent, InputState};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -151,11 +151,11 @@ impl Render for RevisionPicker {
                 .max_h(px(320.))
                 .overflow_y_scroll()
                 .p(px(4.))
-                .bg(p.raised)
+                .bg(p.bg)
                 .border_1()
-                .border_color(p.border_strong)
+                .border_color(p.border)
                 .rounded(R_MD)
-                .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(16.)), blur_radius: px(40.), spread_radius: px(0.), inset: false }])
+                .shadow(crate::theme::overlay_shadow(&p))
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                     this.open = false;
                     cx.notify();

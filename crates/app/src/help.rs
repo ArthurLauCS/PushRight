@@ -3,10 +3,10 @@
 use crate::explain::explainer;
 use crate::i18n::{explain, t};
 use crate::store;
-use crate::theme::{palette, DISPLAY, FS_2XL, FS_MD, FS_XL, LH_BODY, PROSE, R_LG};
+use crate::theme::{palette, DISPLAY, FS_2XL, FS_MD, FS_XL, LH_BODY, PROSE, R_MD};
 use crate::ui::{btn, label};
 use gpui::prelude::*;
-use gpui::{div, point, px, relative, BoxShadow, Context, FocusHandle, FontWeight, KeyDownEvent, MouseButton, Window};
+use gpui::{div, px, relative, Context, FocusHandle, FontWeight, KeyDownEvent, MouseButton, Window};
 
 pub struct Help {
     open: bool,
@@ -47,7 +47,7 @@ impl Render for Help {
                 div()
                     .py(px(24.))
                     .when(i + 1 < n, |s| s.border_b_1().border_color(p.border))
-                    .child(div().mb(px(12.)).text_color(p.accent).font_family(DISPLAY).text_size(FS_XL).font_weight(FontWeight::BOLD).child(label(e.name, true)))
+                    .child(div().mb(px(12.)).text_color(p.accent).font_family(DISPLAY).text_size(FS_XL).font_weight(FontWeight::SEMIBOLD).child(label(e.name, true)))
                     .child(explainer(e, cx)),
             );
         }
@@ -57,11 +57,11 @@ impl Render for Help {
             .max_h(relative(0.86))
             .flex()
             .flex_col()
-            .bg(p.panel)
+            .bg(p.surface)
             .border_1()
-            .border_color(p.border_strong)
-            .rounded(R_LG)
-            .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(16.)), blur_radius: px(40.), spread_radius: px(0.), inset: false }])
+            .border_color(p.border)
+            .rounded(R_MD)
+            .shadow(crate::theme::overlay_shadow(&p))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 div()
@@ -72,7 +72,7 @@ impl Render for Help {
                     .px(px(24.))
                     .pt(px(24.))
                     .pb(px(8.))
-                    .child(div().flex_1().font_family(DISPLAY).text_size(FS_2XL).font_weight(FontWeight::BOLD).child(t.help))
+                    .child(div().flex_1().font_family(DISPLAY).text_size(FS_2XL).font_weight(FontWeight::SEMIBOLD).child(t.help))
                     .child(btn("help-reset").small().text(if self.reset { t.help_reset_done } else { t.help_reset }).disabled(self.reset).on_click(cx.listener(|this, _, _, cx| {
                         // 让所有勾过「下次不再显示」的说明重新出现
                         cx.global_mut::<store::Store>().remove_prefix("skip:");

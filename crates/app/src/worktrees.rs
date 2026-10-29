@@ -3,11 +3,11 @@
 use crate::i18n::{explain, t};
 use crate::repo_view::RepoView;
 use crate::rules::short;
-use crate::theme::{palette, FS_2XL, FS_LG, FS_SM, LH_BODY, MONO, PROSE, R_MD, R_SM};
+use crate::theme::{palette, DISPLAY, FS_2XL, FS_LG, FS_SM, LH_BODY, MONO, PROSE, R_MD, R_SM};
 use crate::time::fmt_time;
 use crate::ui::btn;
 use gpui::prelude::*;
-use gpui::{div, px, relative, BoxShadow, Context, FontWeight, SharedString};
+use gpui::{div, px, relative, Context, FontWeight, SharedString};
 
 pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoElement {
     let p = palette(cx).clone();
@@ -31,21 +31,21 @@ pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoEleme
         .border_1()
         .border_color(p.border)
         .rounded(R_MD)
-        .bg(p.panel)
+        .bg(p.surface)
         .overflow_hidden()
         .child(cols([s(t.wt_folder), s(t.wt_branch), s(t.wt_changes), s(t.wt_sync), s(t.wt_last), s("")]).min_h(px(32.)).px(px(16.)).text_size(FS_SM).text_color(p.muted));
     for (i, w) in this.worktrees.iter().enumerate() {
         let name = w.path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(&w.path).to_owned();
         let small = |text: String| div().text_size(FS_SM).text_color(p.muted).truncate().child(text);
-        let folder = div().child(div().font_weight(FontWeight::BOLD).truncate().child(name)).child(small(w.path.clone()).font_family(MONO)).into_any_element();
+        let folder = div().child(div().font_family(DISPLAY).font_weight(FontWeight::SEMIBOLD).truncate().child(name)).child(small(w.path.clone()).font_family(MONO)).into_any_element();
         let branch = div()
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(div().min_w_0().px(px(8.)).py(px(2.)).rounded(R_SM).text_color(p.accent).bg(p.accent_soft).text_size(FS_SM).font_weight(FontWeight::SEMIBOLD).truncate().child(w.branch.as_deref().map(short).unwrap_or(t.detached).to_owned()))
+            .child(div().min_w_0().px(px(8.)).py(px(2.)).rounded(R_SM).text_color(p.accent).bg(p.selection).text_size(FS_SM).font_weight(FontWeight::BOLD).truncate().child(w.branch.as_deref().map(short).unwrap_or(t.detached).to_owned()))
             .when(w.current, |s| s.child(small(t.wt_current.into()).flex_none()))
             .into_any_element();
-        let changes = div().when(w.changes > 0, |s| s.text_color(p.yellow)).child(if w.changes > 0 { (t.wt_dirty)(w.changes) } else { t.wt_clean.into() }).into_any_element();
+        let changes = div().when(w.changes > 0, |s| s.text_color(p.orange)).child(if w.changes > 0 { (t.wt_dirty)(w.changes) } else { t.wt_clean.into() }).into_any_element();
         let sync = match w.ahead_behind {
             None => small(t.wt_no_upstream.into()).into_any_element(),
             Some((0, 0)) => s(t.wt_synced),
@@ -73,7 +73,7 @@ pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoEleme
                 .min_h(px(56.))
                 .px(px(16.))
                 .py(px(8.))
-                .when(current, |s| s.bg(p.accent_soft).shadow(vec![BoxShadow { color: p.accent, offset: gpui::point(px(2.), px(0.)), blur_radius: px(0.), spread_radius: px(0.), inset: true }]))
+                .when(current, |s| s.bg(p.selection).shadow(crate::theme::select_bar(&p)))
                 .when(!current, |s| s.hover(|s| s.bg(p.hover)))
                 .on_click(cx.listener(move |this, e: &gpui::ClickEvent, window, cx| {
                     if e.click_count() >= 2 && !current {
@@ -99,7 +99,7 @@ pub fn render(this: &mut RepoView, cx: &mut Context<RepoView>) -> impl IntoEleme
                 .child(
                     div()
                         .flex_1()
-                        .child(div().mb(px(8.)).font_family(crate::theme::DISPLAY).text_size(FS_2XL).font_weight(FontWeight::BOLD).child(t.worktrees))
+                        .child(div().mb(px(8.)).font_family(DISPLAY).text_size(FS_2XL).font_weight(FontWeight::SEMIBOLD).child(t.worktrees))
                         .child(div().max_w(gpui::rems(38.)).text_color(p.muted).font_family(PROSE).text_size(FS_LG).line_height(relative(LH_BODY)).child(explain(cx).worktree.what)),
                 )
                 .child(btn("new-worktree").primary().text(t.new_worktree).on_click(cx.listener(|this, _, window, cx| this.add_worktree("HEAD".into(), false, window, cx)))),

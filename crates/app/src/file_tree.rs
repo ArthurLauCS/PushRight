@@ -4,10 +4,10 @@
 use crate::diff_view::{prefs, set_pref};
 use crate::i18n::t;
 use crate::icons::{icon, Icon};
-use crate::theme::{palette, FS_SM};
+use crate::theme::{palette, CONTROL_SM, FS_SM, MONO};
 use crate::ui::btn;
 use gpui::prelude::*;
-use gpui::{div, px, rgb, App, Entity, Hsla, Pixels};
+use gpui::{div, px, App, Entity, Pixels};
 use gpui_component::input::{Input, InputState};
 use gpui_component::Sizable;
 use std::collections::{BTreeMap, HashSet};
@@ -90,7 +90,8 @@ pub fn file_list_bar(filter: &Entity<InputState>, on_fold: impl Fn(bool, &mut Ap
         .gap(px(2.))
         .px(px(8.))
         .py(px(4.))
-        .child(div().flex_1().min_w_0().mr(px(4.)).child(Input::new(filter).small().text_size(FS_SM).cleanable(true)))
+        // 输入框自带的 h() 只管多行，单行用最小高度撑到和按钮一样高
+        .child(div().flex_1().min_w_0().mr(px(4.)).child(Input::new(filter).small().min_h(CONTROL_SM).text_size(FS_SM).cleanable(true)))
         .child(btn("expand-all").small().quiet().icon_size(Icon::Expand, px(14.)).disabled(!tree).tip(t.file_list.expand_all).on_click(move |_, _, cx| f1(true, cx)))
         .child(btn("collapse-all").small().quiet().icon_size(Icon::Collapse, px(14.)).disabled(!tree).tip(t.file_list.collapse_all).on_click(move |_, _, cx| f2(false, cx)))
         .child(btn("tree").small().quiet().icon_size(Icon::Tree, px(14.)).on(tree).tip(t.file_list.tree).on_click(|_, _, cx| set_pref(cx, |p| p.tree = !p.tree)))
@@ -120,14 +121,14 @@ pub fn folder_row(id: gpui::SharedString, row_key: &str, name: &str, count: usiz
         .when(compact, |s| s.text_size(FS_SM))
         .hover(|s| s.bg(p.hover).text_color(p.text))
         .child(icon(if open { Icon::Down } else { Icon::Right }, px(12.), p.muted))
-        .child(icon(Icon::Folder, px(14.), p.yellow))
-        .child(div().min_w_0().truncate().child(name.to_owned()))
+        .child(icon(Icon::Folder, px(14.), p.muted))
+        .child(div().min_w_0().truncate().font_family(MONO).child(name.to_owned()))
         .child(div().flex_1().ml(px(4.)).text_size(FS_SM).opacity(0.7).child(count.to_string()))
 }
 
 // ---------- 文件图标 ----------
 
-/// 「形状 颜色: 扩展名…」；颜色取在深浅两套主题上都看得清的中间调，0 表示用 muted
+/// 「形状 颜色: 扩展名…」；primer 里文件图标一律用 muted，颜色列只保留作识别用，不再画出来
 const TABLE: &[(Icon, u32, &str)] = &[
     (Icon::Code, 0x00a2ff, "luau"),
     (Icon::Code, 0x7986cb, "lua"),
@@ -192,9 +193,8 @@ pub fn file_icon_of(path: &str) -> (Icon, Option<u32>) {
 }
 
 pub fn file_icon(path: &str, size: Pixels, cx: &App) -> impl IntoElement {
-    let (glyph, color) = file_icon_of(path);
-    let color: Hsla = color.map_or(palette(cx).muted, |c| rgb(c).into());
-    icon(glyph, size, color)
+    let (glyph, _) = file_icon_of(path);
+    icon(glyph, size, palette(cx).muted)
 }
 
 #[cfg(test)]
