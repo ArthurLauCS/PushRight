@@ -23,7 +23,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    font-family: var(--prose);
+    font-family: var(--font);
     font-size: var(--fs-md);
     line-height: var(--lh-body);
   }
@@ -48,7 +48,7 @@
     color: var(--muted);
   }
   strong {
-    font-family: var(--display);
+    font-family: var(--font);
     color: var(--text);
     font-weight: 600;
   }

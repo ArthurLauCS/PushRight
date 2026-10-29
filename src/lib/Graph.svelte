@@ -151,7 +151,7 @@
     canvas.height = h * dpr
     const ctx = canvas.getContext('2d')!
     ctx.scale(dpr, dpr)
-    ctx.lineWidth = 1.6
+    ctx.lineWidth = 2
     const x = (lane: number) => PAD + lane * LANE_W + LANE_W / 2
     const link = (lane: number, x0: number, y0: number, x1: number, y1: number) => {
       ctx.strokeStyle = COLORS[lane % COLORS.length]
@@ -174,15 +174,14 @@
       for (const l of row.incoming) if (l < MAX_LANES) link(l, x(l), y, cx, cy)
       for (const l of row.out) if (l < MAX_LANES) link(l, cx, cy, x(l), y + ROW_H)
       if (row.lane >= MAX_LANES) return
-      const color = COLORS[row.lane % COLORS.length]
+      // 节点一律是 muted 实心圆，当前检出的画成空心
+      const color = css.getPropertyValue('--muted').trim()
       ctx.beginPath()
       ctx.arc(cx, cy, compact ? 3 : 4, 0, Math.PI * 2)
       ctx.fillStyle = row.id === headId ? css.getPropertyValue('--bg') : color
       ctx.fill()
-      ctx.strokeStyle = color
-      ctx.lineWidth = 2
+      ctx.strokeStyle = row.id === headId ? css.getPropertyValue('--text') : color
       ctx.stroke()
-      ctx.lineWidth = 1.6
     })
   })
 
@@ -501,9 +500,9 @@
   }
   .badge.branch {
     color: var(--text);
-    background: var(--ref-bg, var(--accent-soft));
-    border-color: color-mix(in srgb, var(--ref-branch, var(--accent)) 55%, var(--border-strong));
-    border-left: 3px solid var(--ref-branch, var(--accent));
+    background: var(--ref-bg, var(--panel));
+    border-color: var(--border);
+    border-left: 3px solid var(--ref-branch, var(--muted));
   }
   .badge.remote {
     color: var(--text);
@@ -512,7 +511,7 @@
   }
   .badge.tag {
     color: var(--text);
-    border-color: color-mix(in srgb, var(--yellow) 45%, transparent);
+    border-color: color-mix(in srgb, var(--orange) 45%, transparent);
   }
   .compact .row {
     gap: 4px;
@@ -536,7 +535,7 @@
   .file-content { display: flex; align-items: center; gap: 5px; min-width: 0; padding-left: 14px; }
   .file-name { flex: 0 1 auto; }
   .file-path { flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-sm); }
-  .file-status { flex: none; width: 12px; color: var(--yellow); font-size: var(--fs-sm); text-align: center; }
+  .file-status { flex: none; width: 12px; color: var(--orange); font-size: var(--fs-sm); text-align: center; }
   .file-status.added { color: var(--diff-added); }
   .file-status.deleted { color: var(--diff-deleted); }
   .file-content button { flex: none; color: var(--text); background: var(--hover); border: 1px solid var(--border-strong); font: inherit; cursor: pointer; }

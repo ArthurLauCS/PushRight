@@ -1,54 +1,56 @@
 /*
- * 设计令牌。组件里的颜色、字号、间距、圆角、动效都从这里取，不写裸值。
- * 间距 scale：2 4 8 12 16 24 32 48；字号音阶 1.2：10 12 14 17 21 25。
+ * 设计令牌（GitHub 风格 primer）。组件里的颜色、字号、间距、圆角、动效都从这里取，不写裸值。
+ * 间距 scale：4 8 16 24（细分 2、12）；字号 12 / 14 / 16 / 20 / 24。
  *
- * 配色和气质参照 Claude 的公开界面：暖调的象牙白与炭黑、陶土色强调、衬线标题。
- * Claude 自用的字体不公开授权，这里用开源字体替代（思源宋体、霞鹜文楷）。
+ * 中性色取 primer 的灰阶，功能色语义固定；强调色取应用图标的黄色，只用于焦点、选中标记、主按钮和链接。
+ * 字体都是 Windows 11 自带的，不再打包字体。
  */
 :root {
   color-scheme: dark;
 
-  /* 底色由深到浅三层：内容区、面板、浮起的控件。全部带一点暖调 */
-  --bg: #1f1e1d;
-  --panel: #262624;
-  --raised: #30302e;
-  --border: #3a3936;
-  --border-strong: #5a5852;
-  --text: #f0eee6;
-  --muted: #a9a69c;
-  --hover: rgba(240, 238, 230, 0.06);
+  /* 底色三层：内容区 bg、面板 panel（primer 的 surface）、浮起的控件 raised */
+  --bg: #0d1117;
+  --panel: #151b23;
+  --raised: #212830;
+  --border: #3d444d;
+  --border-strong: var(--border);
+  --text: #f0f6fc;
+  --muted: #9198a1;
+  --hover: #212830;
 
-  /* 陶土色：全应用唯一的强调色 */
-  --accent: #e08363;
-  --accent-soft: rgba(224, 131, 99, 0.16);
-  /* 提交图里本地分支标签的底色，比选中行的 --accent-soft 重一档 */
-  --ref-bg: rgba(224, 131, 99, 0.3);
-  --on-accent: #1f1e1d;
-  --green: #91b876;
-  --yellow: #e0b35a;
-  /* diff 里的语法高亮，取 VS Code 默认深色主题的配色 */
-  --syn-keyword: #569cd6;
-  --syn-string: #ce9178;
-  --syn-comment: #6a9955;
-  --syn-number: #b5cea8;
-  --syn-function: #dcdcaa;
-  --syn-type: #4ec9b0;
-  --syn-variable: #9cdcfe;
-  --syn-meta: #c586c0;
-  --red: #ef7b88;
-  --on-danger: #1f1e1d;
+  --accent: #f0c23a;
+  /* 选中行的底色：强调色加透明度 */
+  --accent-soft: rgba(240, 194, 58, 0.3);
+  --ref-bg: var(--panel);
+  --on-accent: #1a1a1a;
+  --green: #3fb950;
+  /* 警告、改动过的文件 */
+  --orange: #db6d28;
+  /* 文件夹图标：和文件图标一样用 muted */
+  --folder: var(--muted);
+  /* diff 里的语法高亮 */
+  --syn-keyword: #ff7b72;
+  --syn-string: #a5d6ff;
+  --syn-comment: #9198a1;
+  --syn-number: #79c0ff;
+  --syn-function: #ffa657;
+  --syn-type: #7ee787;
+  --syn-variable: #f0f6fc;
+  --syn-meta: #79c0ff;
+  --red: #f85149;
+  --on-danger: #0d1117;
   --diff-added: var(--green);
   --diff-deleted: var(--red);
 
-  /* 提交图泳道 */
-  --lane-0: #e08363;
-  --lane-1: #91b876;
-  --lane-2: #e0b35a;
-  --lane-3: #b79ad9;
-  --lane-4: #6a9bcc;
-  --lane-5: #5fb8a8;
-  --lane-6: #e08fb0;
-  --lane-7: #a9a69c;
+  /* 提交图泳道（连线）；节点一律 muted */
+  --lane-0: #4493f8;
+  --lane-1: #3fb950;
+  --lane-2: #db6d28;
+  --lane-3: #39c5cf;
+  --lane-4: #9198a1;
+  --lane-5: #d29922;
+  --lane-6: #db61a2;
+  --lane-7: #768390;
 
   /* 作者色：按名字哈希取一个，同一个人在任何仓库里颜色都一样 */
   --author-0: #e59a7f;
@@ -62,74 +64,66 @@
   --author-8: #9fb0e8;
   --author-9: #d6a36a;
 
-  --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.5);
-  --backdrop: rgba(20, 19, 18, 0.55);
+  /* 只有浮在窗口上的东西用阴影 */
+  --shadow-pop: 0 8px 24px rgba(1, 4, 9, 0.4);
+  --backdrop: rgba(1, 4, 9, 0.6);
 
-  /* 四个字族各管一个区域：
-     --font    界面控件：无衬线，小字号下最清楚
-     --display 标题和名字：思源宋体，衬线带来书卷气
-     --prose   给人读的整段话（操作说明、提交说明、空状态）：霞鹜文楷，手写感，和控件区分开
-     --mono    代码、哈希、路径 */
-  --font: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
-  --display: 'Noto Serif SC Variable', Georgia, 'Songti SC', serif;
-  --prose: 'LXGW WenKai', 'KaiTi', 'Noto Serif SC Variable', serif;
-  --mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'Microsoft YaHei UI', monospace;
+  --font: 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, 'Microsoft YaHei UI', monospace;
 
-  --fs-xs: 10px;
+  --fs-xs: 12px;
   --fs-sm: 12px;
   --fs-md: 14px;
-  --fs-lg: 17px;
-  --fs-xl: 21px;
-  --fs-2xl: 25px;
-  --lh-tight: 1.3;
-  --lh-body: 1.7;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --lh-tight: 1.35;
+  --lh-body: 1.6;
 
-  --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 14px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 6px;
 
   --row: 28px;
 
   --t-press: 80ms ease-out;
-  --t-pop: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-pop: 120ms ease-out;
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #f4f2ea;
-  --panel: #ebe8de;
-  --raised: #e0dccf;
-  --border: #d4d0c2;
-  --border-strong: #ada999;
-  --text: #1f1e1c;
-  --muted: #5e5d57;
-  --hover: rgba(20, 20, 19, 0.05);
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --raised: #eff2f5;
+  --border: #d1d9e0;
+  --text: #1f2328;
+  --muted: #59636e;
+  --hover: #eff2f5;
 
-  --accent: #a04423;
-  --accent-soft: rgba(160, 68, 35, 0.12);
-  --ref-bg: var(--accent-soft);
-  --on-accent: #faf9f5;
-  --green: #3f6b2f;
-  --yellow: #7a5607;
-  --syn-keyword: #0000ff;
-  --syn-string: #a31515;
-  --syn-comment: #008000;
-  --syn-number: #098658;
-  --syn-function: #795e26;
-  --syn-type: #267f99;
-  --syn-variable: #001080;
-  --syn-meta: #af00db;
-  --red: #a82835;
-  --on-danger: #faf9f5;
+  --accent: #8a5d00;
+  --accent-soft: rgba(138, 93, 0, 0.18);
+  --on-accent: #ffffff;
+  --green: #1a7f37;
+  --orange: #bc4c00;
+  --syn-keyword: #cf222e;
+  --syn-string: #0a3069;
+  --syn-comment: #59636e;
+  --syn-number: #0550ae;
+  --syn-function: #953800;
+  --syn-type: #116329;
+  --syn-variable: #1f2328;
+  --syn-meta: #0550ae;
+  --red: #cf222e;
+  --on-danger: #ffffff;
 
-  --lane-0: #b5532d;
-  --lane-1: #5a8548;
-  --lane-2: #a87a1c;
-  --lane-3: #7b5bb0;
-  --lane-4: #3f79b5;
-  --lane-5: #2f8a7c;
-  --lane-6: #b8527f;
-  --lane-7: #76746c;
+  --lane-0: #0969da;
+  --lane-1: #1a7f37;
+  --lane-2: #bc4c00;
+  --lane-3: #0e7c86;
+  --lane-4: #6e7781;
+  --lane-5: #9a6700;
+  --lane-6: #bf3989;
+  --lane-7: #57606a;
 
   --author-0: #9a4522;
   --author-1: #40682f;
@@ -142,8 +136,8 @@
   --author-8: #4250a3;
   --author-9: #84511a;
 
-  --shadow-pop: 0 16px 40px rgba(60, 50, 30, 0.18);
-  --backdrop: rgba(40, 36, 28, 0.32);
+  --shadow-pop: 0 8px 24px rgba(140, 149, 159, 0.2);
+  --backdrop: rgba(31, 35, 40, 0.32);
 }
 
 * {
@@ -181,7 +175,6 @@ pre {
 h1,
 h2,
 h3 {
-  font-family: var(--display);
   font-weight: 600;
   line-height: var(--lh-tight);
   text-wrap: balance;
@@ -199,10 +192,7 @@ textarea {
 
 /* 所有按钮共有的四态；各组件只管自己的尺寸和配色 */
 button {
-  transition: transform var(--t-press);
-}
-button:active:enabled {
-  transform: scale(0.96);
+  transition: background-color var(--t-press), border-color var(--t-press);
 }
 button:disabled {
   opacity: 0.45;
@@ -238,7 +228,7 @@ button:disabled {
 }
 .btn.primary:hover:enabled {
   border-color: var(--accent);
-  filter: brightness(1.08);
+  opacity: 0.92;
 }
 .btn.danger:hover:enabled {
   border-color: var(--red);
@@ -251,6 +241,12 @@ button:disabled {
 }
 .btn.primary.danger:hover:enabled {
   color: var(--on-danger);
+}
+/* 停用的主按钮按普通按钮画，强调色只留给能点的按钮 */
+.btn.primary:disabled {
+  border-color: var(--border);
+  background: var(--raised);
+  color: inherit;
 }
 .btn.quiet {
   border-color: transparent;
@@ -319,7 +315,6 @@ dialog {
 @keyframes pop {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -330,9 +325,6 @@ dialog {
     from {
       opacity: 0;
     }
-  }
-  button:active:enabled {
-    transform: none;
   }
 }
 
