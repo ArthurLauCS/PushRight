@@ -25,6 +25,8 @@ The extension updates automatically when installed from VS Code Marketplace. The
 
 ## This release
 
+Version **1.6.0** restyles the desktop app: a flatter look with a calmer palette, one font per role (Segoe UI Variable Text for the interface, Noto Serif SC for titles, LXGW WenKai for prose, Cascadia Code for code), repository tabs with a bottom rule and a new-tab button, and a dark title bar that follows the theme. The extension's commit graph uses the same palette. See the [release notes](docs/RELEASE_1.6.0.md).
+
 Version **1.5.0** lets you pick the assignee and reviewer when creating a GitLab merge request: the assignee defaults to you and the reviewer to the one you picked last for that project, with reviewers you have used listed first. An open merge request's reviewer can be changed or cleared, and the overview shows who is reviewing. Searching long dropdowns in dialogs, such as target branches and project members, now filters the list. See the [release notes](docs/RELEASE_1.5.0.md).
 
 Version **1.4.1** gives the desktop app a new icon: a yellow signpost pointing right with a branch on it, so it no longer looks like the author's other apps in the taskbar. Nothing else changes. See the [release notes](docs/RELEASE_1.4.1.md).
@@ -45,24 +47,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.5.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.6.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
-![PushRight 1.2.0: commit graph, branches and file differences](docs/images/desktop-1.2.0.png)
+![PushRight 1.6.0: commit graph, branches and file differences](docs/images/desktop-1.6.0.png)
 
-Screenshots show the actual 1.2.0 desktop app with a local demo repository and fictional identities.
+The first screenshot shows the 1.6.0 desktop app on PushRight's own repository; the other screenshot, from 1.2.0, uses a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.5.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.5.0.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.5.0/PushRight-Setup-1.5.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.5.0/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/PushRight-Setup-1.6.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.5.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.5.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.6.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.5.0.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.0.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
