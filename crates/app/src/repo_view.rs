@@ -14,7 +14,7 @@ use crate::layout::{self, layout, Key};
 use crate::menu::{Item, Menu};
 use crate::rules::{branch_name_ok, graph_key, short, split_upstream};
 use crate::store;
-use crate::theme::{alpha, palette, DISPLAY, FS_LG, FS_MD, FS_SM, MONO, PROSE, R_LG};
+use crate::theme::{alpha, palette, DISPLAY, FS_LG, FS_MD, FS_SM, MONO, PROSE, R_MD};
 use crate::requests::Requests;
 use crate::tools::Tools;
 use crate::ui::{btn, name_only, sep};
@@ -1854,7 +1854,7 @@ impl RepoView {
             (t.commits)(self.count)
         };
         let detached = head.is_none();
-        let tone = if detached { p.yellow } else { p.accent };
+        let tone = if detached { p.orange } else { p.text };
         let in_progress = self.refs.in_progress.is_some();
         let no_undo = self.undos.is_empty();
         let show_log = self.show_log;
@@ -1880,24 +1880,31 @@ impl RepoView {
             .max_w(relative(0.44))
             .px(px(16.))
             .border_1()
-            .border_color(alpha(tone, 0.45))
-            .rounded(R_LG)
-            .bg(if detached { alpha(p.yellow, 0.14) } else { p.accent_soft })
+            .border_color(if detached { alpha(p.orange, 0.45) } else { p.border })
+            .rounded(R_MD)
+            .bg(if detached { alpha(p.orange, 0.14) } else { p.surface })
             .text_color(tone)
-            .child(icon(Icon::Branch, px(18.), tone))
-            .child(div().min_w_0().truncate().font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::BOLD).child(head.clone().unwrap_or_else(|| t.detached.into())))
+            .child(icon(Icon::Branch, px(18.), if detached { tone } else { p.muted }))
+            // 分支名和同步状态字号不同，两段文字按基线对齐。gpui 的文字不报基线，实际按行框底边对齐，两段基线相差 1px 以内
             .child(
                 div()
-                    .id("ahead-behind")
-                    .flex_none()
-                    .pl(px(8.))
-                    .border_l_1()
-                    .border_color(alpha(tone, 0.35))
-                    .text_color(p.muted)
-                    .text_size(FS_SM)
-                    .whitespace_nowrap()
-                    .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.ahead_behind_hint).build(window, cx))
-                    .child(state),
+                    .flex()
+                    .items_baseline()
+                    .gap(px(8.))
+                    .min_w_0()
+                    .child(div().min_w_0().truncate().font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(head.clone().unwrap_or_else(|| t.detached.into())))
+                    // 分隔线不跟基线走，在胶囊里上下居中
+                    .child(div().self_center().flex_none().w(px(1.)).h(px(16.)).bg(alpha(tone, 0.35)))
+                    .child(
+                        div()
+                            .id("ahead-behind")
+                            .flex_none()
+                            .text_color(p.muted)
+                            .text_size(FS_SM)
+                            .whitespace_nowrap()
+                            .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.ahead_behind_hint).build(window, cx))
+                            .child(state),
+                    ),
             );
         let tools_right = div()
             .flex()
@@ -1921,7 +1928,7 @@ impl RepoView {
             .gap(px(16.))
             .min_h(px(56.))
             .p(px(8.))
-            .bg(p.panel)
+            .bg(p.surface)
             .border_b_1()
             .border_color(p.border)
             .child(div().flex_1().child(tools_left))
@@ -1944,7 +1951,7 @@ impl RepoView {
             out.push(bar(p.red, format!("{}{}", t.auto_ff.skipped, self.auto_ff_skipped.join(" · "))));
         }
         if !self.overlap.is_empty() {
-            out.push(bar(p.yellow, (t.binary_overlap)(&self.overlap.join("、"))));
+            out.push(bar(p.orange, (t.binary_overlap)(&self.overlap.join("、"))));
         }
         if let Some(what) = self.refs.in_progress {
             let resolved = self.conflicts().iter().filter(|c| c.1).count();
@@ -1970,9 +1977,9 @@ impl RepoView {
                     .gap(px(12.))
                     .px(px(16.))
                     .py(px(8.))
-                    .bg(alpha(p.yellow, 0.12))
+                    .bg(alpha(p.orange, 0.12))
                     .text_size(FS_SM)
-                    .child(div().flex_none().font_weight(FontWeight::BOLD).text_color(p.yellow).child(lookup(t.in_progress, what).unwrap_or(what)))
+                    .child(div().flex_none().font_weight(FontWeight::BOLD).text_color(p.orange).child(lookup(t.in_progress, what).unwrap_or(what)))
                     .child(
                         div()
                             .flex_1()
@@ -2038,7 +2045,7 @@ impl RepoView {
             } else {
                 t.no_commits.to_owned()
             };
-            pane.child(div().flex_1().flex().items_center().justify_center().font_family(PROSE).text_size(FS_LG).text_color(p.muted).child(text))
+            pane.child(div().flex_1().p(px(16.)).font_family(PROSE).text_size(FS_MD).text_color(p.muted).child(text))
         };
         let l = layout(cx);
         pane.child(layout::splitter("split-detail", Key::Detail, false, 120., 640., true, cx)).child(div().h(px(l.detail)).max_h(relative(0.62)).flex_none().flex().child(self.detail.clone()))
@@ -2062,7 +2069,7 @@ impl RepoView {
             .text_size(FS_SM)
             .line_height(relative(1.6));
         if self.logs.is_empty() {
-            log = log.child(div().text_color(p.muted).child(t.log_empty));
+            log = log.child(div().text_color(p.muted).font_family(PROSE).child(t.log_empty));
         }
         for entry in &self.logs {
             // 失败的命令除了变红还多一条竖线，不只靠颜色区分

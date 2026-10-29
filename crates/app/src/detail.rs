@@ -9,7 +9,7 @@ use crate::i18n::{error_text, lookup, t};
 use crate::layout::{self, layout, Key};
 use crate::repo_view::RepoView;
 use crate::store;
-use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE};
+use crate::theme::{palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE};
 use crate::time::fmt_time;
 use engine::detail::{Detail, FileChange};
 use engine::forge::{Anchor, Note};
@@ -207,7 +207,7 @@ impl DetailView {
             'A' => p.diff_added,
             'D' => p.diff_deleted,
             'R' | 'C' => p.accent,
-            _ => p.yellow,
+            _ => p.orange,
         };
         let path = f.path.clone();
         let (p1, p2, p3) = (path.clone(), path.clone(), path.clone());
@@ -234,7 +234,7 @@ impl DetailView {
                     .h(px(24.))
                     .px(px(12.))
                     .text_size(FS_SM)
-                    .when(selected, |s| s.bg(p.accent_soft))
+                    .when(selected, |s| s.bg(p.selection))
                     .when(!selected, |s| s.hover(|s| s.bg(p.hover)))
                     .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx))
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -254,6 +254,7 @@ impl DetailView {
                             .flex()
                             .min_w_0()
                             .truncate()
+                            .font_family(MONO)
                             .when_some(f.old_path.clone(), |s, old| s.child(div().text_color(p.muted).child(format!("{} → ", shown(&old)))))
                             .child(shown(&f.path)),
                     ),
@@ -267,7 +268,7 @@ impl Render for DetailView {
         let p = palette(cx).clone();
         let t = t(cx);
         let Some(detail) = self.detail.clone() else {
-            return div().flex_1().flex().items_center().justify_center().bg(p.panel).text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(t.no_selection).into_any_element();
+            return div().flex_1().p(px(16.)).bg(p.surface).text_color(p.muted).font_family(PROSE).text_size(FS_MD).child(t.no_selection).into_any_element();
         };
         let l = layout(cx);
         let query = self.filter.read(cx).value().trim().to_lowercase();
@@ -343,7 +344,7 @@ impl Render for DetailView {
                 .overflow_y_scroll()
                 .px(px(24.))
                 .py(px(16.))
-                .child(div().max_w(gpui::rems(40.)).mb(px(12.)).font_family(crate::theme::DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(subject.to_owned()));
+                .child(div().max_w(gpui::rems(40.)).mb(px(12.)).font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(subject.to_owned()));
             if !body.is_empty() {
                 info = info.child(div().max_w(px(72. * 8.)).mb(px(16.)).font_family(PROSE).text_size(FS_MD).line_height(relative(LH_BODY)).child(body.to_owned()));
             }
@@ -391,7 +392,7 @@ impl Render for DetailView {
             .flex()
             .flex_1()
             .min_h_0()
-            .bg(p.panel)
+            .bg(p.surface)
             .child(list)
             .child(layout::splitter("split-files", Key::Files, true, 200., 640., false, cx))
             .child(right)

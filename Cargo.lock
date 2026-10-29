@@ -5813,6 +5813,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "jiff",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "syntect",

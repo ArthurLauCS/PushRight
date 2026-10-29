@@ -4,7 +4,7 @@ use crate::author::{self, author_key};
 use crate::git::{self, Session};
 use crate::i18n::t;
 use crate::layout::{self, layout, Key};
-use crate::theme::{alpha, mix, palette, Palette, FS_SM, MONO, R_LG, R_SM, ROW};
+use crate::theme::{alpha, palette, select_bar, Palette, FS_SM, MONO, PROSE, R_MD, R_SM, ROW};
 use crate::time::fmt_time;
 use crate::ui::chip;
 use gpui_component::scroll::ScrollableElement;
@@ -12,7 +12,7 @@ use engine::graph::Row;
 use engine::refs::Ref;
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, point, px, uniform_list, BoxShadow, Context, EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton, PathBuilder, Pixels, Point,
+    canvas, div, point, px, uniform_list, Context, EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton, PathBuilder, Pixels, Point,
     ScrollStrategy, UniformListScrollHandle, Window,
 };
 use std::cell::Cell;
@@ -141,13 +141,14 @@ impl Graph {
 }
 
 /// 一行的泳道：竖直方向出入、中间平滑过渡
-fn paint_lanes(row: &Row, head: bool, max_lanes: usize, p: &Palette, origin: Point<Pixels>, window: &mut Window) {
+fn paint_lanes(row: &Row, head: bool, selected: bool, dim: bool, max_lanes: usize, p: &Palette, origin: Point<Pixels>, window: &mut Window) {
     let h = f32::from(ROW);
     let x = |lane: u32| PAD + lane as f32 * LANE_W + LANE_W / 2.;
     let at = |x: f32, y: f32| origin + point(px(x), px(y));
-    let color = |lane: u32| p.lanes[lane as usize % p.lanes.len()];
+    let fade = if dim { 0.12 } else { 1. };
+    let color = |lane: u32| alpha(p.lanes[lane as usize % p.lanes.len()], fade);
     let link = |window: &mut Window, lane: u32, x0: f32, y0: f32, x1: f32, y1: f32| {
-        let mut b = PathBuilder::stroke(px(1.6));
+        let mut b = PathBuilder::stroke(px(2.));
         b.move_to(at(x0, y0));
         b.cubic_bezier_to(at(x1, y1), at(x0, (y0 + y1) / 2.), at(x1, (y0 + y1) / 2.));
         if let Ok(path) = b.build() {
@@ -168,8 +169,19 @@ fn paint_lanes(row: &Row, head: bool, max_lanes: usize, p: &Palette, origin: Poi
     if row.lane >= cap {
         return;
     }
-    // 当前检出的提交画成空心
+    // 节点一律是 muted 实心圆；当前检出的提交画成空心；选中的行外面再套一圈强调色环
     let r = 4.;
+    if selected {
+        let mut halo = PathBuilder::stroke(px(1.5));
+        let rr = r + 3.;
+        halo.move_to(at(cx + rr, cy));
+        halo.arc_to(point(px(rr), px(rr)), px(0.), false, false, at(cx - rr, cy));
+        halo.arc_to(point(px(rr), px(rr)), px(0.), false, false, at(cx + rr, cy));
+        halo.close();
+        if let Ok(path) = halo.build() {
+            window.paint_path(path, p.accent);
+        }
+    }
     let ring = |b: &mut PathBuilder| {
         b.move_to(at(cx + r, cy));
         b.arc_to(point(px(r), px(r)), px(0.), false, false, at(cx - r, cy));
@@ -179,31 +191,25 @@ fn paint_lanes(row: &Row, head: bool, max_lanes: usize, p: &Palette, origin: Poi
     let mut fill = PathBuilder::fill();
     ring(&mut fill);
     if let Ok(path) = fill.build() {
-        window.paint_path(path, if head { p.bg } else { color(row.lane) });
+        window.paint_path(path, if head { p.bg } else { alpha(p.muted, fade) });
     }
     let mut stroke = PathBuilder::stroke(px(2.));
     ring(&mut stroke);
     if let Ok(path) = stroke.build() {
-        window.paint_path(path, color(row.lane));
+        window.paint_path(path, if head { alpha(p.text, fade) } else { alpha(p.muted, fade) });
     }
 }
 
 fn badge(r: &Ref, p: &Palette) -> impl IntoElement {
     let short = r.name.trim_start_matches("refs/heads/").trim_start_matches("refs/tags/").trim_start_matches("refs/remotes/").to_owned();
-    let el = div().flex_none().mr(px(8.)).px(px(8.)).py(px(1.)).rounded(R_SM).text_size(FS_SM).border_1().text_color(p.text).max_w(px(240.)).truncate();
+    let el = div().flex_none().mr(px(8.)).px(px(6.)).py(px(1.)).rounded(R_SM).text_size(FS_SM).border_1().text_color(p.text).max_w(px(240.)).truncate();
     if r.name.starts_with("refs/heads/") {
-        // 本地分支：左边一条 3px 的强调色
-        el.relative()
-            .pl(px(10.))
-            .font_weight(FontWeight::SEMIBOLD)
-            .bg(p.ref_bg)
-            .border_color(mix(p.accent, p.border_strong, 0.55))
-            .child(div().absolute().left(px(-1.)).top(px(-1.)).bottom(px(-1.)).w(px(3.)).rounded_l(R_SM).bg(p.accent))
-            .child(short)
+        // 本地分支：surface 底、粗体，名字前一个 8px 的强调色方点
+        el.flex().items_center().gap(px(6.)).font_weight(FontWeight::BOLD).bg(p.surface).border_color(p.border).child(div().size(px(8.)).rounded(px(2.)).bg(p.muted)).child(short)
     } else if r.name.starts_with("refs/tags/") {
-        el.font_weight(FontWeight::SEMIBOLD).border_color(alpha(p.yellow, 0.45)).child(short)
+        el.flex().items_center().gap(px(6.)).border_color(p.border).child(div().size(px(8.)).rounded(px(2.)).bg(p.orange)).child(short)
     } else {
-        el.border_color(p.border_strong).child(short)
+        el.border_color(p.border).child(short)
     }
 }
 
@@ -280,7 +286,7 @@ impl Render for Graph {
                         .pl(graph_w)
                         .pr(px(24.))
                         .hover(|s| s.bg(p.hover))
-                        .when(selected, |s| s.bg(p.accent_soft).shadow(vec![BoxShadow { color: p.accent, offset: point(px(2.), px(0.)), blur_radius: px(0.), spread_radius: px(0.), inset: true }]))
+                        .when(selected, |s| s.bg(p.selection).shadow(select_bar(&p)))
                         .on_click(cx.listener(move |this, _, window, cx| this.select(r, window, cx)));
                     let Some(row) = row else { return el };
                     let id = row.id.clone();
@@ -291,7 +297,7 @@ impl Render for Graph {
                     let head = this.head_id.as_deref() == Some(row.id.as_str());
                     let lanes_row = row.clone();
                     let pc = p.clone();
-                    el = el.child(canvas(|_, _, _| {}, move |b, _, window, _| paint_lanes(&lanes_row, head, max_lanes, &pc, b.origin, window)).absolute().left_0().top_0().w(graph_w).h(ROW));
+                    el = el.child(canvas(|_, _, _| {}, move |b, _, window, _| paint_lanes(&lanes_row, head, selected, dim, max_lanes, &pc, b.origin, window)).absolute().left_0().top_0().w(graph_w).h(ROW));
                     let opacity = if dim { 0.3 } else { 1. };
                     let badges = this.badges.get(&row.id);
                     let key = author_key(&row.author, &row.author_email);
@@ -307,7 +313,7 @@ impl Render for Graph {
                             .items_center()
                             .opacity(opacity)
                             .when_some(badges, |s, refs| s.child(div().flex().flex_shrink(1.).max_w(gpui::relative(0.5)).overflow_hidden().children(refs.iter().map(|r| badge(r, &p)))))
-                            .child(div().flex_1().min_w_0().truncate().child(row.subject.clone())),
+                            .child(div().flex_1().min_w_0().truncate().font_family(PROSE).child(row.subject.clone())),
                     )
                     .child(
                         div().w(author_w).flex_none().min_w_0().flex().opacity(opacity).child(
@@ -319,7 +325,7 @@ impl Render for Graph {
                                 .text_color(color)
                                 .cursor_pointer()
                                 .hover(|s| s.underline())
-                                .when(style.border || style.fill, |s| s.px(px(8.)).rounded(R_LG).line_height(px(20.)).border_1().border_color(if style.border { color } else { alpha(color, 0.) }))
+                                .when(style.border || style.fill, |s| s.px(px(8.)).rounded(R_MD).line_height(px(20.)).border_1().border_color(if style.border { color } else { alpha(color, 0.) }))
                                 .when(style.fill, |s| s.bg(alpha(color, 0.18)))
                                 .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(t.author_hint).build(window, cx))
                                 .on_click(cx.listener(move |this, _, _, cx| {

@@ -5,7 +5,7 @@ use crate::icons::{icon, Icon};
 use crate::theme::{palette, FS_SM, R_MD, R_SM};
 use crate::ui::label;
 use gpui::prelude::*;
-use gpui::{anchored, deferred, div, point, px, Animation, AnimationExt, App, BoxShadow, Context, FocusHandle, KeyDownEvent, Pixels, Point, Window};
+use gpui::{anchored, deferred, div, px, Animation, AnimationExt, App, Context, FocusHandle, KeyDownEvent, Pixels, Point, Window};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -105,10 +105,10 @@ impl Render for Menu {
             .overflow_y_scroll()
             .p(px(4.))
             .border_1()
-            .border_color(p.border_strong)
+            .border_color(p.border)
             .rounded(R_MD)
-            .bg(p.raised)
-            .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(16.)), blur_radius: px(40.), spread_radius: px(0.), inset: false }])
+            .bg(p.bg)
+            .shadow(crate::theme::overlay_shadow(&p))
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
                 if e.keystroke.key == "escape" {
                     this.close(cx);
@@ -121,6 +121,7 @@ impl Render for Menu {
                 .child(
                     div()
                         .id("menu-back")
+                        .group("menu-row")
                         .flex()
                         .items_center()
                         .gap(px(8.))
@@ -130,8 +131,9 @@ impl Render for Menu {
                         .text_size(FS_SM)
                         .text_color(p.muted)
                         .cursor_pointer()
-                        .hover(|s| s.bg(p.accent).text_color(p.on_accent))
-                        .child(icon(Icon::Left, px(12.), p.muted))
+                        .hover(|s| s.bg(p.raised).text_color(p.text))
+                        // 图标不随文字变色，悬停时单独换成深色
+                        .child(icon(Icon::Left, px(12.), p.muted).group_hover("menu-row", |s| s.text_color(p.text)))
                         .child(format!("{} · {}", t.menu_back, title))
                         .on_click(cx.listener(|this, _, _, cx| {
                             if let Some((_, parent)) = this.parents.pop() {
@@ -146,7 +148,7 @@ impl Render for Menu {
             list = match item {
                 Item::Sep => list.child(div().my(px(4.)).h(px(1.)).bg(p.border)),
                 Item::Entry { label: text, hint, items, danger, disabled, .. } => {
-                    let (fg, hover_bg, hover_fg) = if *danger { (p.red, p.red, p.on_danger) } else { (p.text, p.accent, p.on_accent) };
+                    let (fg, hover_bg, hover_fg) = if *danger { (p.red, p.red, p.on_danger) } else { (p.text, p.raised, p.text) };
                     let mut row = div()
                         .id(("menu-item", i))
                         .w_full()
@@ -159,13 +161,13 @@ impl Render for Menu {
                                 .flex()
                                 .items_center()
                                 .child(div().flex_1().child(label(text, true)))
-                                .when(items.is_some(), |s| s.child(div().opacity(0.7).child(icon(Icon::Right, px(12.), fg)))),
+                                .when(items.is_some(), |s| s.child(div().opacity(0.7).child(icon(Icon::Right, px(12.), fg).group_hover("menu-row", |s| s.text_color(hover_fg))))),
                         )
                         .when_some(hint.clone(), |s, h| s.child(div().text_size(FS_SM).opacity(0.7).child(h)));
                     if *disabled {
                         row = row.opacity(0.45);
                     } else {
-                        row = row.cursor_pointer().hover(move |s| s.bg(hover_bg).text_color(hover_fg)).on_click(cx.listener(move |this, _, window, cx| this.pick(i, window, cx)));
+                        row = row.group("menu-row").cursor_pointer().hover(move |s| s.bg(hover_bg).text_color(hover_fg)).on_click(cx.listener(move |this, _, window, cx| this.pick(i, window, cx)));
                     }
                     list.child(row)
                 }

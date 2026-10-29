@@ -33,6 +33,13 @@ struct Tab {
 /// 页签的自定义名字，按仓库路径记
 const TAB_NAMES: &str = "tabNames";
 
+/// 页签高度
+const TAB_H: f32 = 32.;
+/// 选中页签底边强调线的粗细。每个页签底部都留出这么高，文字在线上方的区域居中，切换页签时不跳动
+const TAB_LINE: f32 = 2.;
+/// 页签行右端「新建页签」按钮的边长。左端留出同样宽的空位，只有一个页签时标题落在整行正中，和工具栏的当前分支对齐
+const NEW_TAB: f32 = 28.;
+
 /// 路径的最后一级文件夹名
 pub fn folder(path: &str) -> String {
     path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(path).to_owned()
@@ -47,7 +54,7 @@ struct DraggedTab {
 impl Render for DraggedTab {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        div().px(px(16.)).py(px(4.)).rounded(R_MD).bg(p.accent).text_color(p.on_accent).font_family(DISPLAY).font_weight(FontWeight::BOLD).child(self.name.clone())
+        div().px(px(16.)).py(px(4.)).rounded(R_MD).bg(p.raised).border_1().border_color(p.border).text_color(p.text).font_family(DISPLAY).font_weight(FontWeight::SEMIBOLD).shadow(theme::overlay_shadow(p)).child(self.name.clone())
     }
 }
 
@@ -73,10 +80,12 @@ const RECENT: &str = "recent";
 impl PushRight {
     pub fn new(args: Vec<String>, forwarded: futures::channel::mpsc::UnboundedReceiver<Vec<String>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         apply_theme(window, cx);
-        // 没手动选过主题时跟随系统
+        // 没手动选过主题时跟随系统；选过时系统换深浅色后会把标题栏改成系统的，下一帧改回应用主题
         let follow = cx.observe_window_appearance(window, |_, window, cx| {
             if store::get::<String>(cx, "theme").is_none() {
                 apply_theme(window, cx);
+            } else {
+                window.on_next_frame(|window, cx| theme::title_bar(palette(cx).dark, window));
             }
         });
 
@@ -402,7 +411,7 @@ impl PushRight {
         cx.notify();
     }
 
-    /// 仓库页签单独一行，按页签数平分整行宽度；选中的页签用陶土色底。
+    /// 仓库页签单独一行，按页签数平分整行宽度；选中的页签浮起一层，底边一条强调色线。
     /// 名字是自定义名或文件夹名，后面跟当前分支，多个工作树同名时也分得清
     fn render_tabs(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx).clone();
@@ -415,15 +424,16 @@ impl PushRight {
             .gap(px(2.))
             .h(px(40.))
             .px(px(8.))
-            .bg(p.bg)
+            .bg(p.surface)
             .border_b_1()
-            .border_color(p.border);
+            .border_color(p.border)
+            .child(div().flex_none().w(px(NEW_TAB)));
         for tab in &self.tabs {
             let id = tab.id;
             let active = self.active == Some(id);
             let name = names.get(&tab.path).cloned().unwrap_or_else(|| folder(&tab.path));
             let branch = tab.view.read(cx).refs.head.as_deref().map(|h| short(h).to_owned()).filter(|b| *b != name);
-            let fg = if active { p.on_accent } else { p.muted };
+            let fg = if active { p.text } else { p.muted };
             let group: SharedString = format!("tab-{id}").into();
             let dragged = DraggedTab { id, name: name.clone().into() };
             nav = nav.child(
@@ -437,17 +447,15 @@ impl PushRight {
                     .items_center()
                     .justify_center()
                     .gap(px(6.))
-                    .h(px(32.))
+                    .h(px(TAB_H))
                     // 左右留出一样宽的位置，关闭按钮浮在右边，仓库名和分支名在标签正中
                     .px(px(32.))
-                    .mb(px(-1.))
+                    .pb(px(TAB_LINE))
                     .rounded_t(R_MD)
-                    .font_family(DISPLAY)
-                    .font_weight(FontWeight::BOLD)
                     .text_color(fg)
-                    .when(active, |s| s.bg(p.accent))
+                    .when(active, |s| s.bg(p.bg).font_weight(FontWeight::BOLD).child(div().absolute().left_0().right_0().bottom_0().h(px(TAB_LINE)).bg(p.accent)))
                     .when(!active, |s| s.hover(|s| s.bg(p.hover).text_color(p.text)))
-                    .drag_over::<DraggedTab>(move |s, _, _, _| s.bg(p.accent_soft))
+                    .drag_over::<DraggedTab>(move |s, _, _, _| s.bg(p.selection))
                     .on_drag(dragged, |d, _, _, cx| cx.new(|_| DraggedTab { id: d.id, name: d.name.clone() }))
                     .on_drop(cx.listener(move |this, d: &DraggedTab, _, cx| this.move_tab(d.id, id, cx)))
                     .tooltip({
@@ -470,7 +478,7 @@ impl PushRight {
                             .items_baseline()
                             .gap(px(8.))
                             .overflow_hidden()
-                            .child(div().min_w_0().truncate().child(name))
+                            .child(div().min_w_0().truncate().font_family(DISPLAY).child(name))
                             // 窄的时候先缩分支名
                             .when_some(branch, |s, b| s.child(div().min_w_0().flex_shrink(4.).truncate().font_family(theme::UI).text_size(FS_SM).opacity(0.8).child(b))),
                     )
@@ -497,9 +505,10 @@ impl PushRight {
                     ),
             );
         }
+        // 新建按钮放在和页签同高同位的格子里，上下居中
         nav.child(
-            div().flex_none().mb(px(4.)).child(
-                btn("new-tab").quiet().icon(Icon::Plus).on(self.active.is_none()).tip(t.new_tab).on_click(cx.listener(|this, _, _, cx| {
+            div().flex_none().flex().items_center().h(px(TAB_H)).child(
+                btn("new-tab").quiet().icon(Icon::Plus).h(px(NEW_TAB)).on(self.active.is_none()).tip(t.new_tab).on_click(cx.listener(|this, _, _, cx| {
                     this.active = None;
                     cx.notify();
                 })),
@@ -539,34 +548,36 @@ impl PushRight {
         let p = palette(cx).clone();
         let t = t(cx);
         let creating = self.creating;
+        // 打开应用时落在左上：标题、一句提示、操作，下面是最近打开的仓库
         div()
-            .m_auto()
-            .w(px(520.))
+            .max_w(px(560.))
+            .p(px(24.))
             .flex()
             .flex_col()
             .items_start()
             .gap(px(8.))
-            .child(div().font_family(DISPLAY).text_size(px(48.)).font_weight(FontWeight::EXTRA_BOLD).text_color(p.accent).line_height(px(62.)).child(t.app_name))
-            .child(div().mb(px(16.)).font_family(PROSE).text_size(FS_XL).child(t.welcome_lead))
-            .child(div().mb(px(16.)).text_color(p.muted).child(t.open_repo_hint))
+            .child(div().font_family(DISPLAY).text_size(FS_XL).font_weight(FontWeight::SEMIBOLD).child(t.app_name))
+            .child(div().text_color(p.muted).font_family(PROSE).child(t.welcome_lead))
+            .child(div().mb(px(8.)).text_color(p.muted).font_family(PROSE).child(t.open_repo_hint))
             .child(
                 div()
                     .flex()
                     .flex_wrap()
                     .gap(px(8.))
-                    .child(btn("open").primary().h(px(40.)).text(t.open_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.pick(window, cx))))
-                    .child(btn("clone").h(px(40.)).text(t.tools.clone_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.create(true, window, cx))))
-                    .child(btn("init").h(px(40.)).text(t.tools.init_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.create(false, window, cx)))),
+                    .child(btn("open").primary().text(t.open_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.pick(window, cx))))
+                    .child(btn("clone").text(t.tools.clone_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.create(true, window, cx))))
+                    .child(btn("init").text(t.tools.init_repo).disabled(creating).on_click(cx.listener(|this, _, window, cx| this.create(false, window, cx)))),
             )
             .when(creating, |s| s.child(t.working))
             .when(!self.error.is_empty(), |s| s.child(div().text_color(p.red).child(i18n::error_text(cx, &self.error))))
             .when(!self.recent.is_empty(), |s| {
-                s.child(div().mt(px(32.)).mb(px(4.)).text_size(FS_SM).text_color(p.muted).child(t.recent)).children(self.recent.iter().enumerate().map(|(i, path)| {
+                s.child(div().mt(px(24.)).mb(px(4.)).text_size(FS_SM).text_color(p.muted).child(t.recent)).children(self.recent.iter().enumerate().map(|(i, path)| {
                     let path = path.clone();
+                    // 悬停底色向两边各伸出 12，路径文字仍和上面的内容同宽
                     div()
                         .id(("recent", i))
-                        .w_full()
-                        .ml(px(-12.))
+                        .self_stretch()
+                        .mx(px(-12.))
                         .px(px(12.))
                         .py(px(8.))
                         .rounded(R_MD)
@@ -590,7 +601,7 @@ fn diff_preview(v: &Values, cx: &App) -> gpui::AnyElement {
     let pick = |key: &str, fallback| if v.bool("default") { fallback } else { crate::diff_colors::hex(&v.text(key)).unwrap_or(fallback) };
     let (added, deleted) = (pick("added", base.diff_added), pick("deleted", base.diff_deleted));
     let line = |color: gpui::Hsla, sign: &str, text: &str| {
-        div().flex().h(px(22.)).bg(theme::alpha(color, 0.22)).border_l_3().border_color(color).child(div().w(px(24.)).flex().justify_center().font_weight(FontWeight::BOLD).child(sign.to_owned())).child(text.to_owned())
+        div().flex().h(px(22.)).bg(theme::alpha(color, 0.22)).border_l_3().border_color(color).child(div().w(px(24.)).flex().justify_center().font_weight(FontWeight::SEMIBOLD).child(sign.to_owned())).child(text.to_owned())
     };
     div()
         .flex()

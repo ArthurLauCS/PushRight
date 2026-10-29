@@ -7,7 +7,7 @@ use crate::i18n::{error_text, lookup, t};
 use crate::icons::Icon;
 use crate::repo_view::RepoView;
 use crate::revision_picker::RevisionPicker;
-use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, R_MD};
+use crate::theme::{palette, DISPLAY, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use crate::time::{calendar, Zone};
 use crate::ui::{btn, Opt};
 use engine::ops::{Log, Op, Verdict};
@@ -469,9 +469,9 @@ impl Tools {
                         .on_click(cx.listener(move |this, _, _, cx| this.toggle_preview(id.clone(), cx))),
                 );
             for b in &step.branches {
-                row = row.child(div().px(px(8.)).border_1().border_color(p.accent).rounded(crate::theme::R_LG).text_color(p.accent).text_size(FS_SM).child(b.trim_start_matches("refs/heads/").to_owned()));
+                row = row.child(div().px(px(8.)).border_1().border_color(p.accent).rounded(crate::theme::R_MD).text_color(p.accent).text_size(FS_SM).child(b.trim_start_matches("refs/heads/").to_owned()));
             }
-            let mut card = div().px(px(16.)).py(px(12.)).bg(p.panel).border_1().border_color(p.border).rounded(R_MD).child(row);
+            let mut card = div().px(px(16.)).py(px(12.)).bg(p.surface).border_1().border_color(p.border).rounded(R_MD).child(row);
             if action == "reword" || action == "squash" {
                 card = card.child(div().mt(px(8.)).text_color(p.muted).child(t.tools.rebase_message).child(Textarea::new(&self.steps[i].message)));
             }
@@ -497,9 +497,9 @@ impl Tools {
         let r = &t.repo_tools;
         let busy = self.busy(cx);
         let mut out = Vec::new();
-        let table = || div().bg(p.panel).border_1().border_color(p.border).rounded(R_MD).overflow_hidden();
+        let table = || div().bg(p.surface).border_1().border_color(p.border).rounded(R_MD).overflow_hidden();
         let row = |first: bool| div().flex().items_center().gap(px(12.)).min_h(px(36.)).pl(px(16.)).pr(px(8.)).py(px(4.)).when(!first, |s| s.border_t_1().border_color(p.border)).text_size(FS_SM);
-        let none = |text: &str| div().p(px(24.)).flex().justify_center().text_color(p.muted).child(text.to_owned());
+        let none = |text: &str| div().p(px(24.)).text_color(p.muted).child(text.to_owned());
         match self.section {
             Section::Patch => {
                 out.push(prose(r.patch_hint, cx));
@@ -582,7 +582,7 @@ impl Tools {
                         row(i == 0)
                             .child(div().font_family(MONO).child(m.path.clone()))
                             .child(div().font_family(MONO).text_color(p.muted).child(m.id[..12.min(m.id.len())].to_owned()))
-                            .child(div().flex_1().text_color(if m.state != "ok" { p.yellow } else { p.muted }).child(lookup(r.submodule_states, m.state).unwrap_or(m.state)))
+                            .child(div().flex_1().text_color(if m.state != "ok" { p.orange } else { p.muted }).child(lookup(r.submodule_states, m.state).unwrap_or(m.state)))
                             .when(m.state != "missing", |s| s.child(btn(SharedString::from(format!("open-{}", m.path))).small().text(r.submodule_open).on_click(cx.listener(move |this, _, window, cx| {
                                 let path = path.clone();
                                 let _ = this.repo.update(cx, |r, cx| r.open_path(path, window, cx));
@@ -597,7 +597,7 @@ impl Tools {
                     Some(stats) if stats.commits > 0 => {
                         let dates = calendar(&stats.times, cx.global::<Zone>());
                         let peak = dates.months.iter().max_by_key(|m| m.count).map(|m| (m.name.clone(), m.count)).unwrap_or_default();
-                        let tile = |value: String, label: &str| div().flex().flex_col().gap(px(4.)).min_w(px(140.)).px(px(16.)).py(px(12.)).bg(p.panel).border_1().border_color(p.border).rounded(R_MD).text_size(FS_SM).text_color(p.muted).child(div().text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).text_color(p.text).child(value)).child(label.to_owned());
+                        let tile = |value: String, label: &str| div().flex().flex_col().gap(px(4.)).min_w(px(140.)).px(px(16.)).py(px(12.)).bg(p.surface).border_1().border_color(p.border).rounded(R_MD).text_size(FS_SM).text_color(p.muted).child(div().text_size(FS_LG).font_weight(FontWeight::BOLD).text_color(p.text).child(value)).child(label.to_owned());
                         out.push(
                             div()
                                 .flex()
@@ -609,7 +609,7 @@ impl Tools {
                                 .child(tile(dates.last.clone(), r.stats_last))
                                 .into_any_element(),
                         );
-                        out.push(div().font_weight(FontWeight::SEMIBOLD).child(r.stats_months).into_any_element());
+                        out.push(div().font_weight(FontWeight::BOLD).child(r.stats_months).into_any_element());
                         // 每月一根柱子：贴着基线、顶端圆角、柱间留 2px
                         let peak_n = peak.1.max(1);
                         out.push(
@@ -650,7 +650,7 @@ impl Tools {
                                 .into_any_element(),
                         );
                         for (title, list) in [(r.stats_by_author, &stats.authors), (r.stats_by_file, &stats.files)] {
-                            out.push(div().font_weight(FontWeight::SEMIBOLD).child(title).into_any_element());
+                            out.push(div().font_weight(FontWeight::BOLD).child(title).into_any_element());
                             let top = list.first().map_or(1, |c| c.count.max(1)) as f32;
                             let mut t = table().id(SharedString::from(title)).flex_none().max_h(px(420.)).overflow_y_scroll();
                             for (i, c) in list.iter().enumerate() {
@@ -659,7 +659,7 @@ impl Tools {
                                     row(i == 0)
                                         .relative()
                                         .min_h(px(28.))
-                                        .child(div().absolute().left_0().top_0().bottom_0().w(relative(w)).bg(p.accent_soft))
+                                        .child(div().absolute().left_0().top_0().bottom_0().w(relative(w)).bg(p.selection))
                                         .child(div().relative().flex_1().min_w_0().truncate().font_family(MONO).child(c.name.clone()))
                                         .child(div().relative().font_family(MONO).child(crate::i18n::group(c.count as usize))),
                                 );
@@ -684,13 +684,13 @@ impl Tools {
                         .flex_wrap()
                         .items_center()
                         .gap(px(8.))
-                        .child(div().text_color(if lfs.installed { p.text } else { p.yellow }).child(if lfs.installed { r.lfs_installed } else { r.lfs_not_installed }))
+                        .child(div().text_color(if lfs.installed { p.text } else { p.orange }).child(if lfs.installed { r.lfs_installed } else { r.lfs_not_installed }))
                         .child(div().text_size(FS_SM).text_color(p.muted).child(lfs.version.clone().unwrap_or_default()))
                         .when(!lfs.installed, |s| s.child(btn("lfs-install").primary().text(r.lfs_install).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.extra(Op::LfsInstall, cx).detach()))))
                         .child(btn("lfs-pull").text(r.lfs_pull).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.extra(Op::LfsPull, cx).detach())))
                         .into_any_element(),
                 );
-                out.push(div().font_weight(FontWeight::SEMIBOLD).child(r.lfs_patterns).into_any_element());
+                out.push(div().font_weight(FontWeight::BOLD).child(r.lfs_patterns).into_any_element());
                 let mut list = table();
                 if lfs.patterns.is_empty() {
                     list = list.child(none(r.lfs_no_patterns));
@@ -755,12 +755,12 @@ impl Tools {
 
 fn prose(text: &str, cx: &App) -> AnyElement {
     let p = palette(cx);
-    div().max_w(px(72. * 8.)).text_color(p.muted).line_height(relative(LH_BODY)).child(text.to_owned()).into_any_element()
+    div().max_w(px(72. * 8.)).text_color(p.muted).font_family(PROSE).line_height(relative(LH_BODY)).child(text.to_owned()).into_any_element()
 }
 
 /// 命令输出：超过 320px 高时在框里滚动
 fn pre(id: &'static str, text: &str, p: &crate::theme::Palette) -> gpui::Stateful<gpui::Div> {
-    div().id(id).overflow_y_scroll().px(px(16.)).py(px(12.)).max_h(px(320.)).bg(p.panel).border_1().border_color(p.border).rounded(R_MD).font_family(MONO).text_size(FS_SM).child(text.to_owned())
+    div().id(id).overflow_y_scroll().px(px(16.)).py(px(12.)).max_h(px(320.)).bg(p.surface).border_1().border_color(p.border).rounded(R_MD).font_family(MONO).text_size(FS_SM).child(text.to_owned())
 }
 
 impl Render for Tools {
@@ -800,11 +800,11 @@ impl Render for Tools {
                         div()
                             .px(px(16.))
                             .py(px(12.))
-                            .bg(p.panel)
+                            .bg(p.surface)
                             .border_1()
                             .border_color(p.border)
                             .rounded(R_MD)
-                            .child(div().mb(px(8.)).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(item.name.clone()))
+                            .child(div().mb(px(8.)).font_family(DISPLAY).text_size(FS_LG).font_weight(FontWeight::SEMIBOLD).child(item.name.clone()))
                             .child(div().flex().flex_col().gap(px(4.)).text_size(FS_SM).child(dl(t.tools.fetch_url, &item.fetch)).child(dl(t.tools.push_url, &item.push)))
                             .child(actions)
                             .into_any_element(),
@@ -815,9 +815,9 @@ impl Render for Tools {
             Section::Reflog => {
                 let mut out = vec![div().flex().child(btn("reflog-refresh").text(t.tools.refresh).disabled(busy).on_click(cx.listener(|this, _, _, cx| this.load_logs(false, cx)))).into_any_element()];
                 // Reflog 是一张表：行高和提交图一致，不再一条记录一张卡片
-                let mut table = div().bg(p.panel).border_1().border_color(p.border).rounded(R_MD).overflow_hidden();
+                let mut table = div().bg(p.surface).border_1().border_color(p.border).rounded(R_MD).overflow_hidden();
                 if self.logs.is_empty() {
-                    table = table.child(div().p(px(24.)).flex().justify_center().text_color(p.muted).child(t.tools.no_reflog));
+                    table = table.child(div().p(px(24.)).text_color(p.muted).font_family(PROSE).child(t.tools.no_reflog));
                 }
                 for (i, entry) in self.logs.clone().into_iter().enumerate() {
                     let e = entry.clone();
@@ -835,7 +835,7 @@ impl Render for Tools {
                             .text_size(FS_SM)
                             .hover(|s| s.bg(p.hover))
                             .child(div().flex_none().font_family(MONO).text_color(p.muted).child(entry.id[..12.min(entry.id.len())].to_owned()))
-                            .child(div().flex().flex_1().min_w_0().child(div().flex_none().mr(px(12.)).font_family(MONO).text_color(p.accent).child(entry.selector.clone())).child(div().min_w_0().truncate().child(entry.subject.clone())))
+                            .child(div().flex().flex_1().min_w_0().child(div().flex_none().mr(px(12.)).font_family(MONO).text_color(p.accent).child(entry.selector.clone())).child(div().min_w_0().truncate().font_family(PROSE).child(entry.subject.clone())))
                             .child(btn(("recover", i)).small().text(t.tools.recover).disabled(busy).on_click(cx.listener(move |this, _, window, cx| this.recover(e.clone(), window, cx)))),
                     );
                 }

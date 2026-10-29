@@ -4,11 +4,11 @@
 use crate::explain::explainer;
 use crate::i18n::{t, Explain};
 use crate::store;
-use crate::theme::{alpha, palette, DISPLAY, FS_MD, FS_SM, FS_XL, LH_BODY, MONO, R_LG, R_MD};
+use crate::theme::{alpha, palette, DISPLAY, FS_MD, FS_SM, FS_XL, LH_BODY, MONO, R_MD};
 use crate::ui::{btn, label, Opt};
 use futures::channel::oneshot;
 use gpui::prelude::*;
-use gpui::{div, point, px, relative, AnyElement, Animation, AnimationExt, App, BoxShadow, Context, Entity, FocusHandle, FontWeight, Hsla, KeyDownEvent, SharedString, Subscription, Window};
+use gpui::{div, px, relative, AnyElement, Animation, AnimationExt, App, Context, Entity, FocusHandle, FontWeight, Hsla, KeyDownEvent, SharedString, Subscription, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
@@ -325,7 +325,7 @@ impl Render for Dialog {
         let spec = &open.spec;
         let entity = cx.entity();
         let mut body = div().flex().flex_col().gap(px(16.)).p(px(24.)).pb(px(12.));
-        body = body.child(div().font_family(DISPLAY).text_size(FS_XL).font_weight(FontWeight::BOLD).line_height(relative(1.3)).child(label(&spec.title, true)));
+        body = body.child(div().font_family(DISPLAY).text_size(FS_XL).font_weight(FontWeight::SEMIBOLD).line_height(relative(1.3)).child(label(&spec.title, true)));
         if let Some(e) = spec.explain {
             body = body.child(explainer(e, cx));
         }
@@ -429,11 +429,11 @@ impl Render for Dialog {
             .max_h(relative(0.9))
             .flex()
             .flex_col()
-            .bg(p.panel)
+            .bg(p.surface)
             .border_1()
-            .border_color(p.border_strong)
-            .rounded(R_LG)
-            .shadow(vec![BoxShadow { color: p.shadow, offset: point(px(0.), px(16.)), blur_radius: px(40.), spread_radius: px(0.), inset: false }])
+            .border_color(p.border)
+            .rounded(R_MD)
+            .shadow(crate::theme::overlay_shadow(&p))
             .child(div().id("dialog-body").flex_1().min_h_0().overflow_y_scroll().child(body))
             .child(buttons)
             .with_animation(("pop", open.serial), Animation::new(Duration::from_millis(180)).with_easing(gpui::ease_out_quint()), |el, d| el.opacity(d).mt(px(8. * (1. - d))));

@@ -1,7 +1,7 @@
 //! 每个操作的白话说明（文案在 i18n）和操作前后的示意图。菜单提示、确认对话框、「操作说明」页都从这里取。
 
 use crate::i18n::{t, Explain};
-use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, FS_XS, LH_BODY, MONO, PROSE, R_MD};
+use crate::theme::{alpha, palette, Palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use gpui::prelude::*;
 use gpui::{canvas, div, point, px, App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point};
 
@@ -191,7 +191,7 @@ fn panel(title: &str, graph: Graph, width: f32, height: f32, p: &Palette) -> imp
                 .items_center()
                 .justify_center()
                 .font_family(MONO)
-                .text_size(FS_XS)
+                .text_size(FS_SM)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(if n.ghost { p.muted } else { p.bg })
                 .child(n.id.clone()),
@@ -215,7 +215,7 @@ fn panel(title: &str, graph: Graph, width: f32, height: f32, p: &Palette) -> imp
                 .border_color(alpha(c, if l.here { 1. } else { 0.5 }))
                 .bg(alpha(c, if l.here { 1. } else { 0.14 }))
                 .font_family(MONO)
-                .text_size(FS_XS)
+                .text_size(FS_SM)
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(if l.here { p.bg } else { c })
                 .child(l.text.clone()),
@@ -312,7 +312,7 @@ pub fn explainer(e: &Explain, cx: &App) -> impl IntoElement {
                 .px(px(12.))
                 .py(px(8.))
                 .border_l_2()
-                .border_color(p.border_strong)
+                .border_color(p.border)
                 .text_color(p.muted)
                 .child(div().child(gpui::StyledText::new(format!("{}{}", t(cx).if_wrong, undo)).with_highlights(vec![(0..t(cx).if_wrong.len(), gpui::HighlightStyle { color: Some(p.text), font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })])))
         }))

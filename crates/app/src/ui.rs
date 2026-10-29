@@ -2,7 +2,7 @@
 //! 文案末尾的 git 命令、分隔线、可点掉的筛选条件。
 
 use crate::icons::{icon, Icon};
-use crate::theme::{alpha, palette, FS_SM, MONO, R_LG, R_MD};
+use crate::theme::{alpha, palette, CONTROL_SM, FS_SM, MONO, R_MD};
 use gpui::prelude::*;
 use gpui::{div, px, AnyElement, App, ClickEvent, ElementId, Hsla, Pixels, SharedString, Window};
 use gpui_component::tooltip::Tooltip;
@@ -135,11 +135,13 @@ impl RenderOnce for Btn {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = palette(cx).clone();
         let icon_only = self.text.is_none();
-        let h = self.height.unwrap_or(if self.small { px(24.) } else { px(28.) });
-        let (bg, fg, border) = match (self.primary, self.danger, self.quiet, self.on) {
+        let h = self.height.unwrap_or(if self.small { CONTROL_SM } else { px(28.) });
+        // 停用的主按钮按普通按钮画，强调色只留给能点的按钮；字重不变，启用时宽度不跳
+        let primary = self.primary && !self.disabled;
+        let (bg, fg, border) = match (primary, self.danger, self.quiet, self.on) {
             (true, true, ..) => (p.red, p.on_danger, p.red),
             (true, false, ..) => (p.accent, p.on_accent, p.accent),
-            (_, _, _, true) => (p.accent_soft, p.accent, p.accent),
+            (_, _, _, true) => (p.raised, p.text, p.muted),
             (_, _, true, _) => (alpha(p.bg, 0.), p.text, alpha(p.bg, 0.)),
             _ => (p.raised, p.text, p.border),
         };
@@ -162,7 +164,7 @@ impl RenderOnce for Btn {
             el = el.text_size(FS_SM);
         }
         if self.primary {
-            el = el.font_weight(gpui::FontWeight::SEMIBOLD);
+            el = el.font_weight(gpui::FontWeight::BOLD);
         }
         if let Some((name, size)) = self.icon {
             el = el.child(icon(name, size, fg));
@@ -176,14 +178,14 @@ impl RenderOnce for Btn {
         if self.disabled {
             return el.opacity(0.45);
         }
-        let (primary, danger, quiet, on) = (self.primary, self.danger, self.quiet, self.on);
+        let (danger, quiet, on) = (self.danger, self.quiet, self.on);
         el = el.cursor_pointer().hover(move |s| match (primary, danger, quiet, on) {
             // 主操作提亮一档；危险操作描红；无边框的只铺一层悬停色
             (true, ..) => s.opacity(0.92),
             (_, true, ..) => s.border_color(p.red).text_color(p.red),
             (_, _, _, true) => s,
             (_, _, true, _) => s.bg(p.hover),
-            _ => s.border_color(p.border_strong),
+            _ => s.border_color(p.border),
         });
         if let Some(f) = self.on_click {
             el = el.on_click(move |e, window, cx| {
@@ -208,7 +210,7 @@ pub fn chip(id: impl Into<ElementId>, text: impl Into<SharedString>, color: Hsla
         .px(px(8.))
         .border_1()
         .border_color(color)
-        .rounded(R_LG)
+        .rounded(R_MD)
         .text_size(FS_SM)
         .text_color(color)
         .cursor_pointer()

@@ -9,11 +9,11 @@ use crate::icons::{icon, Icon};
 use crate::layout::{self, layout, Key};
 use crate::menu::Item;
 use crate::repo_view::RepoView;
-use crate::theme::{palette, FS_LG, FS_MD, FS_SM, LH_BODY, MONO, PROSE, ROW};
+use crate::theme::{palette, FS_MD, FS_SM, LH_BODY, MONO, PROSE, ROW};
 use crate::ui::{btn, label};
 use engine::status::Entry;
 use gpui::prelude::*;
-use gpui::{canvas, div, px, relative, uniform_list, App, BoxShadow, Context, Entity, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Subscription, Task, UniformListScrollHandle, WeakEntity, Window};
+use gpui::{canvas, div, px, relative, uniform_list, App, Context, Entity, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent, SharedString, Subscription, Task, UniformListScrollHandle, WeakEntity, Window};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::{Input, InputEvent, InputState, TextareaState};
 use gpui_component::scroll::ScrollableElement;
@@ -358,7 +358,7 @@ impl WorkingCopy {
             'D' => p.diff_deleted,
             'U' => p.red,
             'R' | 'C' => p.accent,
-            _ => p.yellow,
+            _ => p.orange,
         };
         let selected = self.sel.as_ref().is_some_and(|(path, st)| *path == e.path && *st == staged);
         let disabled = self.disabled(cx);
@@ -381,7 +381,7 @@ impl WorkingCopy {
             .h(ROW)
             .pl(depth.map_or(px(12.), indent))
             .pr(px(8.))
-            .when(selected, |s| s.bg(p.accent_soft).shadow(vec![BoxShadow { color: p.accent, offset: gpui::point(px(2.), px(0.)), blur_radius: px(0.), spread_radius: px(0.), inset: true }]))
+            .when(selected, |s| s.bg(p.selection).shadow(crate::theme::select_bar(&p)))
             .when(!selected, |s| s.hover(|s| s.bg(p.hover)))
             .tooltip({
                 let tip: SharedString = path.clone().into();
@@ -403,7 +403,7 @@ impl WorkingCopy {
             }))
             .child(div().id("status").flex_none().w(px(16.)).flex().justify_center().font_family(MONO).font_weight(FontWeight::SEMIBOLD).text_size(FS_SM).text_color(color).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(status_tip).build(window, cx)).child(s.to_string()))
             .child(file_icon(&e.path, px(14.), cx))
-            .child(div().flex().flex_1().min_w_0().items_baseline().truncate().child(if base.is_empty() { e.path.clone() } else { base }).when(depth.is_none() && !dir.is_empty(), |s| s.child(div().ml(px(8.)).text_size(FS_SM).text_color(p.muted).child(dir))));
+            .child(div().flex().flex_1().min_w_0().items_baseline().truncate().font_family(MONO).child(if base.is_empty() { e.path.clone() } else { base }).when(depth.is_none() && !dir.is_empty(), |s| s.child(div().ml(px(8.)).text_size(FS_SM).text_color(p.muted).child(dir))));
         if !staged && !e.conflicted {
             row = row.child(reveal(btn(SharedString::from(format!("discard-{path}"))).small().quiet().danger().icon_size(Icon::Undo, px(14.)).disabled(disabled).tip(t.discard_file).on_click(cx.listener(move |this, _, window, cx| {
                 let _ = this.repo.update(cx, |r, cx| r.discard(vec![p3.clone()], window, cx));
@@ -452,7 +452,7 @@ impl WorkingCopy {
                     .self_stretch()
                     .cursor_pointer()
                     .text_color(p.text)
-                    .font_weight(FontWeight::SEMIBOLD)
+                    .font_weight(FontWeight::BOLD)
                     .tooltip({
                         let tip: SharedString = format!("{title} · {hint}").into();
                         move |window, cx| gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
@@ -604,9 +604,9 @@ impl Render for WorkingCopy {
         let staged_all: Vec<Entry> = entries.iter().filter(|e| e.staged.is_some()).cloned().collect();
         let l = layout(cx);
 
-        let mut left = div().id("working-left").relative().flex().flex_col().flex_none().w(px(l.changes)).max_w(relative(0.5)).min_h_0().bg(p.panel);
+        let mut left = div().id("working-left").relative().flex().flex_col().flex_none().w(px(l.changes)).max_w(relative(0.5)).min_h_0().bg(p.surface);
         if entries.is_empty() {
-            left = left.child(div().absolute().top(relative(0.22)).left_0().right_0().flex().justify_center().text_color(p.muted).font_family(PROSE).text_size(FS_LG).child(t.clean));
+            left = left.child(div().absolute().top_0().left_0().right_0().p(px(16.)).text_color(p.muted).font_family(PROSE).child(t.clean));
         }
         if !conflicts.is_empty() {
             let resolved = conflicts.iter().filter(|c| c.1).count();
@@ -617,7 +617,7 @@ impl Render for WorkingCopy {
                 .overflow_y_scroll()
                 .border_b_1()
                 .border_color(p.border)
-                .child(div().flex().items_center().min_h(px(36.)).pl(px(12.)).pr(px(8.)).text_size(FS_SM).child(div().font_weight(FontWeight::SEMIBOLD).child(t.conflict_files)).child(div().ml(px(8.)).text_color(p.muted).child((t.conflict_progress)(resolved, conflicts.len()))));
+                .child(div().flex().items_center().min_h(px(36.)).pl(px(12.)).pr(px(8.)).text_size(FS_SM).child(div().font_weight(FontWeight::BOLD).child(t.conflict_files)).child(div().ml(px(8.)).text_color(p.muted).child((t.conflict_progress)(resolved, conflicts.len()))));
             for (path, ok) in conflicts {
                 let selected = self.sel.as_ref().is_some_and(|(p0, _)| *p0 == path);
                 let base = path.rsplit('/').next().unwrap_or(&path).to_owned();
@@ -632,7 +632,7 @@ impl Render for WorkingCopy {
                         .h(ROW)
                         .pl(px(12.))
                         .pr(px(8.))
-                        .when(selected, |s| s.bg(p.accent_soft))
+                        .when(selected, |s| s.bg(p.selection))
                         .when(!selected, |s| s.hover(|s| s.bg(p.hover)))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.sel = Some((p1.clone(), ok));
@@ -668,7 +668,8 @@ impl Render for WorkingCopy {
         let amend = self.amend;
         let ident = identity.as_ref().and_then(|i| if amend { i.committer.clone() } else { i.author.clone() }).unwrap_or_else(|| t.identity_missing.into());
         let disabled = self.disabled(cx) || repo_busy;
-        let mut commit = div().id("commit-box").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().gap(px(8.)).p(px(12.));
+        // 左右边距和上面的筛选框一样，输入框、按钮的边对齐
+        let mut commit = div().id("commit-box").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().gap(px(8.)).px(px(8.)).py(px(12.));
         if !self.error.is_empty() {
             commit = commit.child(div().id("wc-error").flex_none().max_h(px(96.)).overflow_y_scroll().text_size(FS_SM).text_color(p.red).child(error_text(cx, &self.error)));
         }
@@ -679,7 +680,7 @@ impl Render for WorkingCopy {
                 .flex_wrap()
                 .items_center()
                 .gap(px(8.))
-                .child(div().flex_1().min_w_0().truncate().text_size(FS_SM).font_weight(FontWeight::MEDIUM).child(ident))
+                .child(div().flex_1().min_w_0().truncate().text_size(FS_SM).font_weight(FontWeight::NORMAL).child(ident))
                 .child(btn("edit-identity").small().text(t.edit_identity).disabled(disabled).tip(t.edit_identity).on_click(cx.listener(|this, _, window, cx| {
                     let _ = this.repo.update(cx, |r, cx| r.edit_identity(window, cx));
                 }))),
@@ -705,7 +706,7 @@ impl Render for WorkingCopy {
                     .text_size(FS_SM)
                     .text_color(p.muted)
                     .cursor_pointer()
-                    .hover(|s| s.border_color(p.border_strong))
+                    .hover(|s| s.border_color(p.border))
                     .child(div().flex_1().child(t.recent_messages))
                     .child(icon(Icon::Down, px(12.), p.muted))
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, e: &MouseDownEvent, window, cx| this.recent(e.position, window, cx))),
@@ -776,7 +777,7 @@ impl Render for WorkingCopy {
                     .gap(px(6.))
                     .cursor_pointer()
                     .text_size(FS_SM)
-                    .font_weight(FontWeight::SEMIBOLD)
+                    .font_weight(FontWeight::BOLD)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.folded[2] = !this.folded[2];
                         cx.notify();
