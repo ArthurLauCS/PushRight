@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 pub struct Conflict {
     /// 二进制文件没法逐块选，只能整个文件取一边
     pub binary: bool,
+    /// 子模块冲突：唯一的冲突块是两边各指向的提交，只能整个取一边
+    pub submodule: bool,
+    /// 这一边没有这个文件（删除或改名了），Git 不写冲突标记：唯一的冲突块是两边的全文，只能整个文件取一边
+    pub ours_deleted: bool,
+    pub theirs_deleted: bool,
     pub blocks: Vec<Block>,
 }
 
@@ -49,7 +54,7 @@ enum Raw<'a> {
     Conflict { ours: Vec<&'a [u8]>, theirs: Vec<&'a [u8]>, ours_label: &'a [u8], theirs_label: &'a [u8] },
 }
 
-fn split(bytes: &[u8]) -> Result<Vec<Raw<'_>>> {
+fn split<'a>(bytes: &'a [u8]) -> Result<Vec<Raw<'a>>> {
     #[derive(PartialEq)]
     enum In {
         Text,
@@ -59,22 +64,30 @@ fn split(bytes: &[u8]) -> Result<Vec<Raw<'_>>> {
     }
     let mut state = In::Text;
     let mut blocks = vec![Raw::Text(Vec::new())];
-    let (mut ours, mut theirs, mut ours_label) = (Vec::new(), Vec::new(), &b""[..]);
+    let (mut open, mut ours, mut theirs, mut ours_label) = (&b""[..], Vec::new(), Vec::new(), &b""[..]);
+    let text = |blocks: &mut Vec<Raw<'a>>, line: &'a [u8]| match blocks.last_mut() {
+        Some(Raw::Text(lines)) => lines.push(line),
+        _ => blocks.push(Raw::Text(vec![line])),
+    };
     for line in bytes.split_inclusive(|&b| b == b'\n') {
         let body = line.strip_suffix(b"\n").unwrap_or(line);
         let body = body.strip_suffix(b"\r").unwrap_or(body);
         let label = |marker: &[u8]| body.strip_prefix(marker).map(|l| l.strip_prefix(b" ").unwrap_or(l));
         match state {
             In::Text => match label(b"<<<<<<<") {
-                Some(l) => (state, ours_label) = (In::Ours, l),
-                None => match blocks.last_mut() {
-                    Some(Raw::Text(lines)) => lines.push(line),
-                    _ => blocks.push(Raw::Text(vec![line])),
-                },
+                Some(l) => (state, open, ours_label) = (In::Ours, line, l),
+                None => text(&mut blocks, line),
             },
             // diff3 风格多一段共同祖先，界面不展示
             In::Ours if label(b"|||||||").is_some() => state = In::Base,
             In::Ours | In::Base if body == b"=======" => state = In::Theirs,
+            // 我方还没结束又遇到开头：前一个开头是正文里本来就有的一行，连同收进来的内容还回正文
+            In::Ours if body.starts_with(b"<<<<<<<") => {
+                for l in std::iter::once(open).chain(ours.drain(..)) {
+                    text(&mut blocks, l);
+                }
+                (open, ours_label) = (line, label(b"<<<<<<<").unwrap_or_default());
+            }
             In::Ours => ours.push(line),
             In::Base => {}
             In::Theirs => match label(b">>>>>>>") {
@@ -86,16 +99,44 @@ fn split(bytes: &[u8]) -> Result<Vec<Raw<'_>>> {
             },
         }
     }
-    if state != In::Text {
-        return Err("PR_CONFLICT_MARKERS".into());
+    match state {
+        In::Text => {}
+        // 到文件末尾都没有分隔线：那个开头也是正文
+        In::Ours => std::iter::once(open).chain(ours).for_each(|l| text(&mut blocks, l)),
+        _ => return Err("PR_CONFLICT_MARKERS".into()),
     }
     Ok(blocks)
 }
 
+/// 冲突文件在索引里的各版本，每个是「模式 对象 阶段」：阶段 2 是我方、3 是对方，缺哪个就是那边删除或改名了。
+fn stages(repo: &Repo, path: &str) -> Result<Vec<String>> {
+    let out = repo.git(&["--literal-pathspecs", "ls-files", "-u", "-z", "--", path])?;
+    Ok(out.split(|&b| b == 0).filter_map(|r| r.split(|&b| b == b'\t').next()).filter(|h| !h.is_empty()).map(decode).collect())
+}
+
 pub fn read(repo: &Repo, path: &str) -> Result<Conflict> {
-    let bytes = std::fs::read(repo.path.join(path)).map_err(err)?;
-    if bytes.contains(&0) {
-        return Ok(Conflict { binary: true, ..Default::default() });
+    let stages = stages(repo, path)?;
+    let side = |n: &str| stages.iter().find(|s| s.ends_with(n));
+    let (ours, theirs) = (side(" 2"), side(" 3"));
+    // 索引里已经没有冲突（刚被别处解决）时按普通冲突读
+    let (ours_deleted, theirs_deleted) = (!stages.is_empty() && ours.is_none(), !stages.is_empty() && theirs.is_none());
+    let whole = |ours: String, theirs: String| vec![Block::Conflict { ours, theirs, ours_label: String::new(), theirs_label: String::new() }];
+    if stages.iter().any(|s| s.starts_with("160000")) {
+        let id = |s: Option<&String>| s.and_then(|s| s.split(' ').nth(1)).unwrap_or_default().to_owned();
+        return Ok(Conflict { submodule: true, ours_deleted, theirs_deleted, blocks: whole(id(ours), id(theirs)), ..Default::default() });
+    }
+    // 两边都删了（或留下的那一版被手动删了）时工作区里没有这个文件
+    let file = repo.path.join(path);
+    let bytes = if (ours_deleted || theirs_deleted) && !file.exists() { Vec::new() } else { std::fs::read(file).map_err(err)? };
+    // 跟 Git 一样只看前 8000 字节有没有 NUL
+    if bytes[..bytes.len().min(8000)].contains(&0) {
+        return Ok(Conflict { binary: true, ours_deleted, theirs_deleted, ..Default::default() });
+    }
+    // 工作区里是留下的那一边
+    if ours_deleted || theirs_deleted {
+        let kept = decode(&bytes);
+        let blocks = if ours_deleted { whole(String::new(), kept) } else { whole(kept, String::new()) };
+        return Ok(Conflict { ours_deleted, theirs_deleted, blocks, ..Default::default() });
     }
     let text = |lines: &[&[u8]]| decode(&lines.concat());
     let blocks = split(&bytes)?
@@ -114,7 +155,7 @@ pub fn read(repo: &Repo, path: &str) -> Result<Conflict> {
             }),
         })
         .collect();
-    Ok(Conflict { binary: false, blocks })
+    Ok(Conflict { blocks, ..Default::default() })
 }
 
 /// 按 `choices`（每个冲突块一个）写回文件并暂存，即标记为已解决。
@@ -142,10 +183,21 @@ pub fn resolve(repo: &Repo, path: &str, choices: &[Side]) -> Result<()> {
     repo.git(&["add", "--", path]).map(drop)
 }
 
-/// 整个文件取一边并暂存。二进制文件（.rbxl、贴图）只能这样解决。
+/// 整个文件取一边并暂存。二进制文件（.rbxl、贴图）、子模块、一边删除了的文件只能这样解决。
 pub fn take(repo: &Repo, path: &str, theirs: bool) -> Result<()> {
-    repo.git(&["checkout", if theirs { "--theirs" } else { "--ours" }, "--", path])?;
-    repo.git(&["add", "--", path]).map(drop)
+    match stages(repo, path)?.iter().find(|s| s.ends_with(if theirs { " 3" } else { " 2" })) {
+        // 选的那边没有这个文件：解决结果就是删除
+        None => repo.git(&["--literal-pathspecs", "rm", "-q", "--", path]).map(drop),
+        // 子模块只记下选中的提交，它的工作目录不动
+        Some(s) if s.starts_with("160000") => {
+            let id = s.split(' ').nth(1).unwrap_or_default();
+            repo.git(&["update-index", "--cacheinfo", &format!("160000,{id},{path}")]).map(drop)
+        }
+        Some(_) => {
+            repo.git(&["checkout", if theirs { "--theirs" } else { "--ours" }, "--", path])?;
+            repo.git(&["add", "--", path]).map(drop)
+        }
+    }
 }
 
 /// 进行中的合并 / 变基 / 摘取 / 撤销：Git 自己记下的提交信息、正在处理的提交和冲突清单。
@@ -213,4 +265,21 @@ pub fn operation(repo: &Repo) -> Result<Option<Operation>> {
     let number = |name: &str| read(name)?.trim().parse::<u32>().ok();
     let step = number("rebase-merge/msgnum").zip(number("rebase-merge/end")).or_else(|| number("rebase-apply/next").zip(number("rebase-apply/last")));
     Ok(Some(Operation { message: text.trim().to_owned(), id: id.lines().next().map(str::to_owned), conflicts, step }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn literal_marker_lines_stay_text() {
+        let blocks = split(b"<<<<<<< doc\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n<<<<<<< tail\n").unwrap();
+        assert_eq!(blocks.iter().filter(|b| matches!(b, Raw::Conflict { .. })).count(), 1);
+        // 选我方写回：正文里本来就有的两行原样保留
+        let out: Vec<u8> = blocks.iter().flat_map(|b| match b {
+            Raw::Text(lines) => lines.concat(),
+            Raw::Conflict { ours, .. } => ours.concat(),
+        }).collect();
+        assert_eq!(out, b"<<<<<<< doc\na\n<<<<<<< tail\n");
+    }
 }

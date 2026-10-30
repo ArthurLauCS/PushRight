@@ -149,14 +149,11 @@ impl WorkingCopy {
                 if request != this.request {
                     return;
                 }
-                match r {
-                    Ok(c) => this.conflict.update(cx, |v, cx| {
-                        v.rebasing = rebasing;
-                        v.external = external;
-                        v.set(Some(c), cx)
-                    }),
-                    Err(e) => this.error = e,
-                }
+                this.conflict.update(cx, |v, cx| {
+                    v.rebasing = rebasing;
+                    v.external = external;
+                    v.set(r, cx)
+                });
                 cx.notify();
             })
             .detach();
@@ -797,6 +794,7 @@ impl Render for WorkingCopy {
         div()
             .flex()
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .child(left)
             .child(layout::splitter("split-changes", Key::Changes, true, 260., 720., false, cx))

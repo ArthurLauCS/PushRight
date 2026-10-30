@@ -384,6 +384,35 @@ fn operation_reports_git_message_commit_and_original_conflicts() {
 }
 
 #[test]
+fn modify_delete_conflict_shows_the_kept_side_and_takes_either() {
+    use engine::conflict::{read, take, Block};
+    let dir = init("ops-modify-delete");
+    commit_file(&dir, 1, "kept.txt", "base\n");
+    commit_file(&dir, 1, "gone.txt", "base\n");
+    let repo = Repo::open(&dir).unwrap();
+    ok(&repo, Op::CreateBranch { name: "other".into(), start: "main".into(), checkout: true });
+    git(&dir, 0, &["rm", "-q", "kept.txt", "gone.txt"]);
+    git(&dir, 2, &["commit", "-q", "-m", "delete"]);
+    ok(&repo, Op::Checkout { target: "main".into() });
+    commit_file(&dir, 3, "kept.txt", "main\n");
+    commit_file(&dir, 3, "gone.txt", "main\n");
+    assert!(!ops::run(&repo, Op::Merge { target: "other".into() }).unwrap().ok);
+
+    // 对方删了、我方改了：Git 不写冲突标记，唯一的冲突块是我方全文对空
+    let c = read(&repo, "kept.txt").unwrap();
+    assert!(c.theirs_deleted && !c.ours_deleted && !c.binary);
+    assert!(matches!(&c.blocks[..], [Block::Conflict { ours, theirs, .. }] if ours == "main\n" && theirs.is_empty()));
+    // 取删掉的那边就是删除文件，取另一边就是保留
+    take(&repo, "gone.txt", true).unwrap();
+    take(&repo, "kept.txt", false).unwrap();
+    assert!(!dir.join("gone.txt").exists());
+    assert_eq!(std::fs::read_to_string(dir.join("kept.txt")).unwrap(), "main\n");
+    assert!(status::status(&repo).unwrap().iter().all(|e| !e.conflicted));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn fast_forward_moves_only_when_no_commit_is_lost() {
     let origin = init("ff-origin");
     commit_file(&origin, 1, "a.txt", "a\n");
