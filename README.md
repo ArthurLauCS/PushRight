@@ -15,7 +15,7 @@ A Git desktop client written in Rust, with a native GPU-rendered interface (gpui
 5. **One extension instead of several.** The VS Code / Cursor extension combines source control, end-of-line authorship, whole-file blame, CodeLens, file history, line history, previous / next revision, comparison with any revision, commit search and the commit graph.
 6. **Automatic refresh and fetch.** The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. It updates remote refs only: no automatic pull, merge or working-file changes. Each can be turned off.
 7. **Pull rebases by default.** Every Pull asks, with **Rebase instead of merge** checked.
-8. **Conflicts are resolved block by block.** Ours and theirs appear side by side for each conflict; in-progress operations can be continued or aborted at any time.
+8. **Conflicts are resolved block by block.** Ours and theirs appear side by side for each conflict; files deleted on one side, submodules and binary files are resolved by taking one side; in-progress operations can be continued or aborted at any time.
 9. **Worktrees and repository tools.** Worktree overview, arbitrary revision comparison, reviewed-file marks, remote URLs, interactive rebase and reflog recovery are available in the interface.
 10. **Works on large repositories.** Measured on a Linux repository with 1.48 million commits and a 128 MiB file; see the [performance report (Chinese)](docs/PERFORMANCE.md).
 11. **English and Simplified Chinese, light and dark themes**, with individual author styles.
@@ -24,6 +24,8 @@ A Git desktop client written in Rust, with a native GPU-rendered interface (gpui
 The extension updates automatically when installed from VS Code Marketplace. The desktop app has no automatic updates yet; download the installer for each new version.
 
 ## This release
+
+Version **1.6.1** fixes the conflict view. Files with long lines no longer push the conflict pane and its buttons past the window. Modify/delete, rename and submodule conflicts show both sides and can be resolved by taking one side, where choosing the deleted side deletes the file. Text files with a late NUL byte and lines that merely start with `<<<<<<<` are read correctly, and the “working tree is clean” hint no longer covers the file filter. See the [release notes](docs/RELEASE_1.6.1.md).
 
 Version **1.6.0** restyles the desktop app: a flatter look with a calmer palette, one font per role (Segoe UI Variable Text for the interface, Noto Serif SC for titles, LXGW WenKai for prose, Cascadia Code for code), repository tabs with a bottom rule and a new-tab button, and a dark title bar that follows the theme. The extension's commit graph uses the same palette. See the [release notes](docs/RELEASE_1.6.0.md).
 
@@ -47,24 +49,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.6.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.6.1 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 ![PushRight 1.6.0: commit graph, branches and file differences](docs/images/desktop-1.6.0.png)
 
 The first screenshot shows the 1.6.0 desktop app on PushRight's own repository; the other screenshot, from 1.2.0, uses a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/PushRight-Setup-1.6.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.6.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.6.1.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.0.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.1.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 

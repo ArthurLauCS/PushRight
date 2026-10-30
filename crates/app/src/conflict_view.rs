@@ -1,6 +1,6 @@
 //! 逐处解决冲突：每个冲突块选我方、对方、两边都要，或者手动写结果；全部选好后保存并标记已解决。
 
-use crate::i18n::t;
+use crate::i18n::{error_text, t};
 use crate::icons::Icon;
 use crate::theme::{alpha, palette, FS_MD, FS_SM, MONO, PROSE};
 use crate::ui::{btn, label};
@@ -27,6 +27,8 @@ enum Choice {
 
 pub struct ConflictView {
     conflict: Option<Conflict>,
+    /// 读不出冲突内容的原因：显示它，不留着上一个文件的内容
+    error: String,
     pub rebasing: bool,
     /// 配了外部合并工具时才有那个按钮
     pub external: bool,
@@ -41,11 +43,16 @@ impl EventEmitter<ConflictEvent> for ConflictView {}
 
 impl ConflictView {
     pub fn new() -> ConflictView {
-        ConflictView { conflict: None, rebasing: false, external: false, choices: Vec::new(), scroll: ScrollHandle::new(), sections: Vec::new(), _subs: Vec::new() }
+        ConflictView { conflict: None, error: String::new(), rebasing: false, external: false, choices: Vec::new(), scroll: ScrollHandle::new(), sections: Vec::new(), _subs: Vec::new() }
     }
 
-    pub fn set(&mut self, conflict: Option<Conflict>, cx: &mut Context<Self>) {
-        let n = conflict.as_ref().map_or(0, |c| c.blocks.iter().filter(|b| matches!(b, Block::Conflict { .. })).count());
+    pub fn set(&mut self, conflict: engine::Result<Conflict>, cx: &mut Context<Self>) {
+        let (conflict, error) = match conflict {
+            Ok(c) => (Some(c), String::new()),
+            Err(e) => (None, e),
+        };
+        self.error = error;
+        let n =conflict.as_ref().map_or(0, |c| c.blocks.iter().filter(|b| matches!(b, Block::Conflict { .. })).count());
         self.choices = (0..n).map(|_| None).collect();
         self.sections = conflict.as_ref().map_or(Vec::new(), |c| c.blocks.iter().enumerate().filter(|(_, b)| matches!(b, Block::Conflict { .. })).map(|(i, _)| i).collect());
         self.conflict = conflict;
@@ -110,12 +117,28 @@ impl Render for ConflictView {
         let p = palette(cx).clone();
         let t = t(cx);
         let Some(conflict) = &self.conflict else {
-            return div().flex_1().p(px(16.)).text_color(p.muted).bg(p.bg).child(t.pick_file).into_any_element();
+            let (color, text) = if self.error.is_empty() { (p.muted, t.pick_file.to_owned()) } else { (p.red, error_text(cx, &self.error)) };
+            return div().flex_1().p(px(16.)).text_color(color).bg(p.bg).child(text).into_any_element();
         };
         let total = self.choices.len();
         let chosen = self.choices.iter().filter(|c| c.is_some()).count();
-        let done = total > 0 && chosen == total;
-        let hint = format!("{}{}", if conflict.binary { t.conflict_binary.to_owned() } else { (t.conflict_hint)(total) }, if self.rebasing { format!(" {}", t.rebase_conflict_hint) } else { String::new() });
+        // 冲突标记已被别处改掉时没有冲突块，也能直接标记为已解决
+        let done = chosen == total;
+        let (ours_deleted, theirs_deleted) = (conflict.ours_deleted, conflict.theirs_deleted);
+        // 二进制、子模块、一边删掉了文件：只能整个文件取一边
+        let whole = conflict.binary || conflict.submodule || ours_deleted || theirs_deleted;
+        let what = if conflict.binary {
+            t.conflict_binary.to_owned()
+        } else if conflict.submodule {
+            t.conflict_submodule.to_owned()
+        } else if whole {
+            (t.conflict_deleted)(ours_deleted, theirs_deleted).to_owned()
+        } else if total == 0 {
+            t.conflict_no_markers.to_owned()
+        } else {
+            (t.conflict_hint)(total)
+        };
+        let hint = format!("{what}{}", if self.rebasing { format!(" {}", t.rebase_conflict_hint) } else { String::new() });
         // 说明独占一行，按钮在下面一行并可换行：按钮再长也不会把说明挤成一列
         let mut header = div()
             .flex()
@@ -131,7 +154,7 @@ impl Render for ConflictView {
             .border_color(p.border)
             .bg(p.surface)
             .child(div().w_full().text_color(p.orange).font_family(PROSE).text_size(FS_MD).child(hint));
-        if !conflict.binary {
+        if !whole && total > 0 {
             header = header
                 .child(div().text_size(FS_SM).text_color(p.muted).whitespace_nowrap().child((t.conflict_chosen)(chosen, total)))
                 .child(btn("conflict-prev").small().quiet().icon_size(Icon::Up, px(14.)).tip(t.conflict_previous).on_click(cx.listener(|this, _, _, cx| this.jump(false, cx))))
@@ -141,13 +164,14 @@ impl Render for ConflictView {
             header = header.child(btn("external-merge").small().text(t.external_tools.merge).on_click(cx.listener(|_, _, _, cx| cx.emit(ConflictEvent::External))));
         }
         header = header
-            .child(btn("take-ours").small().text(t.take_ours).on_click(cx.listener(|_, _, _, cx| cx.emit(ConflictEvent::Take(false)))))
-            .child(btn("take-theirs").small().text(t.take_theirs).on_click(cx.listener(|_, _, _, cx| cx.emit(ConflictEvent::Take(true)))));
-        if !conflict.binary {
+            .child(btn("take-ours").small().text(if ours_deleted { t.take_ours_deleted } else { t.take_ours }).on_click(cx.listener(|_, _, _, cx| cx.emit(ConflictEvent::Take(false)))))
+            .child(btn("take-theirs").small().text(if theirs_deleted { t.take_theirs_deleted } else { t.take_theirs }).on_click(cx.listener(|_, _, _, cx| cx.emit(ConflictEvent::Take(true)))));
+        if !whole {
             header = header.child(btn("resolve").small().primary().text(t.resolve).disabled(!done).on_click(cx.listener(|this, _, _, cx| this.resolve(cx))));
         }
 
-        let pre = |text: &str| div().px(px(16.)).py(px(4.)).font_family(MONO).text_size(FS_SM).line_height(px(20.)).whitespace_nowrap().child(text.to_owned());
+        // 长行折行显示：这里没有横向滚动，不折行就看不到行尾的改动
+        let pre = |text: &str| div().px(px(16.)).py(px(4.)).font_family(MONO).text_size(FS_SM).line_height(px(20.)).child(text.to_owned());
         let mut body = div().id("conflict-body").track_scroll(&self.scroll).flex_1().min_h_0().overflow_y_scroll();
         let mut index = 0;
         for block in &conflict.blocks {
@@ -178,15 +202,14 @@ impl Render for ConflictView {
                         .border_t_1()
                         .border_b_1()
                         .border_color(p.border)
-                        .child(side(p.blue, dropped_ours).child(bar(t.ours, ours_label).child(pick("use-ours", t.use_this, matches!(choice, Some(Choice::Ours)), "ours", cx))).child(pre(&shown(ours)).when(dropped_ours, |s| s.line_through())))
+                        .child(side(p.blue, dropped_ours).child(bar(t.ours, ours_label).when(!whole, |b| b.child(pick("use-ours", t.use_this, matches!(choice, Some(Choice::Ours)), "ours", cx)))).child(pre(&shown(ours)).when(dropped_ours, |s| s.line_through())))
                         .child(
                             side(p.green, dropped_theirs)
-                                .child(
-                                    bar(t.theirs, theirs_label)
-                                        .child(pick("use-theirs", t.use_this, matches!(choice, Some(Choice::Theirs)), "theirs", cx))
+                                .child(bar(t.theirs, theirs_label).when(!whole, |b| {
+                                    b.child(pick("use-theirs", t.use_this, matches!(choice, Some(Choice::Theirs)), "theirs", cx))
                                         .child(pick("use-both", t.use_both, matches!(choice, Some(Choice::Both)), "both", cx))
-                                        .child(btn(("edit", i)).small().text(t.edit_result).on(custom).tip(t.edit_result_hint).on_click(cx.listener(move |this, _, window, cx| this.choose(i, "custom", window, cx)))),
-                                )
+                                        .child(btn(("edit", i)).small().text(t.edit_result).on(custom).tip(t.edit_result_hint).on_click(cx.listener(move |this, _, window, cx| this.choose(i, "custom", window, cx))))
+                                }))
                                 .child(pre(&shown(theirs)).when(dropped_theirs, |s| s.line_through())),
                         );
                     if let Some(Choice::Custom(state)) = choice {
