@@ -13,7 +13,7 @@
 5. **一个扩展顶多个**。VS Code / Cursor 扩展集成了源代码管理、行末作者信息、整文件 Blame、CodeLens、文件历史、行历史、上一版／下一版对比、与任意版本对比、提交搜索和提交图，不必分别安装多个扩展再逐个配置。
 6. **自动刷新与获取**。桌面版每分钟刷新已打开的仓库，打开时及之后每十分钟自动 fetch，后台页签同样生效；只更新远程引用，不自动 pull、合并或改动工作区文件。两项可分别关闭。
 7. **拉取默认变基**。每次 Pull 都询问并默认勾选「变基而非合并」，减少无意义的合并提交。
-8. **冲突逐处解决**。冲突文件按冲突块并排显示我方和对方，逐处选择保留哪边；进行中的操作随时可以继续或中止。
+8. **冲突逐处解决**。冲突文件按冲突块并排显示我方和对方，逐处选择保留哪边；一边删除的文件、子模块和二进制文件整个取一边；进行中的操作随时可以继续或中止。
 9. **工作树和仓库工具**。工作树总览、任意版本比较、文件审阅标记、远程地址管理、交互式变基和 Reflog 恢复都在界面里完成。
 10. **大仓库可用**。在 148 万提交的 Linux 仓库和 128 MiB 文件上实测，数据见[性能记录](docs/PERFORMANCE.md)。
 11. **中英双语、深浅主题**，可为每个作者单独设置显示样式。
@@ -22,6 +22,8 @@
 扩展通过 VS Code Marketplace 安装时由编辑器自动更新；桌面版暂无自动更新，新版本需重新下载安装包。
 
 ## 本版更新
+
+**1.6.1** 修复冲突视图。有长行的文件不再把冲突面板和按钮撑出窗口。一边删除一边修改、改名和子模块引起的冲突会显示两边，可以整个取一边解决，选删掉的那边就删除文件。NUL 字节靠后的文本文件、以 `<<<<<<<` 开头的普通行都能正确读取；「工作区是干净的」提示不再压住筛选框。详见[发行说明](docs/RELEASE_1.6.1.md)。
 
 **1.6.0** 重新设计了桌面版的外观：更扁平、配色更克制，每种用途一种字体（界面 Segoe UI Variable Text，标题 Noto Serif SC，正文 LXGW WenKai，代码 Cascadia Code），仓库页签带底线和新建页签按钮，标题栏随主题变为深色。扩展里的提交图用了同一套配色。详见[发行说明](docs/RELEASE_1.6.0.md)。
 
@@ -45,23 +47,23 @@ VS Code／Cursor 中的 **PushRight: 打开提交图** 和 **在提交图中定�
 
 桌面应用每分钟刷新所有已打开的仓库，打开仓库时及之后每十分钟自动 fetch，后台页签也生效。两项默认开启，可在语言选择框旁的“自动刷新与获取”中分别关闭。仓库忙碌时延后执行，失败写入命令日志并按周期重试；后台 fetch 保留 `FETCH_HEAD`、暂存区和工作区文件。强制推送增加 `--force-if-includes` 检查，防止覆盖后台刚获取但未在本地整合的远端提交。应用退出后不执行定时任务，扩展版不启用这些定时器。
 
-当前版本为 **v1.6.0 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
+当前版本为 **v1.6.1 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
 
 ![PushRight 1.6.0：提交图、分支与文件差异](docs/images/desktop-1.6.0.png)
 
 第一张截图来自 1.6.0 桌面程序，打开的是 PushRight 自己的仓库；另一张来自 1.2.0，使用虚构作者和本地示例仓库。
 
-本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.0.tar.gz)。
+本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.tar.gz)。
 
 ## 下载与安装
 
-**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/PushRight-Setup-1.6.0.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.0/SHA256SUMS.txt)
+**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
 
-从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.0) 下载 `PushRight-Setup-1.6.0.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
+从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) 下载 `PushRight-Setup-1.6.1.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
 
 - 支持 Windows 10 / 11 x64；本次发布在 Windows x64 上构建和验证。
 - 需要安装 [Git for Windows](https://git-scm.com/downloads/win)，并确保 `git` 在 PATH 中可用。
-- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.6.0.exe -Algorithm SHA256` 核对文件。
+- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.6.1.exe -Algorithm SHA256` 核对文件。
 
 安装器支持英文和简体中文，应用语言独立选择。从 1.1.x 升级时会自动卸载旧版。偏好保存在 `%APPDATA%\PushRight\settings.json`；1.1.x 的语言、主题、时区、差异配色、作者样式和最近仓库不会迁移，需要重新设置一次。
 
