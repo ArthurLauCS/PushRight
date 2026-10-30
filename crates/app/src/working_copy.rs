@@ -502,7 +502,15 @@ impl WorkingCopy {
         )
         .track_scroll(&self.scrolls[index])
         .size_full();
-        let list = div().relative().flex_1().min_h_0().child(list).vertical_scrollbar(&self.scrolls[index]);
+        // 整个工作区都干净时在未暂存的列表里说明
+        let clean = !staged && self.repo.upgrade().is_some_and(|r| r.read(cx).entries.is_empty());
+        let list = div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .child(list)
+            .vertical_scrollbar(&self.scrolls[index])
+            .when(clean, |s| s.child(div().absolute().top_0().left_0().right_0().p(px(16.)).text_color(p.muted).font_family(PROSE).child(t.clean)));
         self.section(index, title_row, list.into_any_element(), cx)
     }
 
@@ -605,9 +613,6 @@ impl Render for WorkingCopy {
         let l = layout(cx);
 
         let mut left = div().id("working-left").relative().flex().flex_col().flex_none().w(px(l.changes)).max_w(relative(0.5)).min_h_0().bg(p.surface);
-        if entries.is_empty() {
-            left = left.child(div().absolute().top_0().left_0().right_0().p(px(16.)).text_color(p.muted).font_family(PROSE).child(t.clean));
-        }
         if !conflicts.is_empty() {
             let resolved = conflicts.iter().filter(|c| c.1).count();
             let mut box_ = div()
