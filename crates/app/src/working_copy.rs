@@ -1,4 +1,5 @@
 //! 本地更改：左边未暂存、分组、已暂存、新提交四栏（可折叠、可拖动分隔线，没有组时分组栏不显示），右边是选中文件的 diff 或冲突。
+//! 文件行前的勾选标已审阅；审阅后又改过的文件，diff 默认只显示审阅后的改动。
 
 use crate::conflict_view::{ConflictEvent, ConflictView};
 use crate::dialog::{Field, Spec};
@@ -57,6 +58,8 @@ pub struct WorkingCopy {
     session: Arc<Session>,
     repo: WeakEntity<RepoView>,
     sel: Option<(String, bool)>,
+    /// 切到「全部改动」的文件：审阅后又改过的文件默认只看审阅后的改动，换个文件看就回到默认
+    all: Option<String>,
     diff: Entity<DiffView>,
     conflict: Entity<ConflictView>,
     conflicted: bool,
@@ -119,6 +122,7 @@ impl WorkingCopy {
             session,
             repo,
             sel: None,
+            all: None,
             diff,
             conflict,
             conflicted: false,
@@ -157,6 +161,11 @@ impl WorkingCopy {
 
     fn groups(&self, cx: &App) -> Vec<Group> {
         self.repo.upgrade().map(|r| r.read(cx).groups.clone()).unwrap_or_default()
+    }
+
+    /// 文件的审阅状态：None 没标过，Some(审阅后有没有再改过)
+    fn review(&self, path: &str, cx: &App) -> Option<bool> {
+        self.repo.upgrade().and_then(|r| r.read(cx).reviews.get(path).copied())
     }
 
     /// 三个文件列表（未筛选）：未分组的未暂存文件、各组和组里的文件、已暂存文件
@@ -238,13 +247,43 @@ impl WorkingCopy {
         };
         // 组里的文件不能按块暂存：暂存了就会离开组
         let grouped = self.groups(cx).iter().any(|g| g.paths.contains(&path));
+        // 审阅后又改过的文件默认只看审阅后的改动；快照没了就看全部改动
+        let changed = self.review(&path, cx) == Some(true);
+        let since = changed && self.all.as_deref() != Some(path.as_str());
         let p = path.clone();
-        git::bg(cx, move || engine::diff::worktree_with(&session.repo, &p, staged, untracked, opts), move |this, r, cx| {
+        let job = move || {
+            if since {
+                if let Some(d) = engine::review::diff(&session.repo, &p, opts)? {
+                    return Ok((d, true));
+                }
+            }
+            engine::diff::worktree_with(&session.repo, &p, staged, untracked, opts).map(|d| (d, false))
+        };
+        let me = cx.entity().downgrade();
+        git::bg(cx, job, move |this, r, cx| {
             if request != this.request {
                 return;
             }
             match r {
-                Ok(d) => this.diff.update(cx, |v, cx| v.set(Some(d), &path, if staged { Mode::Staged } else { Mode::Unstaged }, Some(pager), (!grouped).then_some(apply), (!staged).then_some(discard), cx)),
+                Ok((d, shown_since)) => {
+                    let p = path.clone();
+                    let toggle: Rc<dyn Fn(bool, &mut App)> = Rc::new(move |on, cx| {
+                        let _ = me.update(cx, |this, cx| {
+                            this.all = (!on).then(|| p.clone());
+                            this.load(cx);
+                        });
+                    });
+                    this.diff.update(cx, |v, cx| {
+                        // 要了审阅后的改动却没取到（快照被回收）就不给切换
+                        v.since = (changed && (shown_since || !since)).then_some((shown_since, toggle));
+                        if shown_since {
+                            // 快照 → 现在的内容对不上暂存区，不能按块暂存或丢弃
+                            v.set(Some(d), &path, Mode::Readonly, None, None, None, cx)
+                        } else {
+                            v.set(Some(d), &path, if staged { Mode::Staged } else { Mode::Unstaged }, Some(pager), (!grouped).then_some(apply), (!staged).then_some(discard), cx)
+                        }
+                    })
+                }
                 Err(e) => this.error = e,
             }
             cx.notify();
@@ -294,6 +333,12 @@ impl WorkingCopy {
 
     fn stage(&mut self, paths: Vec<String>, staged: bool, cx: &mut Context<Self>) {
         self.run(move |s| if staged { engine::status::unstage(&s.repo, &paths) } else { engine::status::stage(&s.repo, &paths) }, cx).detach();
+    }
+
+    /// 点已审阅标记：没标过或审阅后又改过就给现在的内容记快照，已审阅就取消
+    fn toggle_review(&mut self, path: String, cx: &mut Context<Self>) {
+        let reviewed = self.review(&path, cx) != Some(false);
+        self.run(move |s| engine::review::set(&s.repo, &path, reviewed), cx).detach();
     }
 
     fn can_commit(&self, cx: &App) -> bool {
@@ -559,8 +604,29 @@ impl WorkingCopy {
         // 行内操作按钮只在悬停或选中时出现
         let reveal = move |b: crate::ui::Btn, group: SharedString| div().when(!selected, |s| s.invisible().group_hover(group, |s| s.visible())).child(b);
         let entry = e.clone();
-        let (p1, p2, p3, p4) = (path.clone(), path.clone(), path.clone(), path.clone());
+        let (p1, p2, p3, p4, p5) = (path.clone(), path.clone(), path.clone(), path.clone(), path.clone());
         let status_tip = lookup(t.status, &s.to_string()).unwrap_or_default();
+        // 已审阅标记：勾选框，审阅后又改过换成橙色方块；点它不选中这一行，连点两下也不会暂存
+        let review = self.review(&e.path, cx);
+        let review_tip = match review {
+            None => t.review.mark,
+            Some(false) => t.review.unmark,
+            Some(true) => t.review.changed,
+        };
+        let mark = div()
+            .id("review")
+            .flex_none()
+            .flex()
+            .items_center()
+            .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(review_tip).build(window, cx))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.toggle_review(p5.clone(), cx);
+            }))
+            .child(match review {
+                Some(true) => div().size(px(12.)).rounded(px(3.)).border_1().border_color(p.orange).flex().items_center().justify_center().child(div().size(px(4.)).rounded_full().bg(p.orange)).into_any_element(),
+                _ => Checkbox::new("review-box").checked(review.is_some()).into_any_element(),
+            });
         let mut row = div()
             .id(group.clone())
             .group(group.clone())
@@ -593,6 +659,7 @@ impl WorkingCopy {
                 let _ = this.repo.update(cx, |r, cx| r.work_file_menu(at, &entry, staged, move_to, window, cx));
             }))
             .when(!e.conflicted, |s| s.on_drag(DraggedFiles { paths: vec![path.clone()], label: base.clone().into() }, |d, _, _, cx| cx.new(|_| d.clone())))
+            .child(mark)
             .child(div().id("status").flex_none().w(px(16.)).flex().justify_center().font_family(MONO).font_weight(FontWeight::SEMIBOLD).text_size(FS_SM).text_color(color).tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(status_tip).build(window, cx)).child(s.to_string()))
             .child(file_icon(&e.path, px(14.), cx))
             .child(div().flex().flex_1().min_w_0().items_baseline().truncate().font_family(MONO).child(if base.is_empty() { e.path.clone() } else { base }).when(depth.is_none() && !dir.is_empty(), |s| s.child(div().ml(px(8.)).text_size(FS_SM).text_color(p.muted).child(dir))));
@@ -657,6 +724,8 @@ impl WorkingCopy {
                     .child(div().min_w_0().flex().child(div().flex_none().child(label(title, false))).child(div().flex_none().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(count)).child(div().min_w_0().truncate().ml(px(8.)).font_weight(FontWeight::NORMAL).text_color(p.muted).child(hint.to_owned()))),
             );
         if index == UNSTAGED {
+            let hide = diff_view::prefs(cx).hide_reviewed;
+            title_row = title_row.child(btn("hide-reviewed").small().quiet().icon_size(Icon::Filter, px(14.)).on(hide).tip(t.review.hide).on_click(|_, _, cx| diff_view::set_pref(cx, |p| p.hide_reviewed = !p.hide_reviewed)));
             title_row = title_row.child(btn("discard-all").small().quiet().danger().text(t.discard_all).no_cmd().disabled(disabled || total == 0).tip(t.discard_all).on_click(cx.listener(|this, _, window, cx| {
                 let _ = this.repo.update(cx, |r, cx| r.discard(Vec::new(), window, cx));
             })));
@@ -848,7 +917,7 @@ impl Render for WorkingCopy {
         self.prefill(prefill, window, cx);
         let query = self.filter.read(cx).value().trim().to_lowercase();
         let shown = |list: Vec<Entry>| -> Vec<Entry> { list.into_iter().filter(|e| query.is_empty() || e.path.to_lowercase().contains(&query)).collect() };
-        let count = |shown: usize, total: usize| if query.is_empty() { total.to_string() } else { (t.file_list.shown)(shown, total) };
+        let count = |shown: usize, total: usize| if shown == total { total.to_string() } else { (t.file_list.shown)(shown, total) };
         let (unstaged_all, groups, staged_all) = self.lists(cx);
         let l = layout(cx);
 
@@ -911,7 +980,9 @@ impl Render for WorkingCopy {
         left = left.child(file_list_bar(&self.filter, fold, cx));
         let paths = |list: &[Entry]| list.iter().map(|e| e.path.clone()).collect::<Vec<_>>();
         let (all0, all2) = (paths(&unstaged_all), paths(&staged_all));
-        let (shown0, shown2) = (shown(unstaged_all), shown(staged_all));
+        let hide = diff_view::prefs(cx).hide_reviewed;
+        let shown0: Vec<Entry> = shown(unstaged_all).into_iter().filter(|e| !hide || self.review(&e.path, cx) != Some(false)).collect();
+        let shown2 = shown(staged_all);
         let (count0, count2) = (count(shown0.len(), all0.len()), count(shown2.len(), all2.len()));
         let rows0 = if self.folded[UNSTAGED] { Vec::new() } else { self.rows(shown0, &self.closed[UNSTAGED], cx).into_iter().map(Row::Tree).collect() };
         let rows2 = if self.folded[STAGED] { Vec::new() } else { self.rows(shown2, &self.closed[STAGED], cx).into_iter().map(Row::Tree).collect() };

@@ -237,6 +237,18 @@ pub struct Groups {
     pub ungroup: &'static str,
 }
 
+/// 本地更改页的已审阅标记：只看审阅后的新改动
+pub struct Review {
+    pub mark: &'static str,
+    pub unmark: &'static str,
+    pub changed: &'static str,
+    pub since: &'static str,
+    pub since_tip: &'static str,
+    pub all: &'static str,
+    pub all_tip: &'static str,
+    pub hide: &'static str,
+}
+
 /// 拉取请求 / 合并请求页
 pub struct Requests {
     pub nav: &'static str,
@@ -538,6 +550,7 @@ pub struct Messages {
     pub diff_tools: DiffTools,
     pub file_list: FileList,
     pub groups: Groups,
+    pub review: Review,
     pub back: &'static str,
     pub before: &'static str,
     pub after: &'static str,

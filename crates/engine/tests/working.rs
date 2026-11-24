@@ -2,7 +2,7 @@ mod common;
 
 use common::{git, init};
 use engine::groups::{self, Group};
-use engine::{diff, refs, status, Repo};
+use engine::{diff, refs, review, status, Repo};
 
 fn lines(from: u32, to: u32) -> String {
     (from..=to).map(|i| format!("l{i}\n")).collect()
@@ -248,6 +248,61 @@ fn change_groups_commit_only_their_files() {
     assert!(groups::commit(&repo, &pruned[0]).is_err());
     assert_eq!(brief(&repo), [("a.txt".into(), None, Some('M')), ("b.txt".into(), Some('M'), None), ("c.txt".into(), None, Some('?'))]);
     assert_eq!(load(), pruned);
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn review_snapshots_show_only_changes_since_review() {
+    let dir = init("review");
+    std::fs::write(dir.join("a.txt"), "1\n2\n3\n").unwrap();
+    std::fs::write(dir.join("gone.txt"), "g\n").unwrap();
+    git(&dir, 0, &["add", "."]);
+    git(&dir, 1, &["commit", "-q", "-m", "base"]);
+    let repo = Repo::open(&dir).unwrap();
+    let load = || review::load(&repo, &status::status(&repo).unwrap());
+    let marks = |list: &[(&str, bool)]| list.iter().map(|(p, c)| (p.to_string(), *c)).collect::<std::collections::HashMap<_, _>>();
+    let changes = |d: diff::Diff| d.hunks.iter().flat_map(|h| &h.lines).filter(|l| l.kind != ' ').map(|l| format!("{}{}", l.kind, l.text)).collect::<Vec<_>>();
+    let opts = diff::Options::default();
+
+    // 审阅后再改：只看审阅后的改动，全部改动里还有审阅前的那行
+    std::fs::write(dir.join("a.txt"), "1\n2x\n3\n").unwrap();
+    review::set(&repo, "a.txt", true).unwrap();
+    assert_eq!(load(), marks(&[("a.txt", false)]));
+    std::fs::write(dir.join("a.txt"), "1\n2x\n3y\n").unwrap();
+    assert_eq!(load(), marks(&[("a.txt", true)]));
+    assert_eq!(changes(review::diff(&repo, "a.txt", opts).unwrap().unwrap()), ["-3", "+3y"]);
+    assert_eq!(changes(diff::worktree(&repo, "a.txt", false, false).unwrap()), ["-2", "-3", "+2x", "+3y"]);
+
+    // 改回审阅时的内容就又是已审阅；再标一次换成新快照
+    std::fs::write(dir.join("a.txt"), "1\n2x\n3\n").unwrap();
+    assert_eq!(load(), marks(&[("a.txt", false)]));
+    std::fs::write(dir.join("a.txt"), "1\n2x\n3z\n").unwrap();
+    review::set(&repo, "a.txt", true).unwrap();
+    assert_eq!(load(), marks(&[("a.txt", false)]));
+
+    // 审阅时文件已删除：又出现时整个文件都是审阅后的新增
+    std::fs::remove_file(dir.join("gone.txt")).unwrap();
+    review::set(&repo, "gone.txt", true).unwrap();
+    assert_eq!(load(), marks(&[("a.txt", false), ("gone.txt", false)]));
+    std::fs::write(dir.join("gone.txt"), "back\n").unwrap();
+    assert_eq!(load(), marks(&[("a.txt", false), ("gone.txt", true)]));
+    assert_eq!(changes(review::diff(&repo, "gone.txt", opts).unwrap().unwrap()), ["+back"]);
+
+    // 取消审阅；不再有改动的文件（恢复成提交里的内容）刷新时去掉记录
+    review::set(&repo, "a.txt", false).unwrap();
+    git(&dir, 2, &["checkout", "--", "gone.txt"]);
+    assert!(load().is_empty());
+    assert!(review::diff(&repo, "a.txt", opts).unwrap().is_none());
+
+    // 快照对象被 Git 回收了：没有审阅后的改动可看，标记仍显示有新改动
+    review::set(&repo, "a.txt", true).unwrap();
+    std::fs::write(dir.join("a.txt"), "changed\n").unwrap();
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join(".git/pushright/review.json")).unwrap()).unwrap();
+    let blob = saved["a.txt"]["blob"].as_str().unwrap();
+    std::fs::remove_file(dir.join(".git/objects").join(&blob[..2]).join(&blob[2..])).unwrap();
+    assert!(review::diff(&repo, "a.txt", opts).unwrap().is_none());
+    assert_eq!(load(), marks(&[("a.txt", true)]));
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
