@@ -44,9 +44,12 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
     if cmd == "open_repo" {
         let path: String = arg(a, "path")?;
         let repo = Arc::new(Repo::open(path.as_ref())?);
-        let graph = Arc::new(Graph::load(&repo, FIRST_PAGE)?);
+        // 提交图由 load_graph 按范围加载，打开时不预先读
+        let graph = Arc::new(Graph::load(&repo, 0)?);
         let tab = tabs.next.fetch_add(1, Ordering::Relaxed);
-        let reply = out((tab, repo.path.display().to_string(), graph.len()));
+        // 工作树和子模块的 Git 目录不在工作区里，扩展要另外监听
+        let (git_dir, common_dir) = repo.git_dirs();
+        let reply = out((tab, repo.path.display().to_string(), git_dir, common_dir));
         tabs.sessions.write().unwrap().insert(tab, Session { repo, graph });
         return reply;
     }

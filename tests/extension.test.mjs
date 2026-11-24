@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { startEngine } from '../extension/src/engine.ts'
 import { isUncommitted, runBlame } from '../extension/src/git-blame.ts'
@@ -166,9 +166,11 @@ test('sidecar answers the same commands as the desktop backend, plus history', {
   const dir = fixture()
   const engine = startEngine(exe)
   try {
-    const [tab, path, count] = await engine.call('open_repo', { path: dir })
-    assert.equal(count, 3)
+    const [tab, path, gitDir, commonDir] = await engine.call('open_repo', { path: dir })
     assert.ok(existsSync(join(path, 'b.txt')))
+    assert.equal(resolve(gitDir), resolve(path, '.git'))
+    assert.equal(resolve(commonDir), resolve(path, '.git'))
+    assert.equal(await engine.call('load_graph', { tab, full: false }), 3)
     const [rows, refs, history] = await Promise.all([
       engine.call('rows', { tab, start: 0, count: 10 }),
       engine.call('refs', { tab }),

@@ -143,7 +143,7 @@ test('extension time zones persist globally, notify views and keep native dates 
 test('file-only refreshes read status alone and stay quiet until it changes', async () => {
   const calls = []
   let status = []
-  const engine = { call: async (cmd) => { calls.push(cmd); return cmd === 'open_repo' ? [0, resolve('quiet-repo-test'), 1] : cmd === 'refs' ? { head_id: 'head', refs: [] } : cmd === 'status' ? status : [] } }
+  const engine = { call: async (cmd) => { calls.push(cmd); return cmd === 'open_repo' ? [0, resolve('quiet-repo-test'), resolve('quiet-repo-test/.git'), resolve('quiet-repo-test/.git')] : cmd === 'refs' ? { head_id: 'head', refs: [] } : cmd === 'status' ? status : [] } }
   const vscode = { EventEmitter: Event, env: { language: 'en' }, Uri: { file: uri }, window: { createOutputChannel: () => ({ appendLine() {} }) },
     workspace: { workspaceFolders: [{ uri: uri(resolve('quiet-repo-test')) }] }, commands: { executeCommand() {} } }
   const locale = { messages: { vscode: {} }, explanations: {} }
@@ -185,7 +185,7 @@ test('closed repositories stay closed across discovery, pending refreshes and re
   const saved = {}, sessions = new Map(), contexts = new Map()
   let next = 0, delayed
   const engine = { call: async (cmd, args) => {
-    if (cmd === 'open_repo') { const tab = next++; sessions.set(tab, args.path); return [tab, args.path, 1] }
+    if (cmd === 'open_repo') { const tab = next++; sessions.set(tab, args.path); return [tab, args.path, join(args.path, '.git'), join(args.path, '.git')] }
     if (cmd === 'close_repo') { sessions.delete(args.tab); return }
     if (cmd === 'repositories') return sessions.get(args.tab) === root ? [child] : []
     if (cmd === 'refs') return { head_id: 'head', refs: [] }
@@ -485,11 +485,52 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   assert.ok(!lists[2].some((item) => item.ref === 'refs/heads/old'))
 })
 
+test('SCM refreshes a linked worktree when its Git directories outside the workspace change', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const watchers = [], refreshes = []
+  const repo = { tab: 0, root: '/wt', gitDir: '/main/.git/worktrees/wt', commonDir: '/main/.git', name: 'wt', status: [], refs: {} }
+  const event = () => ({ dispose() {} })
+  const watch = (base, pattern) => {
+    const w = { base, pattern, on: {}, dispose() {} }
+    for (const kind of ['Change', 'Create', 'Delete']) w[`onDid${kind}`] = (fn) => { w.on[kind] = fn }
+    watchers.push(w)
+    return w
+  }
+  const vscode = {
+    EventEmitter: Event, Uri: { file: uri }, FileType: { File: 1 }, FileChangeType: { Changed: 1 },
+    RelativePattern: class { constructor(base, pattern) { Object.assign(this, { base: base.fsPath, pattern }) } },
+    scm: { createSourceControl: () => ({ createResourceGroup: (id) => ({ id }), inputBox: { value: '' }, dispose() {} }) },
+    commands: { registerCommand: () => {} },
+    window: { onDidChangeWindowState: event, registerFileDecorationProvider: event },
+    workspace: {
+      getConfiguration: () => ({ get: (_, fallback) => fallback }), workspaceFolders: [{ uri: uri('/wt') }], textDocuments: [],
+      createFileSystemWatcher: (p) => typeof p === 'string' ? watch('', p) : watch(p.base, p.pattern),
+      onDidCloseTextDocument: new Event().event, registerFileSystemProvider: () => {},
+    },
+  }
+  const core = {
+    repos: [repo], onRepoChange: new Event(), REV: 'rev', v: {}, t: {}, help: {},
+    repoOf: () => repo, under: (path, dir) => path.startsWith(dir + '/'), revOf: () => undefined,
+    refresh: async (r, git, notify) => { refreshes.push([r.name, git, notify]) },
+  }
+  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [], conflictFiles: () => [] } }).registerScm({ subscriptions: [] })
+  const [own, common] = ['/main/.git/worktrees/wt', '/main/.git'].map((dir) => watchers.find((w) => w.base === dir))
+  assert.deepEqual([own.pattern, common.pattern], ['**', '{refs/**,packed-refs,config}'], 'only refs and config of the shared directory are watched')
+  // 终端里在这个工作树提交：分支引用在共用目录里变化，要重读引用；暂存只动索引，只重读状态
+  common.on.Change(uri('/main/.git/refs/heads/feature'))
+  t.mock.timers.tick(300)
+  own.on.Change(uri('/main/.git/worktrees/wt/index'))
+  t.mock.timers.tick(300)
+  own.on.Create(uri('/main/.git/worktrees/wt/index.lock'))
+  t.mock.timers.tick(300)
+  assert.deepEqual(refreshes, [['wt', true, true], ['wt', false, false]])
+})
+
 test('SCM separates repositories, stops on failed saves and uses selections after formatting', async () => {
   const commands = new Map(), providers = new Map(), calls = [], writes = [], controls = []
   const repos = [
-    { tab: 0, root: '/one', name: 'one', status: [], refs: {} },
-    { tab: 1, root: '/two', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
+    { tab: 0, root: '/one', gitDir: '/one/.git', commonDir: '/one/.git', name: 'one', status: [], refs: {} },
+    { tab: 1, root: '/two', gitDir: '/two/.git', commonDir: '/two/.git', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
   ]
   const selection = (line) => ({ start: { line, character: 0 }, end: { line, character: 1 } })
   const editor = { document: { uri: uri('/one/file'), isDirty: true, lineCount: 2, save: async () => false }, selections: [selection(0)] }
@@ -502,6 +543,7 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
     window: { activeTextEditor: editor, onDidChangeWindowState: event },
     workspace: {
       getConfiguration: () => ({ get: (_, fallback) => fallback }),
+      workspaceFolders: [{ uri: uri('/one') }, { uri: uri('/two') }],
       textDocuments: [], createFileSystemWatcher: () => ({ onDidChange: event, onDidCreate: event, onDidDelete: event }),
       onDidCloseTextDocument: new Event().event,
       registerFileSystemProvider: (scheme, provider, options) => { assert.equal(options.isReadonly, true); providers.set(scheme, provider) },
@@ -511,7 +553,7 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
   const diff = { hunks: [{ header: '@@ -1,0 +1,2 @@', lines: [1, 2].map((n) => ({ kind: '+', new_no: n })) }] }
   const core = {
     repos, onRepoChange: new Event(), REV: 'rev', v: { conflicts: 'Conflicts' }, t: { identityMissing: '', conflictProgress: (done, total) => `${done}/${total}` }, help: {},
-    repoOf: () => repos[0], rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
+    repoOf: () => repos[0], under: (path, dir) => path.startsWith(dir + '/'), rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
     revUri: () => uri('/one/file').with({ scheme: 'rev', query: '{"rev":""}' }),
     engine: { call: async (cmd) => { calls.push(cmd); return diff } },
     write: async (repo, cmd, args) => { writes.push([repo.tab, cmd, args]); return null },
