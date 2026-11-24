@@ -6,11 +6,11 @@
 
 PushRight brings Git source control, blame, history and a commit graph into VS Code. It makes push destinations explicit and defaults every Pull to **Rebase instead of merge**. English and Simplified Chinese are included; the extension follows VS Code's display language.
 
-**1.2.1**: PushRight activates as soon as a workspace with a Git repository opens instead of waiting for every other extension, so Source Control shows its changes within seconds of opening a window, and diff tabs from the last session reopen. The sidebar graph uses the palette of desktop 1.6, and taking the deleted side of a modify/delete conflict deletes the file instead of failing.
+**1.3.0**: PushRight activates as soon as a workspace with a Git repository opens instead of waiting for every other extension, so Source Control shows its changes within seconds of opening a window, and diff tabs from the last session reopen. Commits and branch switches made in a terminal inside a linked worktree or submodule refresh Source Control within about a second. The branch picker marks branches checked out in another worktree and opens that worktree in a new window. Search Commits takes the text right away, and committing during a merge drops Git's `# Conflicts:` comment lines.
 
 PushRight adds native Git commands to Chinese action labels across menus, dialogs and the command palette. Open **Repository settings** in Source Control to disable revert for the local repository. The setting is shared with the desktop app and linked worktrees; it blocks starting and continuing revert while allowing abort. Revert is allowed by default. Terminal Git and other tools are unaffected.
 
-**[Download VSIX · Windows x64 · 1.2.1](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1)
+**[Download VSIX · Windows x64 · 1.3.0](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/pushright-win32-x64-1.3.0.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2)
 
 ## Preview
 
@@ -107,11 +107,11 @@ Ignore rules do not hide changes to tracked files. Stop-tracking refuses to disc
 
 ## Install from VSIX
 
-Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
+Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
 
 ```sh
-code --install-extension pushright-win32-x64-1.2.1.vsix
-cursor --install-extension pushright-win32-x64-1.2.1.vsix
+code --install-extension pushright-win32-x64-1.3.0.vsix
+cursor --install-extension pushright-win32-x64-1.3.0.vsix
 ```
 
 Report problems in [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues), including the version and reproduction steps. Remove credentials and private repository information from logs before sharing.

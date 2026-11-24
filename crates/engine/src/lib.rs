@@ -58,6 +58,13 @@ impl Repo {
         self.gix.to_thread_local()
     }
 
+    /// 本工作区的 Git 目录和各工作树共用的目录（引用、配置在后者）
+    pub fn git_dirs(&self) -> (String, String) {
+        let gix = self.gix();
+        let absolute = |dir: &Path| self.path.join(dir).display().to_string();
+        (absolute(gix.git_dir()), absolute(gix.common_dir()))
+    }
+
     pub(crate) fn git(&self, args: &[&str]) -> Result<Vec<u8>> {
         self.git_in(args, &[])
     }

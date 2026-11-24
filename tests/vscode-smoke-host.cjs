@@ -175,10 +175,17 @@ exports.run = async () => {
     await until('amended HEAD refresh', () => api.repos[0].refs.head_id === git('rev-parse', 'HEAD'))
     step('stages, unstages and amends through the source control commands')
 
+    // 文件有改动时第一步是工作区对比最近一版；没有改动时直接看最近一次提交
+    const committed = git('show', 'HEAD:src.ts')
+    writeFileSync(file.fsPath, `${committed}\n// uncommitted\n`)
+    await until('dirty status', () => api.repos[0].status.some((e) => e.path === 'src.ts'))
     await vscode.commands.executeCommand('pushright.previousRevision')
     const diffOf = () => vscode.window.tabGroups.activeTabGroup.activeTab?.input
     await until('diff with HEAD', () => diffOf() instanceof vscode.TabInputTextDiff && diffOf().modified.scheme === 'file')
     const latest = JSON.parse(diffOf().original.query).rev
+    git('checkout', '--', 'src.ts')
+    await until('clean status', () => !api.repos[0].status.some((e) => e.path === 'src.ts'))
+    await vscode.window.showTextDocument(editor.document)
     await vscode.commands.executeCommand('pushright.previousRevision')
     await until('diff of the latest commit', () => diffOf() instanceof vscode.TabInputTextDiff && JSON.parse(diffOf().modified.query || '{}').rev === latest)
     await vscode.commands.executeCommand('pushright.previousRevision')

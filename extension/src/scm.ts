@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import * as vscode from 'vscode'
 import type { Diff, Entry, Identity, Log, WorkflowSettings } from '../../src/lib/api'
 import {
-  activeRepo, attempt, closedRepos, closeRepo, discoverRepositories, engine, errorText, fileUri, help, log, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, v, write, type Repo,
+  activeRepo, attempt, closedRepos, closeRepo, discoverForFile, discoverRepositories, engine, errorText, fileUri, help, log, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, under, v, write, type Repo,
 } from './core'
 import { conflictFiles, statusCommands } from './sync'
 
@@ -61,7 +61,7 @@ async function commit(repo: Repo, amend: boolean) {
   if (!amend && !repo.status.some((e) => e.staged)) {
     if (!repo.status.length) return void vscode.window.showInformationMessage(t.clean)
     if (!(await vscode.window.showInformationMessage(v.nothingStaged, { modal: true, detail: help.stage.what }, v.stageAllAndCommit))) return
-    if ((await write(repo, 'stage', { paths: repo.status.map((e) => e.path) })) === undefined) return
+    if ((await write(repo, 'stage', { paths: repo.status.map((e) => e.path) }, false)) === undefined) return
   }
   // 仓库设置了「提交前自动检查」时先跑一遍；没通过由用户决定要不要照样提交
   const settings = await attempt(engine.call<WorkflowSettings>('workflow_settings', { tab: repo.tab }))
@@ -95,7 +95,7 @@ async function editIdentity(repo: Repo) {
 }
 
 async function discard(repo: Repo, paths: string[]) {
-  const detail = `${repo.root}\n\n${help.discard.what}\n\n${help.discard.undo}`
+  const detail = `${repo.root}\n\n${help.discard.what}\n\n${v.discardUndo}`
   if (await vscode.window.showWarningMessage(t.discardTitle(paths.length), { modal: true, detail }, t.discardConfirm)) await run(repo, { op: 'discard', paths })
 }
 
@@ -106,7 +106,7 @@ async function applySelection(mode: 'stage' | 'unstage' | 'discard') {
   if (!editor || !repo) return
   const staged = mode === 'unstage'
   if (staged ? revOf(editor.document.uri) !== '' : editor.document.uri.scheme !== 'file') return void vscode.window.showWarningMessage(v.selectionSide)
-  if (mode === 'discard' && !(await vscode.window.showWarningMessage(t.discardLinesTitle, { modal: true, detail: help.discard.undo }, t.discardLinesConfirm))) return
+  if (mode === 'discard' && !(await vscode.window.showWarningMessage(t.discardLinesTitle, { modal: true, detail: v.discardUndo }, t.discardLinesConfirm))) return
   // 保存可能失败，也可能经格式化改变选区；以保存成功后的行号为准。
   if (editor.document.isDirty && !(await editor.document.save())) return
   // 选区在行首结束时，最后那一行其实没被选中
@@ -134,7 +134,7 @@ async function applySelection(mode: 'stage' | 'unstage' | 'discard') {
     if (!picked.length) continue
     applied = true
     const args = mode === 'discard' ? { path, hunk, header, lines: picked } : { path, staged, hunk, header, lines: picked }
-    if ((await write(repo, mode === 'discard' ? 'discard_lines' : 'apply_lines', args)) === undefined) return
+    if ((await write(repo, mode === 'discard' ? 'discard_lines' : 'apply_lines', args, false)) === undefined) return
   }
   if (!applied) vscode.window.showInformationMessage(v.noChangedLines)
 }
@@ -161,9 +161,12 @@ export function registerScm(context: vscode.ExtensionContext) {
   // Quick Diff 的存在性检查、stat 和 readFile 共用一次读取；仓库刷新后失效。
   const contents = new WeakMap<Repo, Map<string, Promise<Buffer | null>>>()
   let revisionTime = Date.now()
-  const readRevision = (uri: vscode.Uri): Promise<Buffer | null> => {
+  const readRevision = async (uri: vscode.Uri): Promise<Buffer | null> => {
+    if (JSON.parse(uri.query).empty) return Buffer.alloc(0)
+    // 窗口恢复上次开着的对比视图时，仓库可能还没读完或者不在工作区里
+    if (!repoOf(uri)) await discoverForFile(uri.with({ scheme: 'file', query: '' }))
     const repo = repoOf(uri)
-    if (!repo || JSON.parse(uri.query).empty) return Promise.resolve(Buffer.alloc(0))
+    if (!repo) return Buffer.alloc(0)
     let cache = contents.get(repo)
     if (!cache) contents.set(repo, cache = new Map())
     const key = uri.toString()
@@ -182,6 +185,9 @@ export function registerScm(context: vscode.ExtensionContext) {
   const changed = new Map<Repo, Map<string, Entry>>()
   const groups = new Map<Repo, Record<'conflicts' | 'staged' | 'changes', vscode.SourceControlResourceGroup>>()
   const timers = new Map<Repo, { timer: ReturnType<typeof setTimeout>; git: boolean; notify: boolean }>()
+  /** 每个仓库的 SourceControl 和它 Git 目录的监听 */
+  const disposables = new Map<Repo, vscode.Disposable[]>()
+  context.subscriptions.push({ dispose: () => disposables.forEach((list) => list.forEach((d) => d.dispose())) })
 
   const addControl = (repo: Repo) => {
     // VS Code 按名称去重菜单、按标识生成命令；同标识须同名，仓库名由根目录显示。
@@ -201,7 +207,13 @@ export function registerScm(context: vscode.ExtensionContext) {
     }
     groups.set(repo, { conflicts: group('conflicts', v.conflicts, true), staged: group('staged', t.staged, true), changes: group('changes', t.unstaged, false) })
     controls.set(repo, control)
-    context.subscriptions.push(control)
+    // 工作树、子模块的 Git 目录在工作区外时，工作区的监听看不到终端里的提交、切分支，另外监听；共用目录里只看引用和配置
+    const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)
+    const watched = [[repo.gitDir, '**'], ...(repo.commonDir !== repo.gitDir ? [[repo.commonDir, '{refs/**,packed-refs,config}']] : [])]
+      .filter(([dir]) => !folders.some((f) => under(dir, f)))
+      .map(([dir, pattern]) => vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(dir), pattern)))
+    for (const w of watched) w.onDidChange(schedule(false)), w.onDidCreate(schedule(true)), w.onDidDelete(schedule(true))
+    disposables.set(repo, [control, ...watched])
   }
 
   const update = (repo: Repo) => {
@@ -210,7 +222,8 @@ export function registerScm(context: vscode.ExtensionContext) {
     if (!repos.includes(repo)) {
       clearTimeout(timers.get(repo)?.timer)
       timers.delete(repo)
-      controls.get(repo)?.dispose()
+      disposables.get(repo)?.forEach((d) => d.dispose())
+      disposables.delete(repo)
       controls.delete(repo)
       groups.delete(repo)
       changed.delete(repo)
@@ -239,23 +252,23 @@ export function registerScm(context: vscode.ExtensionContext) {
       if (repoOf(doc.uri) === repo && ['', 'HEAD'].includes(revOf(doc.uri) ?? '-')) revChanged.fire([{ type: vscode.FileChangeType.Changed, uri: doc.uri }])
     }
   }
-  repos.forEach(update)
-
-  // 文件或 .git 有变化时刷新，300 毫秒内的连续变化合并成一次。
-  // 只有 .git 里的变化才重读引用等全部数据；文件内容变化只重读状态，状态没变就不通知；增删文件照常通知（被忽略的文件不在状态里）。
+  // 文件或 Git 目录有变化时刷新，300 毫秒内的连续变化合并成一次。
+  // Git 目录里的变化按目录找仓库（子模块的在父仓库 .git/modules 下，工作树的在主仓库 .git/worktrees 下，引用在共用目录里），
+  // 除了索引都要重读引用等全部数据；索引和文件内容变化只重读状态，状态没变就不通知；增删文件照常通知（被忽略的文件不在状态里）。
   const schedule = (added: boolean) => (uri: vscode.Uri) => {
-    const repo = repoOf(uri)
-    const git = /[\\/]\.git[\\/]/.test(uri.fsPath) || uri.fsPath.endsWith('.gitmodules')
-    if (!repo || /[\\/]\.git[\\/].*\.lock$/.test(uri.fsPath)) return
-    // 子模块的 Git 元数据在父仓库 .git/modules 下；那里变化时也刷新子仓库。
-    const affected = /[\\/]\.git[\\/]/.test(uri.fsPath) ? repos.filter((r) => r === repo || r.root.startsWith(repo.root + (process.platform === 'win32' ? '\\' : '/'))) : [repo]
+    const path = uri.fsPath
+    const owners = repos.filter((r) => under(path, r.gitDir) || under(path, r.commonDir))
+    if (owners.length && path.endsWith('.lock')) return
+    const git = (owners.length > 0 && basename(path) !== 'index') || path.endsWith('.gitmodules')
+    const affected = owners.length ? owners : [repoOf(uri)].filter((r) => !!r)
     for (const r of affected) {
       const last = timers.get(r)
       clearTimeout(last?.timer)
-      const next = { git: git || !!last?.git, notify: git || added || !!last?.notify, timer: setTimeout(async () => { timers.delete(r); if (uri.fsPath.endsWith('.gitmodules')) await discoverRepositories(); await refresh(r, next.git, next.notify) }, 300) }
+      const next = { git: git || !!last?.git, notify: git || added || !!last?.notify, timer: setTimeout(async () => { timers.delete(r); if (path.endsWith('.gitmodules')) await discoverRepositories(); await refresh(r, next.git, next.notify) }, 300) }
       timers.set(r, next)
     }
   }
+  repos.forEach(update)
   const watcher = vscode.workspace.createFileSystemWatcher('**')
   const command = (id: string, fn: (...args: any[]) => unknown) => vscode.commands.registerCommand(`pushright.${id}`, fn)
   const paths = (states: Resource[]) => states.map((s) => s.entry.path)
@@ -299,18 +312,18 @@ export function registerScm(context: vscode.ExtensionContext) {
     }),
     command('openChange', openChange),
     command('openFile', (state: Resource) => vscode.window.showTextDocument(state.resourceUri)),
-    command('stage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'stage', { paths }))),
-    command('unstage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'unstage', { paths }))),
+    command('stage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'stage', { paths }, false))),
+    command('unstage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'unstage', { paths }, false))),
     command('discard', (...states: Resource[]) => eachRepo(states, discard)),
     command('takeOurs', (state: Resource) => write(state.repo, 'conflict_take', { path: state.entry.path, theirs: false })),
     command('takeTheirs', (state: Resource) => write(state.repo, 'conflict_take', { path: state.entry.path, theirs: true })),
     command('stageAll', (arg) => {
       const repo = target(arg)
-      return repo && write(repo, 'stage', { paths: repo.status.filter((e) => e.unstaged).map((e) => e.path) })
+      return repo && write(repo, 'stage', { paths: repo.status.filter((e) => e.unstaged).map((e) => e.path) }, false)
     }),
     command('unstageAll', (arg) => {
       const repo = target(arg)
-      return repo && write(repo, 'unstage', { paths: repo.status.filter((e) => e.staged).map((e) => e.path) })
+      return repo && write(repo, 'unstage', { paths: repo.status.filter((e) => e.staged).map((e) => e.path) }, false)
     }),
     command('discardAll', (arg) => ((repo) => repo && discard(repo, []))(target(arg))),
     command('commit', (arg) => ((repo) => repo && commit(repo, false))(target(arg))),

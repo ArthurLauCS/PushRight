@@ -369,8 +369,12 @@ fn operation_reports_git_message_commit_and_original_conflicts() {
     engine::conflict::take(&repo, "b.txt", true).unwrap();
     assert_eq!(engine::conflict::operation(&repo).unwrap().unwrap().conflicts.len(), 2);
     assert_eq!(status::status(&repo).unwrap().iter().filter(|e| e.conflicted).count(), 1);
-    ok(&repo, Op::Abort { what: InProgress::Merge });
+    // 用预填的说明提交：和 Git 的默认一样去掉注释行
+    engine::conflict::take(&repo, "中文 名.txt", true).unwrap();
+    status::commit(&repo, &info.message, false).unwrap();
+    assert_eq!(status::last_message(&repo).unwrap(), "Merge branch 'other'");
     assert_eq!(engine::conflict::operation(&repo).unwrap(), None);
+    git(&dir, 0, &["reset", "-q", "--hard", "HEAD~1"]);
 
     // 变基：正在重放的提交和它的说明，外加步数
     assert!(!ops::run(&repo, Op::Rebase { onto: "other".into() }).unwrap().ok);

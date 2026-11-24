@@ -80,30 +80,38 @@ export async function fetch(repo = activeRepo()) {
   if (repo) await run(repo, { op: 'fetch' })
 }
 
-type Tip = { name: string; short_id: string; author: string; time: number; subject: string }
+type Tip = { name: string; short_id: string; author: string; time: number; subject: string; worktree: string }
 
-/** 顶部选择框里的分支项：本地在前、顺序固定，当前分支带对钩，每项下面一行是该分支的最新提交。 */
+/** 顶部选择框里的分支项：本地在前、顺序固定，当前分支带对钩，在别的工作树签出的带窗口标记，每项下面一行是该分支的最新提交。 */
 async function branchItems(repo: Repo, withHead: boolean) {
   const tips = new Map((await engine.call<Tip[]>('branch_tips', { tab: repo.tab })).map((tip) => [tip.name, tip]))
   const candidates = repo.refs.refs.filter((r) => (withHead || r.name !== repo.refs.head) && /^refs\/(heads|remotes)\//.test(r.name) && !r.name.endsWith('/HEAD'))
   const group = (prefix: string) => candidates.filter((r) => r.name.startsWith(prefix))
   return [...group('refs/heads/'), ...group('refs/remotes/')].map((r) => {
     const tip = tips.get(r.name)
+    const worktree = (r.name !== repo.refs.head && tip?.worktree) || ''
     return {
       label: short(r.name),
-      description: `${r.name === repo.refs.head ? '$(check) ' : ''}${tip ? ago(tip.time) : ''}`,
+      description: `${r.name === repo.refs.head ? '$(check) ' : ''}${worktree ? `$(window) ${t.inOtherWorktreeMark} · ` : ''}${tip ? ago(tip.time) : ''}`,
       detail: tip && `${tip.author} · ${tip.short_id} · ${tip.subject}`,
       ref: r.name,
+      worktree,
     }
   })
 }
 
 export async function checkout(repo = activeRepo()) {
   if (!repo) return
-  const create = { label: `$(plus) ${t.newBranch}…`, ref: '' }
+  const create = { label: `$(plus) ${t.newBranch}…`, ref: '', worktree: '' }
   const pick = await vscode.window.showQuickPick([create, ...await branchItems(repo, false)], { title: t.opNames.checkout, placeHolder: help.checkout.short, matchOnDetail: true })
   if (!pick) return
   if (pick === create) return createBranch(repo)
+  // 一个分支只能在一个工作树里签出：改为在新窗口打开签出它的那个工作树
+  if (pick.worktree) {
+    const open = await vscode.window.showInformationMessage(t.switchDirtyTitle(pick.label), { modal: true, detail: t.inOtherWorktree(pick.label, pick.worktree) }, v.openInNewWindow)
+    if (open) vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(pick.worktree), { forceNewWindow: true })
+    return
+  }
   await run(repo, pick.ref.startsWith('refs/remotes/') ? { op: 'track', remote_branch: pick.label } : { op: 'checkout', target: pick.label })
 }
 

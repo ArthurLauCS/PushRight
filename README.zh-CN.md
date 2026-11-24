@@ -23,6 +23,8 @@
 
 ## 本版更新
 
+**1.6.2** 在合并、摘取、撤销进行中提交时，去掉 Git 预填说明里的注释行（如 `# Conflicts:` 列表）。同时发布扩展 **1.3.0**：关联工作树和子模块里在终端提交后，源代码管理会刷新；分支选择框选中已在别的工作树签出的分支时，直接打开那个工作树；搜索提交可以直接输入内容。详见[发行说明](docs/RELEASE_1.6.2.md)。
+
 **1.6.1** 修复冲突视图。有长行的文件不再把冲突面板和按钮撑出窗口。一边删除一边修改、改名和子模块引起的冲突会显示两边，可以整个取一边解决，选删掉的那边就删除文件。NUL 字节靠后的文本文件、以 `<<<<<<<` 开头的普通行都能正确读取；「工作区是干净的」提示不再压住筛选框。详见[发行说明](docs/RELEASE_1.6.1.md)。
 
 **1.6.0** 重新设计了桌面版的外观：更扁平、配色更克制，每种用途一种字体（界面 Segoe UI Variable Text，标题 Noto Serif SC，正文 LXGW WenKai，代码 Cascadia Code），仓库页签带底线和新建页签按钮，标题栏随主题变为深色。扩展里的提交图用了同一套配色。详见[发行说明](docs/RELEASE_1.6.0.md)。
@@ -47,23 +49,23 @@ VS Code／Cursor 中的 **PushRight: 打开提交图** 和 **在提交图中定�
 
 桌面应用每分钟刷新所有已打开的仓库，打开仓库时及之后每十分钟自动 fetch，后台页签也生效。两项默认开启，可在语言选择框旁的“自动刷新与获取”中分别关闭。仓库忙碌时延后执行，失败写入命令日志并按周期重试；后台 fetch 保留 `FETCH_HEAD`、暂存区和工作区文件。强制推送增加 `--force-if-includes` 检查，防止覆盖后台刚获取但未在本地整合的远端提交。应用退出后不执行定时任务，扩展版不启用这些定时器。
 
-当前版本为 **v1.6.1 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
+当前版本为 **v1.6.2 正式版（MIT 许可）**，提供 Windows x64 安装包。首次启动默认英文，内置完整英文和简体中文语言包，可在右上角切换，选择会保存在本机。界面、提示、操作说明和应用自身的错误均提供双语；仓库内容和 Git / 系统原始输出保持原文，系统原生对话框使用系统语言。
 
 ![PushRight 1.6.0：提交图、分支与文件差异](docs/images/desktop-1.6.0.png)
 
 第一张截图来自 1.6.0 桌面程序，打开的是 PushRight 自己的仓库；另一张来自 1.2.0，使用虚构作者和本地示例仓库。
 
-本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.tar.gz)。
+本版源码：[ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.zip) · [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.tar.gz)。
 
 ## 下载与安装
 
-**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
+**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/PushRight-Setup-1.6.2.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/pushright-win32-x64-1.3.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/SHA256SUMS.txt)
 
-从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) 下载 `PushRight-Setup-1.6.1.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
+从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2) 下载 `PushRight-Setup-1.6.2.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
 
 - 支持 Windows 10 / 11 x64；本次发布在 Windows x64 上构建和验证。
 - 需要安装 [Git for Windows](https://git-scm.com/downloads/win)，并确保 `git` 在 PATH 中可用。
-- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.6.1.exe -Algorithm SHA256` 核对文件。
+- 安装包尚未进行代码签名，Windows 可能显示未知发布者提示。Release 附有 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash .\PushRight-Setup-1.6.2.exe -Algorithm SHA256` 核对文件。
 
 安装器支持英文和简体中文，应用语言独立选择。从 1.1.x 升级时会自动卸载旧版。偏好保存在 `%APPDATA%\PushRight\settings.json`；1.1.x 的语言、主题、时区、差异配色、作者样式和最近仓库不会迁移，需要重新设置一次。
 
@@ -146,14 +148,14 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 
 ## VS Code / Cursor 扩展
 
-扩展 **1.2.1** 在打开含 Git 仓库的工作区时立即启动，新窗口几秒内就能在源代码管理里看到改动，上次留着的对比标签页也能恢复；“打开提交图”用桌面版显示仓库。侧栏提交图保留提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
+扩展 **1.3.0** 在打开含 Git 仓库的工作区时立即启动，新窗口几秒内就能在源代码管理里看到改动，上次留着的对比标签页也能恢复；关联工作树和子模块里在终端提交后会刷新，分支选择框可直接打开已签出该分支的工作树；“打开提交图”用桌面版显示仓库。侧栏提交图保留提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
 
-同一套引擎可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
+同一套引擎可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm ext:package
-code --install-extension extension/pushright-win32-x64-1.2.1.vsix
+code --install-extension extension/pushright-win32-x64-1.3.0.vsix
 ```
 
 - **源代码管理面板**：已暂存、未暂存和冲突的文件；按文件或按选中的行暂存、取消暂存、丢弃；提交和修补上次提交；行号旁的改动标记和资源管理器角标。首次使用时 PushRight 会说明关闭 VS Code 自带 Git 的后果，由你决定是否关闭。

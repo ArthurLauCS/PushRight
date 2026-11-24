@@ -27,7 +27,7 @@ const uri = (fsPath) => ({ fsPath, scheme: 'file', toString() { return `${this.s
 test('diff editors show current-line blame on both sides and reload inactive index snapshots', () => {
   const active = new Event(), visible = new Event(), selection = new Event(), changed = new Event(), closed = new Event()
   const repoChanged = new Event(), prefs = new Event(), theme = new Event(), config = new Event()
-  const repo = { root: '/repo', refs: { head_id: 'head' } }, requests = [], types = []
+  const repo = { root: '/repo', refs: { head_id: 'head' }, status: [] }, requests = [], types = []
   const status = { show() {}, hide() {} }
   const document = (rev, text = 'unchanged\nchanged\n', empty = false) => ({
     uri: rev === undefined ? uri('/repo/a.txt') : uri('/repo/a.txt').with({ scheme: 'pushright-rev', query: JSON.stringify({ rev, empty }) }),
@@ -143,7 +143,7 @@ test('extension time zones persist globally, notify views and keep native dates 
 test('file-only refreshes read status alone and stay quiet until it changes', async () => {
   const calls = []
   let status = []
-  const engine = { call: async (cmd) => { calls.push(cmd); return cmd === 'open_repo' ? [0, resolve('quiet-repo-test'), 1] : cmd === 'refs' ? { head_id: 'head', refs: [] } : cmd === 'status' ? status : [] } }
+  const engine = { call: async (cmd) => { calls.push(cmd); return cmd === 'open_repo' ? [0, resolve('quiet-repo-test'), resolve('quiet-repo-test/.git'), resolve('quiet-repo-test/.git')] : cmd === 'refs' ? { head_id: 'head', refs: [] } : cmd === 'status' ? status : [] } }
   const vscode = { EventEmitter: Event, env: { language: 'en' }, Uri: { file: uri }, window: { createOutputChannel: () => ({ appendLine() {} }) },
     workspace: { workspaceFolders: [{ uri: uri(resolve('quiet-repo-test')) }] }, commands: { executeCommand() {} } }
   const locale = { messages: { vscode: {} }, explanations: {} }
@@ -185,7 +185,7 @@ test('closed repositories stay closed across discovery, pending refreshes and re
   const saved = {}, sessions = new Map(), contexts = new Map()
   let next = 0, delayed
   const engine = { call: async (cmd, args) => {
-    if (cmd === 'open_repo') { const tab = next++; sessions.set(tab, args.path); return [tab, args.path, 1] }
+    if (cmd === 'open_repo') { const tab = next++; sessions.set(tab, args.path); return [tab, args.path, join(args.path, '.git'), join(args.path, '.git')] }
     if (cmd === 'close_repo') { sessions.delete(args.tab); return }
     if (cmd === 'repositories') return sessions.get(args.tab) === root ? [child] : []
     if (cmd === 'refs') return { head_id: 'head', refs: [] }
@@ -449,17 +449,25 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
     { name: 'refs/remotes/origin/old' }, { name: 'refs/heads/old' }, { name: 'refs/remotes/origin/recent' }, { name: 'refs/heads/recent' }, { name: 'refs/heads/main' },
   ] } }
   let choose = 2, typed
-  const vscode = { window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed } } }
+  const opened = []
+  const vscode = {
+    window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed }, showInformationMessage: async (_title, _options, button) => button },
+    commands: { executeCommand: (cmd, uri) => opened.push([cmd, uri.fsPath]) }, Uri: { file: (fsPath) => ({ fsPath }) },
+  }
   const core = {
-    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
+    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' }, inOtherWorktreeMark: 'elsewhere', switchDirtyTitle: (b) => b, inOtherWorktree: (b, p) => `${b} ${p}` }, v: { openInNewWindow: 'open' }, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
     stored: () => saved, store: async (key, value) => { saved[key] = value }, run: (_, op) => sent.push(op), headBranch: () => 'main', ago: (time) => `at ${time}`,
-    engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest' }] } },
+    engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest', worktree: '' }, { name: 'refs/heads/old', short_id: 'def5678', author: 'bob', time: 3, subject: 'older', worktree: 'C:/wt/old' }] } },
   }
   const { checkout, pickScope } = load('sync', { vscode, './core': core, '../../src/lib/push-target': {}, '../../src/lib/branch-name': await import('../src/lib/branch-name.ts') })
   await checkout(repo)
   assert.deepEqual(shown[0].slice(1).map((item) => item.ref), ['refs/heads/old', 'refs/heads/recent', 'refs/remotes/origin/old', 'refs/remotes/origin/recent'])
   assert.deepEqual([shown[0][2].description, shown[0][2].detail], ['at 5', 'alice · abc1234 · latest'], 'each branch shows its latest commit')
   assert.deepEqual(sent, [{ op: 'checkout', target: 'recent' }])
+  choose = 1
+  await checkout(repo)
+  assert.equal(shown.at(-1)[1].description, '$(window) elsewhere · at 3', 'a branch checked out in another worktree is marked')
+  assert.deepEqual([opened, sent.length], [[['vscode.openFolder', 'C:/wt/old']], 1], 'picking it opens that worktree instead of checking out')
   choose = 0; typed = 'feat_S_userLogin'
   await checkout(repo)
   assert.deepEqual(sent.at(-1), { op: 'create_branch', name: 'feat_S_userLogin', start: 'HEAD', checkout: true }, 'new branches default to the current commit')
@@ -485,11 +493,52 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
   assert.ok(!lists[2].some((item) => item.ref === 'refs/heads/old'))
 })
 
+test('SCM refreshes a linked worktree when its Git directories outside the workspace change', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const watchers = [], refreshes = []
+  const repo = { tab: 0, root: '/wt', gitDir: '/main/.git/worktrees/wt', commonDir: '/main/.git', name: 'wt', status: [], refs: {} }
+  const event = () => ({ dispose() {} })
+  const watch = (base, pattern) => {
+    const w = { base, pattern, on: {}, dispose() {} }
+    for (const kind of ['Change', 'Create', 'Delete']) w[`onDid${kind}`] = (fn) => { w.on[kind] = fn }
+    watchers.push(w)
+    return w
+  }
+  const vscode = {
+    EventEmitter: Event, Uri: { file: uri }, FileType: { File: 1 }, FileChangeType: { Changed: 1 },
+    RelativePattern: class { constructor(base, pattern) { Object.assign(this, { base: base.fsPath, pattern }) } },
+    scm: { createSourceControl: () => ({ createResourceGroup: (id) => ({ id }), inputBox: { value: '' }, dispose() {} }) },
+    commands: { registerCommand: () => {} },
+    window: { onDidChangeWindowState: event, registerFileDecorationProvider: event },
+    workspace: {
+      getConfiguration: () => ({ get: (_, fallback) => fallback }), workspaceFolders: [{ uri: uri('/wt') }], textDocuments: [],
+      createFileSystemWatcher: (p) => typeof p === 'string' ? watch('', p) : watch(p.base, p.pattern),
+      onDidCloseTextDocument: new Event().event, registerFileSystemProvider: () => {},
+    },
+  }
+  const core = {
+    repos: [repo], onRepoChange: new Event(), REV: 'rev', v: {}, t: {}, help: {},
+    repoOf: () => repo, under: (path, dir) => path.startsWith(dir + '/'), revOf: () => undefined,
+    refresh: async (r, git, notify) => { refreshes.push([r.name, git, notify]) },
+  }
+  load('scm', { vscode, './core': core, './sync': { statusCommands: () => [], conflictFiles: () => [] } }).registerScm({ subscriptions: [] })
+  const [own, common] = ['/main/.git/worktrees/wt', '/main/.git'].map((dir) => watchers.find((w) => w.base === dir))
+  assert.deepEqual([own.pattern, common.pattern], ['**', '{refs/**,packed-refs,config}'], 'only refs and config of the shared directory are watched')
+  // 终端里在这个工作树提交：分支引用在共用目录里变化，要重读引用；暂存只动索引，只重读状态
+  common.on.Change(uri('/main/.git/refs/heads/feature'))
+  t.mock.timers.tick(300)
+  own.on.Change(uri('/main/.git/worktrees/wt/index'))
+  t.mock.timers.tick(300)
+  own.on.Create(uri('/main/.git/worktrees/wt/index.lock'))
+  t.mock.timers.tick(300)
+  assert.deepEqual(refreshes, [['wt', true, true], ['wt', false, false]])
+})
+
 test('SCM separates repositories, stops on failed saves and uses selections after formatting', async () => {
   const commands = new Map(), providers = new Map(), calls = [], writes = [], controls = []
   const repos = [
-    { tab: 0, root: '/one', name: 'one', status: [], refs: {} },
-    { tab: 1, root: '/two', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
+    { tab: 0, root: '/one', gitDir: '/one/.git', commonDir: '/one/.git', name: 'one', status: [], refs: {} },
+    { tab: 1, root: '/two', gitDir: '/two/.git', commonDir: '/two/.git', name: 'two', status: [], refs: { in_progress: 'merge' }, operation: { message: "Merge branch 'x'\n\n# Conflicts:\n#\ta.txt" }, files: [{ path: 'a.txt', resolved: true }, { path: 'b.txt', resolved: false }] },
   ]
   const selection = (line) => ({ start: { line, character: 0 }, end: { line, character: 1 } })
   const editor = { document: { uri: uri('/one/file'), isDirty: true, lineCount: 2, save: async () => false }, selections: [selection(0)] }
@@ -502,6 +551,7 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
     window: { activeTextEditor: editor, onDidChangeWindowState: event },
     workspace: {
       getConfiguration: () => ({ get: (_, fallback) => fallback }),
+      workspaceFolders: [{ uri: uri('/one') }, { uri: uri('/two') }],
       textDocuments: [], createFileSystemWatcher: () => ({ onDidChange: event, onDidCreate: event, onDidDelete: event }),
       onDidCloseTextDocument: new Event().event,
       registerFileSystemProvider: (scheme, provider, options) => { assert.equal(options.isReadonly, true); providers.set(scheme, provider) },
@@ -511,7 +561,7 @@ test('SCM separates repositories, stops on failed saves and uses selections afte
   const diff = { hunks: [{ header: '@@ -1,0 +1,2 @@', lines: [1, 2].map((n) => ({ kind: '+', new_no: n })) }] }
   const core = {
     repos, onRepoChange: new Event(), REV: 'rev', v: { conflicts: 'Conflicts' }, t: { identityMissing: '', conflictProgress: (done, total) => `${done}/${total}` }, help: {},
-    repoOf: () => repos[0], rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
+    repoOf: () => repos[0], under: (path, dir) => path.startsWith(dir + '/'), rel: () => 'file', revOf: () => '', errorText: String, attempt: (p) => p,
     revUri: () => uri('/one/file').with({ scheme: 'rev', query: '{"rev":""}' }),
     engine: { call: async (cmd) => { calls.push(cmd); return diff } },
     write: async (repo, cmd, args) => { writes.push([repo.tab, cmd, args]); return null },
@@ -655,11 +705,11 @@ test('local files expand lazily and tracking commands distinguish local rules, s
   assert.match(prompts.at(-1)[1].detail, /stages deletion for the team/)
   accept = true
   await commands.get('pushright.untrackFile')(file)
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }])
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }, false])
   await commands.get('pushright.trackFile')(file)
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: true }])
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: true }, false])
   await commands.get('pushright.untrackFile')({ repo, entry: { path: 'skills/a.md' }, resourceUri: file })
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }], 'SCM resource arguments use their URI, not the local-tree node shape')
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }, false], 'SCM resource arguments use their URI, not the local-tree node shape')
   tracked = false
   const second = uri('/parent/child/skills/deep/b.md')
   await commands.get('pushright.ignoreLocal')(file, [file, second])

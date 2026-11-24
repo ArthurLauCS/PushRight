@@ -76,12 +76,19 @@ export function registerBlame(context: vscode.ExtensionContext) {
     old?.cancel()
     const entry: Entry = { repo, version: doc.version, blame: { lines: [], done: false }, cancel: () => {} }
     cache.set(key, entry)
-    const contents = rev === '' || doc.isDirty ? doc.getText() : undefined
-    entry.cancel = runBlame(repo.root, rel(repo, doc.uri), contents, (blame) => {
+    const show = (blame: Blame) => {
       entry.blame = blame
       for (const editor of vscode.window.visibleTextEditors) if (editor.document === doc) render(editor, true)
       if (blame.done) lensChanged.fire()
-    }, rev, (message) => log.appendLine(`[Blame] ${repo.root}\n${message}`))
+    }
+    const path = rel(repo, doc.uri)
+    // 新文件（未跟踪、新加入暂存）和还没有提交的仓库在 HEAD 里没有这个路径，git blame 只会报错：整份都算未提交
+    if (!rev && (!repo.refs.head_id || repo.status.some((e) => e.path === path && (e.unstaged === '?' || e.staged === 'A')))) {
+      const uncommitted: BlameCommit = { id: '0'.repeat(40), author: '', author_email: '', time: 0, subject: '', path }
+      return show({ lines: Array(doc.lineCount).fill(uncommitted), done: true })
+    }
+    const contents = rev === '' || doc.isDirty ? doc.getText() : undefined
+    entry.cancel = runBlame(repo.root, path, contents, show, rev, (message) => log.appendLine(`[Blame] ${repo.root}\n${message}`))
   }
 
   function drop(filter: (uri: vscode.Uri, entry: Entry) => boolean) {

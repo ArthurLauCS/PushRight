@@ -1,4 +1,4 @@
-import { basename, dirname, join, relative, sep } from 'node:path'
+import { basename, dirname, join, normalize, relative, sep } from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
 import * as vscode from 'vscode'
 import type { Entry, Identity, Log, Op, Operation, Refs, WorkflowSettings } from '../../src/lib/api'
@@ -26,6 +26,9 @@ export interface Repo {
   /** sidecar 里的会话 id */
   tab: number
   root: string
+  /** 本工作区的 Git 目录和各工作树共用的目录；工作树、子模块的不在 root 下 */
+  gitDir: string
+  commonDir: string
   name: string
   refs: Refs
   /** 进行中的合并 / 变基 / 摘取 / 撤销在 Git 里记下的信息；没有时为 null */
@@ -70,7 +73,7 @@ async function discover(extra: string[]) {
       let repo = repos.find((r) => fold(r.root) === fold(path))
       let loading: Promise<void> | undefined
       if (!repo) {
-        const [tab, actual] = await engine.call<[number, string, number]>('open_repo', { path })
+        const [tab, actual, gitDir, commonDir] = await engine.call<[number, string, string, string]>('open_repo', { path })
         const root = vscode.Uri.file(actual).fsPath
         if (closedRepos.has(fold(root))) { await engine.call('close_repo', { tab }); continue }
         repo = repos.find((r) => fold(r.root) === fold(root))
@@ -78,7 +81,8 @@ async function discover(extra: string[]) {
         else {
           const parent = repos.filter((r) => fold(root).startsWith(fold(r.root) + sep)).sort((a, b) => b.root.length - a.root.length)[0]
           repo = {
-            tab, root, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [], operation: null, workflow: null,
+            // 工作树的共用目录来自 Git 记下的相对路径（`…/worktrees/x/../..`），规整后才能按前缀比较
+            tab, root, gitDir: vscode.Uri.file(normalize(gitDir)).fsPath, commonDir: vscode.Uri.file(normalize(commonDir)).fsPath, name: parent ? `${parent.name}/${relative(parent.root, root).split(sep).join('/')}` : basename(root), status: [], identity: null, remotes: [], operation: null, workflow: null,
             refs: { head: null, head_id: null, ahead_behind: null, in_progress: null, revert_disabled: false, refs: [] },
           }
           repos.push(repo)
@@ -178,10 +182,10 @@ export async function attempt<T>(promise: Promise<T>): Promise<T | undefined> {
   }
 }
 
-/** 调一个会改动仓库的引擎命令，然后刷新。失败时返回 undefined。 */
-export async function write<T>(repo: Repo, cmd: string, args: object): Promise<T | undefined> {
+/** 调一个会改动仓库的引擎命令，然后刷新；`git` 为 false 表示只动了暂存区和文件（暂存、忽略），只重读状态。失败时返回 undefined。 */
+export async function write<T>(repo: Repo, cmd: string, args: object, git = true): Promise<T | undefined> {
   const result = await attempt(engine.call<T>(cmd, { tab: repo.tab, ...args }))
-  await refresh(repo)
+  await refresh(repo, git, true)
   return result
 }
 
@@ -202,6 +206,8 @@ export async function run(repo: Repo, op: Op): Promise<boolean> {
 }
 
 const fold = (path: string) => (process.platform === 'win32' ? path.toLowerCase() : path)
+/** `path` 在目录 `dir` 里面 */
+export const under = (path: string, dir: string) => fold(path).startsWith(fold(dir) + sep)
 
 /** 文件所在的仓库；嵌套时取最里层。 */
 export function repoOf(uri: vscode.Uri | undefined): Repo | undefined {

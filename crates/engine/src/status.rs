@@ -66,6 +66,10 @@ pub fn unstage(repo: &Repo, paths: &[String]) -> Result<()> {
 
 pub fn commit(repo: &Repo, message: &str, amend: bool) -> Result<()> {
     let mut args = vec!["commit", "-q", "-F", "-"];
+    // 合并、变基等进行中时，提交框预填的是 Git 准备的说明；和 Git 用编辑器提交时的默认一样去掉 `# Conflicts:` 这类注释行
+    if crate::conflict::operation(repo)?.is_some() {
+        args.push("--cleanup=strip");
+    }
     if amend {
         args.push("--amend");
     }
