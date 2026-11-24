@@ -37,6 +37,13 @@ test('push target: upstream is split by known remotes, including remotes with sl
   assert.equal(splitUpstream('refs/remotes/gone/main', ['origin']), null)
 })
 
+test('the extension activates with the workspace repository, not after every other extension', () => {
+  // onStartupFinished 要等所有扩展启动完：装了几十个扩展时界面 12~24 秒才出来，恢复的对比标签页还会被丢掉
+  const events = JSON.parse(readFileSync(new URL('../extension/package.json', import.meta.url), 'utf8')).activationEvents
+  assert.ok(events.includes('workspaceContains:.git'))
+  assert.ok(events.includes('onFileSystem:pushright-rev'))
+})
+
 test('blame follows renames, keeps authors apart and marks unsaved lines as uncommitted', async () => {
   const dir = fixture()
   const saved = await blame(dir, 'b.txt')

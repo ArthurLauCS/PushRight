@@ -26,6 +26,8 @@
   "type": "module",
   "main": "./out/extension.cjs",
   "activationEvents": [
+    "workspaceContains:.git",
+    "onFileSystem:pushright-rev",
     "onStartupFinished"
   ],
   "contributes": {
