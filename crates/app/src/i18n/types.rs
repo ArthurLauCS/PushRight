@@ -217,6 +217,26 @@ pub struct FileList {
     pub discard_folder: &'static str,
 }
 
+/// 本地更改页的改动分组
+pub struct Groups {
+    pub title: &'static str,
+    pub hint: &'static str,
+    pub count: fn(usize, usize) -> String,
+    pub new_group: &'static str,
+    pub name: &'static str,
+    pub name_hint: &'static str,
+    pub rename: &'static str,
+    pub delete: &'static str,
+    pub delete_hint: &'static str,
+    pub commit: &'static str,
+    pub commit_tip: &'static str,
+    pub commit_blocked: &'static str,
+    pub empty: &'static str,
+    pub more: &'static str,
+    pub move_to: &'static str,
+    pub ungroup: &'static str,
+}
+
 /// 拉取请求 / 合并请求页
 pub struct Requests {
     pub nav: &'static str,
@@ -517,6 +537,7 @@ pub struct Messages {
     pub graph_filter: GraphFilter,
     pub diff_tools: DiffTools,
     pub file_list: FileList,
+    pub groups: Groups,
     pub back: &'static str,
     pub before: &'static str,
     pub after: &'static str,

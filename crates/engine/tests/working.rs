@@ -1,6 +1,7 @@
 mod common;
 
 use common::{git, init};
+use engine::groups::{self, Group};
 use engine::{diff, refs, status, Repo};
 
 fn lines(from: u32, to: u32) -> String {
@@ -194,6 +195,61 @@ fn display_options_change_the_view_without_breaking_partial_staging() {
     git(&dir, 2, &["add", "added.txt"]);
     let added = diff::worktree_with(&repo, "added.txt", true, false, with(Some(0), true)).unwrap();
     assert_eq!(added.hunks[0].lines.iter().map(|l| (l.kind, l.new_no)).collect::<Vec<_>>(), [('+', Some(1)), ('+', Some(2))]);
+}
+
+#[test]
+fn change_groups_commit_only_their_files() {
+    let dir = init("groups");
+    for f in ["a.txt", "b.txt", "gone.txt"] {
+        std::fs::write(dir.join(f), "1\n").unwrap();
+    }
+    git(&dir, 0, &["add", "."]);
+    git(&dir, 1, &["commit", "-q", "-m", "base"]);
+    let repo = Repo::open(&dir).unwrap();
+    let paths = |list: &[&str]| list.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+    let load = || groups::load(&repo, &status::status(&repo).unwrap());
+
+    // 组里有修改、删除、未跟踪三种文件；b.txt 已暂存，不在组里
+    std::fs::write(dir.join("a.txt"), "2\n").unwrap();
+    std::fs::remove_file(dir.join("gone.txt")).unwrap();
+    std::fs::write(dir.join("new.txt"), "n\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "2\n").unwrap();
+    git(&dir, 2, &["add", "b.txt"]);
+
+    // 移到另一个组的文件从原来的组里拿掉，已在目标组的不重复
+    let mut list = vec![Group { name: "feat: 分组\n\n正文".into(), paths: Vec::new() }, Group { name: "其他".into(), paths: Vec::new() }];
+    groups::assign(&mut list, &paths(&["a.txt", "new.txt"]), Some(1));
+    groups::assign(&mut list, &paths(&["a.txt", "gone.txt", "new.txt"]), Some(0));
+    groups::assign(&mut list, &paths(&["new.txt"]), Some(0));
+    assert_eq!(list[0].paths, paths(&["a.txt", "gone.txt", "new.txt"]));
+    assert!(list[1].paths.is_empty());
+    groups::save(&repo, &list).unwrap();
+    assert_eq!(load(), list);
+
+    // 提交这个组：只提交组里的文件，组外已暂存的 b.txt 留在暂存区；提交完组被删掉
+    groups::commit(&repo, &list[0]).unwrap();
+    assert_eq!(brief(&repo), [("b.txt".into(), Some('M'), None)]);
+    assert_eq!(status::last_message(&repo).unwrap(), "feat: 分组\n\n正文");
+    let out = std::process::Command::new("git").current_dir(&dir).args(["show", "--name-status", "--format=", "HEAD"]).output().unwrap();
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "M\ta.txt\nD\tgone.txt\nA\tnew.txt\n");
+    assert_eq!(load(), [Group { name: "其他".into(), paths: Vec::new() }]);
+
+    // 刷新时清理：没有改动的（new.txt）和已暂存的（b.txt）移出组，变空的组保留
+    std::fs::write(dir.join("a.txt"), "3\n").unwrap();
+    std::fs::write(dir.join("c.txt"), "c\n").unwrap();
+    let list = vec![Group { name: "x".into(), paths: paths(&["a.txt", "new.txt", "b.txt", "c.txt"]) }, Group { name: "空".into(), paths: paths(&["new.txt"]) }];
+    groups::save(&repo, &list).unwrap();
+    let pruned = vec![Group { name: "x".into(), paths: paths(&["a.txt", "c.txt"]) }, Group { name: "空".into(), paths: Vec::new() }];
+    assert_eq!(load(), pruned);
+    assert_eq!(load(), pruned);
+
+    // 钩子拒绝提交：暂存区原样，未跟踪文件不留「待添加」记录，组还在
+    std::fs::write(dir.join(".git/hooks/pre-commit"), "#!/bin/sh\nexit 1\n").unwrap();
+    assert!(groups::commit(&repo, &pruned[0]).is_err());
+    assert_eq!(brief(&repo), [("a.txt".into(), None, Some('M')), ("b.txt".into(), Some('M'), None), ("c.txt".into(), None, Some('?'))]);
+    assert_eq!(load(), pruned);
+
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

@@ -23,6 +23,7 @@ use crate::{diff_view, worktrees};
 use engine::conflict::Operation;
 use engine::detail::Detail;
 use engine::graph::Graph as EngineGraph;
+use engine::groups::Group;
 use engine::identity::Identity;
 use engine::ops::{InProgress, Log, Op, ResetMode};
 use engine::refs::{Refs, Stash, Track, Worktree};
@@ -114,6 +115,8 @@ pub struct RepoView {
     pub stashes: Vec<Stash>,
     pub worktrees: Vec<Worktree>,
     pub entries: Vec<Entry>,
+    /// 改动分组，和 entries 同一次刷新读出
+    pub groups: Vec<Group>,
     pub identity: Option<Identity>,
     /// 进行中的操作在 Git 里记下的信息；没有进行中的操作时为 None
     pub operation: Option<Operation>,
@@ -276,6 +279,7 @@ impl RepoView {
             stashes: Vec::new(),
             worktrees: Vec::new(),
             entries: Vec::new(),
+            groups: Vec::new(),
             identity: None,
             operation: None,
             workflow: Settings::default(),
@@ -371,17 +375,19 @@ impl RepoView {
                     let operation = if refs.in_progress.is_some() { engine::conflict::operation(repo).ok().flatten() } else { None };
                     // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
                     let overlap = if refs.ahead_behind.is_some_and(|(_, behind)| behind > 0) { engine::refs::binary_overlap(repo).unwrap_or_default() } else { Vec::new() };
-                    (refs, stashes, worktrees, entries, identity, workflow, tools, operation, overlap)
+                    let groups = engine::groups::load(repo, &entries);
+                    (refs, stashes, worktrees, entries, groups, identity, workflow, tools, operation, overlap)
                 });
                 all
             },
             |this, result, cx| {
                 match result {
-                    Ok((refs, stashes, worktrees, entries, identity, workflow, tools, operation, overlap)) => {
+                    Ok((refs, stashes, worktrees, entries, groups, identity, workflow, tools, operation, overlap)) => {
                         this.refs = refs;
                         this.stashes = stashes;
                         this.worktrees = worktrees;
                         this.entries = entries;
+                        this.groups = groups;
                         this.identity = Some(identity);
                         this.workflow = workflow;
                         this.external_tools = tools;
@@ -1751,12 +1757,17 @@ impl RepoView {
         .detach();
     }
 
-    pub fn work_file_menu(&mut self, at: Point<Pixels>, entry: &Entry, staged: bool, window: &mut Window, cx: &mut Context<Self>) {
+    /// `move_to`：本地更改页给的「移到组」子菜单，冲突文件没有
+    pub fn work_file_menu(&mut self, at: Point<Pixels>, entry: &Entry, staged: bool, move_to: Option<Item>, window: &mut Window, cx: &mut Context<Self>) {
         let t = t(cx);
         let untracked = entry.unstaged == Some('?');
         let file = entry.path.clone();
         let gone = (if staged { entry.staged } else { entry.unstaged }) == Some('D');
         let mut items = self.file_items(&file, if staged { "staged" } else { "unstaged" }, "", gone, untracked, cx);
+        if let Some(item) = move_to {
+            items.push(Item::Sep);
+            items.push(item);
+        }
         if !staged && !entry.conflicted {
             let f = file.clone();
             items.push(Item::Sep);

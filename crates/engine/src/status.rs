@@ -76,6 +76,21 @@ pub fn commit(repo: &Repo, message: &str, amend: bool) -> Result<()> {
     repo.git_in(&args, message.as_bytes()).map(drop)
 }
 
+/// 只提交 `paths` 在工作区里的当前内容，其他文件已暂存的内容原样留在暂存区（`git commit --only`）。
+/// 它只认已跟踪的路径：未跟踪的先登记为待添加（`add -N`），提交失败时再撤掉
+pub fn commit_paths(repo: &Repo, message: &str, paths: &[String]) -> Result<()> {
+    let untracked: Vec<String> = status(repo)?.into_iter().filter(|e| e.unstaged == Some('?') && paths.contains(&e.path)).map(|e| e.path).collect();
+    if !untracked.is_empty() {
+        with_paths(repo, &["add", "-N"], &untracked)?;
+    }
+    // 路径占了 stdin，说明走参数
+    let r = with_paths(repo, &["commit", "-q", "--only", "-m", message], paths);
+    if r.is_err() && !untracked.is_empty() {
+        let _ = unstage(repo, &untracked);
+    }
+    r
+}
+
 /// 上一次提交的完整信息，amend 时预填用。
 pub fn last_message(repo: &Repo) -> Result<String> {
     Ok(crate::decode(&repo.git(&["log", "-1", "--format=%B"])?).trim_end().to_owned())

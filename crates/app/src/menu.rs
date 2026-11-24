@@ -115,7 +115,9 @@ impl Render for Menu {
                     cx.stop_propagation();
                 }
             }))
-            .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close(cx)));
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close(cx)))
+            // 挡住下层：否则点菜单项时下面的行和按钮也会收到点击
+            .occlude();
         if let Some((title, _)) = self.parents.last() {
             list = list
                 .child(

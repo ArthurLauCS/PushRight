@@ -200,7 +200,7 @@ impl Dialog {
         }
         let (tx, rx) = oneshot::channel();
         let mut subs = Vec::new();
-        let mut first_input = None;
+        let mut first_input: Option<Box<dyn FnOnce(&mut Window, &mut App)>> = None;
         let controls = spec
             .fields
             .iter()
@@ -218,7 +218,8 @@ impl Dialog {
                         _ => {}
                     }));
                     if first_input.is_none() {
-                        first_input = Some(state.clone());
+                        let s = state.clone();
+                        first_input = Some(Box::new(move |window, cx| s.update(cx, |s, cx| s.focus(window, cx))));
                     }
                     Control::Input(state)
                 }
@@ -230,6 +231,10 @@ impl Dialog {
                         s
                     });
                     subs.push(cx.subscribe(&state, |_, _, _: &InputEvent, cx| cx.notify()));
+                    if first_input.is_none() {
+                        let s = state.clone();
+                        first_input = Some(Box::new(move |window, cx| s.update(cx, |s, cx| s.focus(window, cx))));
+                    }
                     Control::Area(state)
                 }
                 Kind::Checkbox => Control::Check(f.checked),
@@ -258,7 +263,7 @@ impl Dialog {
         self.serial += 1;
         self.open = Some(Open { spec, controls, skip: false, reply: tx, serial: self.serial, _subs: subs });
         match first_input {
-            Some(input) => input.update(cx, |s, cx| s.focus(window, cx)),
+            Some(focus) => focus(window, cx),
             None => window.focus(&self.focus, cx),
         }
         cx.notify();
