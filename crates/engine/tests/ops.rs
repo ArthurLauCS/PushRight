@@ -2,7 +2,7 @@ mod common;
 
 use common::{git, init};
 use engine::ops::{self, InProgress, Op, ResetMode};
-use engine::{refs, status, Repo};
+use engine::{overview, refs, status, Repo};
 use std::path::Path;
 
 fn ok(repo: &Repo, op: Op) {
@@ -324,13 +324,14 @@ fn worktree_add_overview_remove() {
     std::fs::write(other.join("new.txt"), "n\n").unwrap();
     std::fs::write(other.join("a.txt"), "changed\n").unwrap();
 
-    let list = refs::worktrees(&repo).unwrap();
+    let list = refs::worktrees(&repo, false).unwrap();
     assert_eq!(list.len(), 2);
+    // git 按文件夹名排列链接工作树
     let brief: Vec<_> = list.iter().map(|w| (w.branch.as_deref(), w.current, w.changes, w.subject.as_str())).collect();
     assert_eq!(brief, [(Some("refs/heads/main"), true, 0, "a.txt"), (Some("refs/heads/side"), false, 2, "a.txt")]);
     assert_eq!(list[1].time, 1_700_000_001);
     // 从另一个工作树打开时，current 跟着变
-    let from_other = refs::worktrees(&Repo::open(&other).unwrap()).unwrap();
+    let from_other = refs::worktrees(&Repo::open(&other).unwrap(), false).unwrap();
     assert_eq!(from_other.iter().map(|w| w.current).collect::<Vec<_>>(), [false, true]);
 
     // 分支已在别的工作树检出：git 拒绝，日志里是失败
@@ -338,9 +339,74 @@ fn worktree_add_overview_remove() {
     // 有改动的工作树不强制就删不掉
     assert!(!ops::run(&repo, Op::WorktreeRemove { path: path.clone(), force: false }).unwrap().ok);
     ok(&repo, Op::WorktreeRemove { path, force: true });
-    assert_eq!(refs::worktrees(&repo).unwrap().len(), 1);
+    assert_eq!(refs::worktrees(&repo, false).unwrap().len(), 1);
 
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn overview_groups_repos_flags_merged_and_cleans_without_following_junctions() {
+    let dir = init("ov");
+    commit_file(&dir, 1, ".gitignore", "node_modules\n");
+    let origin = dir.with_extension("origin");
+    let wt = |name: &str| dir.with_extension(name).to_str().unwrap().replace('\\', "/");
+    git(&dir, 0, &["clone", "--bare", "-q", ".", origin.to_str().unwrap()]);
+    git(&dir, 0, &["remote", "add", "origin", origin.to_str().unwrap()]);
+    // done：提交已推到 origin/main，主线又往前走了一个提交
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "done", &wt("done"), "main"]);
+    commit_file(Path::new(&wt("done")), 2, "b.txt", "b\n");
+    git(&dir, 0, &["merge", "-q", "--ff-only", "done"]);
+    commit_file(&dir, 3, "c.txt", "c\n");
+    git(&dir, 0, &["push", "-q", "origin", "main"]);
+    git(&dir, 0, &["remote", "set-head", "origin", "main"]);
+    // fresh：刚从主线建、还没提交；dev：本地主线名的分支；wip：没有上游、一个没推的提交加一个未提交的改动
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "fresh", &wt("fresh"), "origin/main"]);
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "dev", &wt("dev"), "done"]);
+    git(&dir, 0, &["worktree", "add", "-q", "-b", "wip", &wt("wip"), "main"]);
+    commit_file(Path::new(&wt("wip")), 4, "d.txt", "d\n");
+    std::fs::write(Path::new(&wt("wip")).join("d.txt"), "changed\n").unwrap();
+    let other = init("ov-other");
+    commit_file(&other, 1, "a.txt", "a\n");
+
+    let missing = dir.with_extension("missing").to_str().unwrap().to_owned();
+    let paths = [wt("wip"), dir.to_str().unwrap().into(), missing, other.to_str().unwrap().into()];
+    let groups = overview::groups(&paths);
+    // 同一个仓库的两个工作树只算一组，读不到的路径跳过
+    assert_eq!(groups.iter().map(|g| g.worktrees.len()).collect::<Vec<_>>(), [5, 1]);
+    let list = &groups[0].worktrees;
+    assert_eq!(groups[0].path, list[0].path);
+    let brief: Vec<_> = list.iter().map(|w| (w.branch.as_deref().unwrap_or(""), w.merged, w.unpushed)).collect();
+    assert_eq!(
+        brief,
+        [("refs/heads/main", false, 0), ("refs/heads/dev", false, 0), ("refs/heads/done", true, 0), ("refs/heads/fresh", false, 0), ("refs/heads/wip", false, 1)]
+    );
+    // 最后活动：没有改动时是提交时间，有改动时是文件的修改时间（现在）
+    assert_eq!(list[2].active, list[2].time);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    assert!(list[4].active > now - 600, "{}", list[4].active);
+
+    // 借主检出依赖的目录联接：清理时只删联接，不进入指向的目录
+    let keep = dir.with_extension("keep");
+    std::fs::create_dir_all(&keep).unwrap();
+    std::fs::write(keep.join("p.txt"), "precious\n").unwrap();
+    #[cfg(windows)]
+    assert!(std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(dir.with_extension("done").join("node_modules")).arg(&keep).output().unwrap().status.success());
+    let logs = overview::clean(&groups[0].path, &list[2]).unwrap();
+    assert!(logs.iter().all(|l| l.ok), "{:?}", logs.iter().map(|l| &l.output).collect::<Vec<_>>());
+    assert!(!Path::new(&wt("done")).exists());
+    assert!(keep.join("p.txt").exists());
+    let repo = Repo::open(&dir).unwrap();
+    assert_eq!(id_of(&repo, "refs/heads/done"), None);
+    assert!(id_of(&repo, "refs/remotes/origin/main").is_some());
+
+    // 列出后又有了新提交：不删
+    commit_file(Path::new(&wt("fresh")), 5, "e.txt", "e\n");
+    assert_eq!(overview::clean(&groups[0].path, &list[3]).err().as_deref(), Some("PR_WORKTREE_CHANGED"));
+    assert!(Path::new(&wt("fresh")).exists());
+
+    for d in [dir.clone(), origin, keep, other, wt("fresh").into(), wt("dev").into(), wt("wip").into()] {
+        std::fs::remove_dir_all(d).unwrap();
+    }
 }
 
 #[test]

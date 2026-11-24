@@ -49,6 +49,13 @@ pub struct Worktree {
     /// 最后一次提交的标题和时间
     pub subject: String,
     pub time: i64,
+    // 以下三项只在工作树总览（`worktrees(repo, true)`）里算
+    /// 不在任何远程分支上的提交数；有上游时不算（看 ahead_behind）
+    pub unpushed: u32,
+    /// HEAD 已经包含在远程主线分支里，见 `merged`
+    pub merged: bool,
+    /// 最后活动时间：最后一次提交和未提交文件最新修改时间中较晚的
+    pub active: i64,
 }
 
 /// 分支选择器里每个分支下面显示的最新提交
@@ -218,7 +225,8 @@ pub fn stashes(repo: &Repo) -> Result<Vec<Stash>> {
         .collect())
 }
 
-pub fn worktrees(repo: &Repo) -> Result<Vec<Worktree>> {
+/// `full` 时多算未推送、已合并和最后活动（每个工作树多一两条 git 命令），只给工作树总览用，侧栏刷新不用。
+pub fn worktrees(repo: &Repo, full: bool) -> Result<Vec<Worktree>> {
     let out = repo.git(&["worktree", "list", "--porcelain", "-z"])?;
     let mut list = Vec::new();
     let mut cur: Option<Worktree> = None;
@@ -250,7 +258,8 @@ pub fn worktrees(repo: &Repo) -> Result<Vec<Worktree>> {
                 let dir = Path::new(&w.path);
                 let run = |args: &[&str]| git_at(dir, args, &[]).map(|o| String::from_utf8_lossy(&o).into_owned());
                 w.current = here.is_some() && std::fs::canonicalize(dir).ok() == *here;
-                w.changes = run(&["status", "--porcelain=v2", "-z"]).map_or(0, |o| crate::status::parse(&o).len());
+                let entries = run(&["status", "--porcelain=v2", "-z"]).map(|o| crate::status::parse(&o)).unwrap_or_default();
+                w.changes = entries.len();
                 w.ahead_behind = run(&["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]).ok().and_then(|o| {
                     let mut n = o.split_whitespace().map(|n| n.parse().ok());
                     Some((n.next()??, n.next()??))
@@ -259,10 +268,50 @@ pub fn worktrees(repo: &Repo) -> Result<Vec<Worktree>> {
                     w.subject = subject.to_owned();
                     w.time = time.parse().unwrap_or(0);
                 }
+                if !full {
+                    return;
+                }
+                if w.ahead_behind.is_none() {
+                    w.unpushed = run(&["rev-list", "--count", "HEAD", "--not", "--remotes"]).ok().and_then(|o| o.trim().parse().ok()).unwrap_or(0);
+                }
+                w.merged = run(&["for-each-ref", "--contains=HEAD", "--format=%(refname)%00%(symref)%00%(objectname)", "refs/remotes/*/HEAD", "refs/remotes/*/develop", "refs/remotes/*/dev", "refs/remotes/*/main", "refs/remotes/*/master"])
+                    .is_ok_and(|o| merged(&o, &w.head, w.branch.as_deref()));
+                // 删除的文件读不到修改时间，跳过
+                let modified = entries.iter().filter_map(|e| std::fs::metadata(dir.join(&e.path)).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok());
+                w.active = modified.map(|d| d.as_secs() as i64).max().unwrap_or(0).max(w.time);
             });
         }
     });
     Ok(list)
+}
+
+/// 远程主线分支：远程默认分支（`<远程>/HEAD`）和 develop / dev / main / master
+const MAINLINE: [&str; 5] = ["HEAD", "develop", "dev", "main", "master"];
+
+/// 工作树的 HEAD 是否已经合入主线。`out` 是包含 HEAD 的远程主线引用（for-each-ref 的 引用名、符号引用目标、提交）。
+/// 不算已合并：主线分支自己的工作树（含远程默认分支指向的那个名字），和 HEAD 就是主线最新提交的（多半是刚建还没提交的，同「清理分支」）。
+/// 压缩合并（squash）后的分支认不出。
+fn merged(out: &str, head: &str, branch: Option<&str>) -> bool {
+    fn name(r: &str) -> Option<&str> {
+        Some(r.strip_prefix("refs/remotes/")?.split_once('/')?.1)
+    }
+    // refs/remotes/origin/feature/dev 也会匹配 refs/remotes/*/dev（for-each-ref 的 * 跨斜杠），按分支名再筛一次
+    let lines: Vec<(&str, &str)> = out
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split('\0');
+            let (refname, symref, id) = (f.next()?, f.next()?, f.next()?);
+            if !MAINLINE.contains(&name(refname)?) {
+                return None;
+            }
+            Some((name(if symref.is_empty() { refname } else { symref })?, id))
+        })
+        .collect();
+    let own = branch.and_then(|b| b.strip_prefix("refs/heads/"));
+    if own.is_some_and(|b| MAINLINE.contains(&b) || lines.iter().any(|&(main, _)| main == b)) {
+        return false;
+    }
+    lines.iter().any(|&(_, id)| id != head)
 }
 
 /// 本地和远程分支各自的最新提交；只在打开分支选择器时取，不拖慢 `list`。

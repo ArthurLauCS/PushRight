@@ -66,7 +66,7 @@ fn graph_rows_refs_and_detail() {
     assert!(detail::detail(&repo, "--output=x").is_err());
 
     assert!(refs::stashes(&repo).unwrap().is_empty());
-    let wt = refs::worktrees(&repo).unwrap();
+    let wt = refs::worktrees(&repo, false).unwrap();
     assert_eq!((wt.len(), wt[0].branch.as_deref(), wt[0].head.as_str()), (1, Some("refs/heads/main"), rows[0].id.as_str()));
 
     std::fs::remove_dir_all(&dir).unwrap();

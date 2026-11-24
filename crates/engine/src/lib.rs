@@ -8,6 +8,7 @@ pub mod history;
 pub mod identity;
 pub mod local_files;
 pub mod ops;
+pub mod overview;
 pub mod refs;
 pub mod review;
 pub mod status;
