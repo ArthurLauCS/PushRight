@@ -114,6 +114,12 @@ pub struct RepoView {
     pub refs: Refs,
     pub stashes: Vec<Stash>,
     pub worktrees: Vec<Worktree>,
+    /// 工作树总览页的数据（多了未推送、已合并、最后活动），只在那一页读，见 `load_overview`
+    pub overview: Vec<engine::overview::Group>,
+    /// 总览里在页签中打开着的工作树路径，不清理
+    pub overview_open: Vec<String>,
+    /// 总览显示所有仓库（打开的页签和最近打开的），否则只显示本仓库
+    pub overview_all: bool,
     pub entries: Vec<Entry>,
     /// 改动分组，和 entries 同一次刷新读出
     pub groups: Vec<Group>,
@@ -280,6 +286,9 @@ impl RepoView {
             refs: Refs { head: None, head_id: None, ahead_behind: None, in_progress: None, revert_disabled: false, refs: Vec::new() },
             stashes: Vec::new(),
             worktrees: Vec::new(),
+            overview: Vec::new(),
+            overview_open: Vec::new(),
+            overview_all: false,
             entries: Vec::new(),
             groups: Vec::new(),
             reviews: HashMap::new(),
@@ -367,7 +376,7 @@ impl RepoView {
                     Ok::<_, String>((
                         engine::refs::list(repo)?,
                         engine::refs::stashes(repo)?,
-                        engine::refs::worktrees(repo)?,
+                        engine::refs::worktrees(repo, false)?,
                         engine::status::status(repo)?,
                         engine::identity::read(repo)?,
                         engine::workflow::read(repo)?,
@@ -495,6 +504,10 @@ impl RepoView {
         cx.spawn(async move |this, cx| {
             load.await;
             let Ok(next) = this.update(cx, |this, cx| {
+                // 所有仓库要读好几个仓库，文件变化触发的后台刷新不重读
+                if this.view == View::Worktrees && (!background || !this.overview_all) {
+                    this.load_overview(cx);
+                }
                 if !this.started {
                     return None;
                 }
@@ -662,6 +675,9 @@ impl RepoView {
         if view == View::Requests && self.requests.is_none() {
             let (session, me) = (self.session.clone(), cx.entity().downgrade());
             self.requests = Some(cx.new(|cx| Requests::new(session, me, window, cx)));
+        }
+        if view == View::Worktrees {
+            self.load_overview(cx);
         }
         self.view = view;
         cx.notify();
@@ -1301,9 +1317,8 @@ impl RepoView {
 
     pub fn remove_worktree(&mut self, w: &Worktree, window: &mut Window, cx: &mut Context<Self>) {
         let t = t(cx);
-        let name = w.path.trim_end_matches(['\\', '/']).rsplit(['\\', '/']).next().unwrap_or(&w.path).to_owned();
         let rx = self.ask(
-            Spec::new((t.wt_remove_title)(&name))
+            Spec::new((t.wt_remove_title)(worktrees::folder(&w.path)))
                 .message(explain(cx).worktree.undo.unwrap_or_default())
                 .maybe_warning((w.changes > 0).then(|| (t.wt_remove_warning)(w.changes)))
                 .danger(),
@@ -1312,6 +1327,80 @@ impl RepoView {
         );
         let (path, force) = (w.path.clone(), w.changes > 0);
         self.then(rx, window, cx, move |this, _, _, cx| this.exec_detached(Op::WorktreeRemove { path, force }, cx));
+    }
+
+    /// 读工作树总览：本仓库，或所有仓库（本仓库、打开的页签、最近打开的，依次排列）。
+    /// 每个工作树要多跑几条 git 命令，所以只在打开这一页、切换范围和刷新时读，不进侧栏刷新
+    pub fn load_overview(&mut self, cx: &mut Context<Self>) {
+        let all = self.overview_all;
+        let tabs: Vec<String> = store::get(cx, "tabs").unwrap_or_default();
+        let mut paths = vec![self.path.clone()];
+        if all {
+            paths.extend(tabs.iter().cloned());
+            paths.extend(store::get::<Vec<String>>(cx, "recent").unwrap_or_default());
+        }
+        let job = cx.background_spawn(async move {
+            let groups = engine::overview::groups(&paths);
+            let tabs: Vec<_> = tabs.iter().filter_map(|p| std::fs::canonicalize(p).ok()).collect();
+            let open = groups.iter().flat_map(|g| &g.worktrees).filter(|w| std::fs::canonicalize(&w.path).is_ok_and(|p| tabs.contains(&p))).map(|w| w.path.clone()).collect();
+            (groups, open)
+        });
+        cx.spawn(async move |this, cx| {
+            let (groups, open) = job.await;
+            let _ = this.update(cx, |this, cx| {
+                // 读的时候又切换了范围，这份作废
+                if this.overview_all == all {
+                    this.overview = groups;
+                    this.overview_open = open;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// 可以一键清理的工作树（所在仓库的主工作树, 工作树）：已合并、没有未提交的改动、没有未推送的提交，
+    /// 不含主工作树和在页签中打开着的
+    pub fn cleanable(&self) -> Vec<(String, Worktree)> {
+        let idle = |w: &&Worktree| w.merged && w.changes == 0 && w.unpushed == 0 && w.ahead_behind.is_none_or(|(ahead, _)| ahead == 0) && !self.overview_open.contains(&w.path);
+        self.overview.iter().flat_map(|g| g.worktrees.iter().skip(1).filter(idle).map(|w| (g.path.clone(), w.clone()))).collect()
+    }
+
+    /// 清理已合并的工作树：列出来让用户勾选（默认全勾），逐个删文件夹和本地分支，删不掉的报在命令日志里
+    pub fn clean_worktrees(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let t = t(cx);
+        let items = self.cleanable();
+        let fields = items.iter().map(|(_, w)| Field::checkbox(w.path.clone(), format!("{} · {}", worktrees::folder(&w.path), w.branch.as_deref().map(short).unwrap_or(t.detached)), true));
+        let rx = self.ask(Spec::new(t.wt_cleanup_title).message(t.wt_cleanup_hint).danger().confirm(t.wt_cleanup_confirm).fields(fields), window, cx);
+        self.then(rx, window, cx, move |this, v, _, cx| {
+            if this.busy || this.working_busy {
+                return;
+            }
+            let picked: Vec<_> = items.into_iter().filter(|(_, w)| v.bool(&w.path)).collect();
+            this.busy = true;
+            this.error.clear();
+            cx.notify();
+            let job = cx.background_spawn(async move { picked.iter().map(|(main, w)| engine::overview::clean(main, w)).collect::<Vec<_>>() });
+            cx.spawn(async move |this, cx| {
+                let results = job.await;
+                let _ = this.update(cx, |this, cx| {
+                    this.busy = false;
+                    for r in results {
+                        match r {
+                            Ok(logs) => {
+                                for log in logs {
+                                    this.show_log |= !log.ok;
+                                    this.push_log(log);
+                                }
+                            }
+                            Err(e) => this.error = e,
+                        }
+                    }
+                    let _ = this.refresh(false, cx);
+                });
+            })
+            .detach();
+        });
     }
 
     /// 在（新）页签中打开另一个仓库或工作树

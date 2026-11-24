@@ -83,7 +83,7 @@ pub fn call(tabs: &Tabs, cmd: &str, a: &Value) -> Result<Value> {
         "row_of" => out(s.graph.row_of(&arg::<String>(a, "id")?)),
         "refs" => out(refs::list(repo)?),
         "stashes" => out(refs::stashes(repo)?),
-        "worktrees" => out(refs::worktrees(repo)?),
+        "worktrees" => out(refs::worktrees(repo, false)?),
         "remotes" => out(refs::remotes(repo)?),
         "tracking" => out(refs::tracking(repo)?),
         "detail" => out(detail::detail(repo, &arg::<String>(a, "id")?)?),
