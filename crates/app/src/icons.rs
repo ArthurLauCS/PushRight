@@ -55,6 +55,7 @@ icons! {
     Wrap "wrap" "M3 6h18M3 12h15a3 3 0 1 1 0 6h-4m2-2-2 2 2 2M3 18h7",
     ContextLess "context-less" "M3 5h18M3 19h18M8 12h8",
     ContextMore "context-more" "M3 5h18M3 19h18M8 12h8M12 8v8",
+    More "more" "M5 12h.01M12 12h.01M19 12h.01",
     WholeFile "whole-file" "M3 4h18M3 20h18M12 8v8M9 11l3-3 3 3M9 13l3 3 3-3",
     Split "split" "M3 4h18v16H3zM12 4v16",
     Maximize "maximize" "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",

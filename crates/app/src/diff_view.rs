@@ -794,7 +794,7 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
                 let this = this.clone();
                 bar = bar.child(btn(("discard-hunk", h)).small().danger().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, true, window, cx))));
             }
-            if editable {
+            if editable && v.on_apply.is_some() {
                 let text = v.label(h, cx);
                 let this = this.clone();
                 bar = bar.child(btn(("apply-hunk", h)).small().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
