@@ -562,6 +562,7 @@ export const messages = {
     upstreamMismatch: '上游名字不一致',
     forcePushWarning: (dest: string) => `强制推送会用你本地的分支覆盖 ${dest} 的历史，只存在于远程的提交会从该分支上消失。如果远程在你上次获取之后有了新提交，这次推送会被拒绝。`,
     conflicts: '冲突',
+    openInNewWindow: '在新窗口打开',
     commitAs: (identity: string) => `提交说明（Ctrl+Enter 以 ${identity} 的身份提交）`,
     emptyMessage: '请先填写提交说明',
     nothingStaged: '还没有暂存任何改动。要暂存全部改动并提交吗？',

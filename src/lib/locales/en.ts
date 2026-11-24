@@ -549,6 +549,7 @@ export const messages = {
     upstreamMismatch: 'Upstream name differs',
     forcePushWarning: (dest: string) => `Force push replaces the history of ${dest} with your local branch. Commits that exist only on the remote will be removed from that branch. The push is rejected if the remote has changed since your last fetch.`,
     conflicts: 'Conflicts',
+    openInNewWindow: 'Open in New Window',
     commitAs: (identity: string) => `Message (Ctrl+Enter to commit as ${identity})`,
     emptyMessage: 'Enter a commit message first',
     nothingStaged: 'Nothing is staged. Stage all changes and commit them?',

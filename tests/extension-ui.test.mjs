@@ -449,17 +449,25 @@ test('branch picker keeps local refs before remote refs in a stable order and ti
     { name: 'refs/remotes/origin/old' }, { name: 'refs/heads/old' }, { name: 'refs/remotes/origin/recent' }, { name: 'refs/heads/recent' }, { name: 'refs/heads/main' },
   ] } }
   let choose = 2, typed
-  const vscode = { window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed } } }
+  const opened = []
+  const vscode = {
+    window: { showQuickPick: async (items) => { shown.push(items); return items[choose] }, showInputBox: async ({ validateInput }) => { assert.ok(validateInput('feature/x')); assert.equal(validateInput(typed), undefined); return typed }, showInformationMessage: async (_title, _options, button) => button },
+    commands: { executeCommand: (cmd, uri) => opened.push([cmd, uri.fsPath]) }, Uri: { file: (fsPath) => ({ fsPath }) },
+  }
   const core = {
-    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' } }, v: {}, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
+    activeRepo: () => repo, help: { checkout: { short: '' } }, t: { checkoutRemote: 'remote', branchRule: 'rule', opNames: { checkout: 'checkout' }, compareBranch: { pick: 'versus', hint: '', pickBranch: '', base: '' }, inOtherWorktreeMark: 'elsewhere', switchDirtyTitle: (b) => b, inOtherWorktree: (b, p) => `${b} ${p}` }, v: { openInNewWindow: 'open' }, short: (name) => name.replace(/^refs\/(heads|remotes)\//, ''),
     stored: () => saved, store: async (key, value) => { saved[key] = value }, run: (_, op) => sent.push(op), headBranch: () => 'main', ago: (time) => `at ${time}`,
-    engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest' }] } },
+    engine: { call: async (cmd) => { assert.equal(cmd, 'branch_tips'); return [{ name: 'refs/heads/recent', short_id: 'abc1234', author: 'alice', time: 5, subject: 'latest', worktree: '' }, { name: 'refs/heads/old', short_id: 'def5678', author: 'bob', time: 3, subject: 'older', worktree: 'C:/wt/old' }] } },
   }
   const { checkout, pickScope } = load('sync', { vscode, './core': core, '../../src/lib/push-target': {}, '../../src/lib/branch-name': await import('../src/lib/branch-name.ts') })
   await checkout(repo)
   assert.deepEqual(shown[0].slice(1).map((item) => item.ref), ['refs/heads/old', 'refs/heads/recent', 'refs/remotes/origin/old', 'refs/remotes/origin/recent'])
   assert.deepEqual([shown[0][2].description, shown[0][2].detail], ['at 5', 'alice · abc1234 · latest'], 'each branch shows its latest commit')
   assert.deepEqual(sent, [{ op: 'checkout', target: 'recent' }])
+  choose = 1
+  await checkout(repo)
+  assert.equal(shown.at(-1)[1].description, '$(window) elsewhere · at 3', 'a branch checked out in another worktree is marked')
+  assert.deepEqual([opened, sent.length], [[['vscode.openFolder', 'C:/wt/old']], 1], 'picking it opens that worktree instead of checking out')
   choose = 0; typed = 'feat_S_userLogin'
   await checkout(repo)
   assert.deepEqual(sent.at(-1), { op: 'create_branch', name: 'feat_S_userLogin', start: 'HEAD', checkout: true }, 'new branches default to the current commit')
