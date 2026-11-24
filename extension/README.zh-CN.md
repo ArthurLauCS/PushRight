@@ -6,11 +6,11 @@
 
 PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图。推送前明确目标，每次 Pull 默认勾选 **Rebase instead of merge**。包含中英文界面，扩展语言跟随 VS Code。
 
-**1.2.0 正式版**：**PushRight: 打开提交图** 和 **在提交图中定位** 改为用 [PushRight 桌面版](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0)打开仓库，不再在编辑器页签里显示；桌面版已在运行时直接切换到该仓库。需要先安装桌面版，或把 `pushright.desktopPath` 设为它的 `pushright.exe`。VSIX 从 13 MB 减到 1.7 MB。日期时区改用 **PushRight: 时区…** 选择。
+**1.2.1**：打开含 Git 仓库的工作区时扩展立即启动，不再等其他扩展全部启动完，新窗口几秒内就能在源代码管理里看到改动，上次留着的对比标签页也能恢复。侧栏提交图改用桌面版 1.6 的配色；一边删除一边修改的冲突选择被删的一边时直接删除文件，不再报错。
 
 中文菜单、弹窗选项和命令面板附加对应 Git 命令。源代码管理中的“仓库设置”可禁用当前仓库的 revert，与桌面版及关联工作树共享；禁用后阻止发起和继续 revert，仍允许中止。默认允许 revert，此设置不限制终端或其他 Git 工具。
 
-**[下载 VSIX · Windows x64 · 1.2.0](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0)
+**[下载 VSIX · Windows x64 · 1.2.1](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [版本说明与校验值](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1)
 
 ## 界面预览
 
@@ -68,7 +68,7 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 - 可选择 **自动（Auto）**、**全部分支**或某个本地/远程分支。Auto 显示 HEAD、上游及远程基准分支（依次尝试已有 VS Code 基准设置、分支创建来源、远程默认分支）。按仓库记住选择，筛选不切换分支。获取、拉取、推送作用于所选仓库的**当前检出分支**；图中的推送固定使用同名远程分支，并确认目标。
 - 已初始化的子模块和嵌套仓库分别显示仓库入口、提交图和源代码管理，子仓库名称包含父路径。新增仓库后可点“刷新”；新增工作区文件夹会自动识别。打开被忽略的嵌套仓库内的文件，也会识别其仓库归属。
 - 新增目录逐个列出未跟踪文件，可在暂存前查看每个文件，并分别暂存；仍遵守忽略规则。
-- 运行 **PushRight: 打开提交图** 或点击侧栏提交图标题栏按钮，在桌面版中浏览分支、提交和差异。如果曾隐藏侧栏图，可在源代码管理的“视图”菜单中重新勾选 **PushRight 提交图**。
+- 运行 **PushRight: 打开提交图** 或点击侧栏提交图标题栏按钮，在 [PushRight 桌面版](https://github.com/ArthurLauCS/PushRight/releases/latest)中浏览分支、提交和差异；桌面版已在运行时直接切换到该仓库。需要先安装桌面版，或把 `pushright.desktopPath` 设为它的 `pushright.exe`。如果曾隐藏侧栏图，可在源代码管理的“视图”菜单中重新勾选 **PushRight 提交图**。
 - 快速修改当前仓库的提交名和邮箱。
 - 提交输入框自动带出仓库的提交信息模板；**PushRight: 最近的提交信息…** 复用之前写过的信息，**PushRight: 运行提交前检查** 执行仓库设置的检查命令。模板和检查命令在桌面版的“仓库设置”里填写。
 - 侧栏提交图顶部有“标签”“只看主线”两个开关。
@@ -106,11 +106,11 @@ PushRight 在 VS Code 中提供 Git 源代码管理、Blame、历史和提交图
 
 ## VSIX 安装
 
-在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
+在 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1) 下载 Windows x64 VSIX，然后执行 VS Code 或 Cursor 的“扩展：从 VSIX 安装”，或：
 
 ```sh
-code --install-extension pushright-win32-x64-1.2.0.vsix
-cursor --install-extension pushright-win32-x64-1.2.0.vsix
+code --install-extension pushright-win32-x64-1.2.1.vsix
+cursor --install-extension pushright-win32-x64-1.2.1.vsix
 ```
 
 反馈问题请提交到 [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues)，附版本和复现步骤；分享日志前移除凭据和私有仓库信息。

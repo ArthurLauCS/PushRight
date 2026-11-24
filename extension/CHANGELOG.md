@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+- PushRight activates as soon as a workspace with a Git repository opens instead of waiting for every other extension to start. With a few dozen extensions installed, Source Control showed PushRight's changes after 12–24 s; now after 3–4 s. Diff tabs restored from the last session open again instead of being dropped.
+- The sidebar commit graph uses the palette of desktop 1.6.
+- Taking the deleted side of a modify/delete conflict deletes the file instead of failing.
+
+打开含 Git 仓库的工作区时扩展立即启动，不再等其他扩展全部启动完。装了几十个扩展时，源代码管理里要 12–24 秒才出现 PushRight 的改动，现在 3–4 秒；上次留着的对比标签页也能恢复，不再被丢掉。侧栏提交图改用桌面版 1.6 的配色。一边删除一边修改的冲突选择被删的一边时直接删除文件，不再报错。
+
 ## 1.2.0
 
 - **Open Commit Graph** and **Show in Commit Graph** open the repository in the PushRight desktop app; a running instance switches to it. Set `pushright.desktopPath` when the app is not in its default location. The in-editor full panel is removed, shrinking the VSIX from 13 MB to 1.7 MB.

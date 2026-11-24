@@ -57,7 +57,7 @@ VS Code／Cursor 中的 **PushRight: 打开提交图** 和 **在提交图中定�
 
 ## 下载与安装
 
-**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
+**[下载桌面安装包](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[下载 VSIX（VS Code / Cursor）](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [SHA256 校验值](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
 
 从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) 下载 `PushRight-Setup-1.6.1.exe`，运行安装程序。安装到当前用户的 `%LOCALAPPDATA%\Programs\PushRight`，不需要管理员权限。
 
@@ -146,14 +146,14 @@ PushRight 使用系统 Git 的凭据管理器或 SSH 配置；遇到认证失败
 
 ## VS Code / Cursor 扩展
 
-扩展 **1.2.0** 改为用桌面版打开提交图，并新增 **PushRight: 时区…**。侧栏提交图保留提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
+扩展 **1.2.1** 在打开含 Git 仓库的工作区时立即启动，新窗口几秒内就能在源代码管理里看到改动，上次留着的对比标签页也能恢复；“打开提交图”用桌面版显示仓库。侧栏提交图保留提交内文件列表与原生差异、Auto / 全部分支 / 指定分支筛选、同名推送、子仓库识别、顺序固定并以对钩标记当前分支的分支列表，以及批量本机忽略和跟踪管理。
 
-同一套引擎可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
+同一套引擎可以在 VS Code 里运行。从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) 安装 Windows x64 正式版，或从 [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1) 下载 VSIX。使用条件和边界见[扩展说明](extension/README.zh-CN.md)。也可从源码构建：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm ext:package
-code --install-extension extension/pushright-win32-x64-1.2.0.vsix
+code --install-extension extension/pushright-win32-x64-1.2.1.vsix
 ```
 
 - **源代码管理面板**：已暂存、未暂存和冲突的文件；按文件或按选中的行暂存、取消暂存、丢弃；提交和修补上次提交；行号旁的改动标记和资源管理器角标。首次使用时 PushRight 会说明关闭 VS Code 自带 Git 的后果，由你决定是否关闭。

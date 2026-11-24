@@ -6,11 +6,11 @@
 
 PushRight brings Git source control, blame, history and a commit graph into VS Code. It makes push destinations explicit and defaults every Pull to **Rebase instead of merge**. English and Simplified Chinese are included; the extension follows VS Code's display language.
 
-**1.2.0**: **PushRight: Open Commit Graph** and **Show in Commit Graph** open the repository in the [PushRight desktop app](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0) instead of an editor tab; a running instance switches to that repository. Install the desktop app first, or set `pushright.desktopPath` to its `pushright.exe`. The VSIX shrinks from 13 MB to 1.7 MB. Choose the date time zone with **PushRight: Time Zone…**.
+**1.2.1**: PushRight activates as soon as a workspace with a Git repository opens instead of waiting for every other extension, so Source Control shows its changes within seconds of opening a window, and diff tabs from the last session reopen. The sidebar graph uses the palette of desktop 1.6, and taking the deleted side of a modify/delete conflict deletes the file instead of failing.
 
 PushRight adds native Git commands to Chinese action labels across menus, dialogs and the command palette. Open **Repository settings** in Source Control to disable revert for the local repository. The setting is shared with the desktop app and linked worktrees; it blocks starting and continuing revert while allowing abort. Revert is allowed by default. Terminal Git and other tools are unaffected.
 
-**[Download VSIX · Windows x64 · 1.2.0](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0)
+**[Download VSIX · Windows x64 · 1.2.1](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [Release notes and checksums](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1)
 
 ## Preview
 
@@ -69,7 +69,7 @@ The branch picker lists local branches before remote branches in a fixed order a
 - Choose **Auto**, **All branches**, or a local/remote branch. Auto shows HEAD, its upstream and a remote base (the existing VS Code base setting, the branch creation source, then the remote default branch). Selection is remembered per repository and does not check out a branch. Fetch, Pull and Push act on the displayed repository's **checked-out branch**; the graph's Push always targets a remote branch with the same name and confirms the destination.
 - Initialized submodules and nested repositories have separate repository entries, graphs and source controls. Child names include their parent path. Use **Refresh** after adding a repository; workspace-folder additions are detected automatically. An ignored nested repository is also detected when you open one of its files.
 - New folders list their untracked files individually, so you can inspect and stage each file before committing. Ignored files stay excluded.
-- Run **PushRight: Open Commit Graph**, or use the sidebar graph's title button, to browse branches, commits and file differences in the desktop app. If the sidebar graph was hidden, enable **PushRight Graph** in Source Control's **Views** menu.
+- Run **PushRight: Open Commit Graph**, or use the sidebar graph's title button, to browse branches, commits and file differences in the [PushRight desktop app](https://github.com/ArthurLauCS/PushRight/releases/latest); a running instance switches to that repository. Install the desktop app first, or set `pushright.desktopPath` to its `pushright.exe`. If the sidebar graph was hidden, enable **PushRight Graph** in Source Control's **Views** menu.
 - Change the commit name and email for the current repository.
 - The commit box is pre-filled with the repository's commit message template. **PushRight: Recent Commit Messages…** reuses an earlier message; **PushRight: Run Pre-Commit Check** runs the repository's check command. Set the template and the check command under **Repository settings** in the desktop app.
 - The sidebar graph has **Tags** and **First parent only** toggles.
@@ -107,11 +107,11 @@ Ignore rules do not hide changes to tracked files. Stop-tracking refuses to disc
 
 ## Install from VSIX
 
-Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
+Download the Windows x64 VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1), then use **Extensions: Install from VSIX** in VS Code or Cursor, or:
 
 ```sh
-code --install-extension pushright-win32-x64-1.2.0.vsix
-cursor --install-extension pushright-win32-x64-1.2.0.vsix
+code --install-extension pushright-win32-x64-1.2.1.vsix
+cursor --install-extension pushright-win32-x64-1.2.1.vsix
 ```
 
 Report problems in [GitHub Issues](https://github.com/ArthurLauCS/PushRight/issues), including the version and reproduction steps. Remove credentials and private repository information from logs before sharing.
