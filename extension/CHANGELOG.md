@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0
+
+- A linked worktree or submodule keeps its Git directory outside the workspace, so commits and branch switches made in a terminal never refreshed Source Control. PushRight now watches those directories and refreshes within about a second.
+- The branch picker marks branches checked out in another worktree. Picking one opens that worktree in a new window instead of running a checkout Git would refuse.
+- Search Commits takes the text right away: press Enter to search messages, or pick another field.
+- Committing during a merge, cherry-pick or revert drops the `# Conflicts:` comment lines of Git's prepared message, as Git does when committing from its editor.
+- Staging, unstaging, ignoring and tracking reread only the status. New files and repositories without commits show as uncommitted in inline blame instead of an error. Previous Revision on a file without changes opens the latest commit's diff first.
+
+关联工作树和子模块的 Git 目录在工作区外，在终端里提交、切分支后源代码管理不会刷新；现在会监听这些目录，约 1 秒内刷新。分支选择框标出已在别的工作树签出的分支，选中时在新窗口打开那个工作树，不再执行会被 Git 拒绝的切换。搜索提交可以直接输入内容，回车按提交说明搜，或再选别的范围。合并、摘取、撤销进行中提交时，和 Git 用编辑器提交一样去掉预填说明里的 `# Conflicts:` 注释行。暂存、取消暂存、忽略和跟踪只重读状态；新文件和还没有提交的仓库在行内作者里显示为未提交，不再报错；没有改动的文件第一次“上一版本”直接看最近一次提交的差异。
+
 ## 1.2.1
 
 - PushRight activates as soon as a workspace with a Git repository opens instead of waiting for every other extension to start. With a few dozen extensions installed, Source Control showed PushRight's changes after 12–24 s; now after 3–4 s. Diff tabs restored from the last session open again instead of being dropped.

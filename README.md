@@ -25,6 +25,8 @@ The extension updates automatically when installed from VS Code Marketplace. The
 
 ## This release
 
+Version **1.6.2** strips Git's comment lines, such as the `# Conflicts:` list, from the prepared message when you commit during a merge, cherry-pick or revert. Extension **1.3.0** ships with it: Source Control refreshes after terminal commits in linked worktrees and submodules, the branch picker opens the worktree that already has a branch checked out, and Search Commits takes the text right away. See the [release notes](docs/RELEASE_1.6.2.md).
+
 Version **1.6.1** fixes the conflict view. Files with long lines no longer push the conflict pane and its buttons past the window. Modify/delete, rename and submodule conflicts show both sides and can be resolved by taking one side, where choosing the deleted side deletes the file. Text files with a late NUL byte and lines that merely start with `<<<<<<<` are read correctly, and the “working tree is clean” hint no longer covers the file filter. See the [release notes](docs/RELEASE_1.6.1.md).
 
 Version **1.6.0** restyles the desktop app: a flatter look with a calmer palette, one font per role (Segoe UI Variable Text for the interface, Noto Serif SC for titles, LXGW WenKai for prose, Cascadia Code for code), repository tabs with a bottom rule and a new-tab button, and a dark title bar that follows the theme. The extension's commit graph uses the same palette. See the [release notes](docs/RELEASE_1.6.0.md).
@@ -49,24 +51,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.6.1 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.6.2 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 ![PushRight 1.6.0: commit graph, branches and file differences](docs/images/desktop-1.6.0.png)
 
 The first screenshot shows the 1.6.0 desktop app on PushRight's own repository; the other screenshot, from 1.2.0, uses a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.1.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/PushRight-Setup-1.6.2.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/pushright-win32-x64-1.3.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.6.1.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.6.2.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.1.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.2.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
@@ -151,14 +153,14 @@ App text, tooltips, explanations and app-generated errors are translated. Reposi
 
 ## VS Code / Cursor extension
 
-Extension **1.2.1** activates as soon as a workspace with a Git repository opens, so Source Control shows its changes within seconds of opening a window and diff tabs from the last session reopen. Open Commit Graph shows the repository in the desktop app. The sidebar graph keeps inline commit file lists and native diffs, Auto / All / branch filters, same-name push, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
+Extension **1.3.0** activates as soon as a workspace with a Git repository opens, so Source Control shows its changes within seconds of opening a window and diff tabs from the last session reopen. It also follows terminal commits in linked worktrees and submodules, and the branch picker opens the worktree that already has a branch checked out. Open Commit Graph shows the repository in the desktop app. The sidebar graph keeps inline commit file lists and native diffs, Auto / All / branch filters, same-name push, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
 
-The same engine runs inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
+The same engine runs inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm ext:package
-code --install-extension extension/pushright-win32-x64-1.2.1.vsix
+code --install-extension extension/pushright-win32-x64-1.3.0.vsix
 ```
 
 - **Source Control panel**: staged, unstaged and conflicted files; stage, unstage or discard files or selected lines; commit and amend; gutter change markers and Explorer badges. On first use PushRight explains what turning off VS Code's built-in Git means and lets you decide.
