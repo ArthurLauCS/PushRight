@@ -117,6 +117,8 @@ pub struct RepoView {
     pub entries: Vec<Entry>,
     /// 改动分组，和 entries 同一次刷新读出
     pub groups: Vec<Group>,
+    /// 已审阅的文件 → 审阅后有没有再改过，和 entries 同一次刷新读出
+    pub reviews: HashMap<String, bool>,
     pub identity: Option<Identity>,
     /// 进行中的操作在 Git 里记下的信息；没有进行中的操作时为 None
     pub operation: Option<Operation>,
@@ -280,6 +282,7 @@ impl RepoView {
             worktrees: Vec::new(),
             entries: Vec::new(),
             groups: Vec::new(),
+            reviews: HashMap::new(),
             identity: None,
             operation: None,
             workflow: Settings::default(),
@@ -376,18 +379,20 @@ impl RepoView {
                     // 只有落后于上游时才可能撞上；多数刷新不用多跑这两条命令
                     let overlap = if refs.ahead_behind.is_some_and(|(_, behind)| behind > 0) { engine::refs::binary_overlap(repo).unwrap_or_default() } else { Vec::new() };
                     let groups = engine::groups::load(repo, &entries);
-                    (refs, stashes, worktrees, entries, groups, identity, workflow, tools, operation, overlap)
+                    let reviews = engine::review::load(repo, &entries);
+                    (refs, stashes, worktrees, entries, groups, reviews, identity, workflow, tools, operation, overlap)
                 });
                 all
             },
             |this, result, cx| {
                 match result {
-                    Ok((refs, stashes, worktrees, entries, groups, identity, workflow, tools, operation, overlap)) => {
+                    Ok((refs, stashes, worktrees, entries, groups, reviews, identity, workflow, tools, operation, overlap)) => {
                         this.refs = refs;
                         this.stashes = stashes;
                         this.worktrees = worktrees;
                         this.entries = entries;
                         this.groups = groups;
+                        this.reviews = reviews;
                         this.identity = Some(identity);
                         this.workflow = workflow;
                         this.external_tools = tools;

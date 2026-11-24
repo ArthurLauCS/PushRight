@@ -38,6 +38,8 @@ pub struct DiffPrefs {
     pub context: u32,
     /// 变更文件按文件夹显示
     pub tree: bool,
+    /// 本地更改的未暂存栏不列已审阅、审阅后也没再改的文件
+    pub hide_reviewed: bool,
     /// 并排时左栏占的比例，拖中间的分隔条调整
     pub split_ratio: f32,
     /// 显示整个文件：只在本次运行内有效，免得每打开一个文件都取全文
@@ -47,7 +49,7 @@ pub struct DiffPrefs {
 
 impl Default for DiffPrefs {
     fn default() -> DiffPrefs {
-        DiffPrefs { ignore_ws: false, hidden: false, wrap: false, side_by_side: false, context: 3, tree: true, split_ratio: 0.5, whole: false }
+        DiffPrefs { ignore_ws: false, hidden: false, wrap: false, side_by_side: false, context: 3, tree: true, hide_reviewed: false, split_ratio: 0.5, whole: false }
     }
 }
 
@@ -289,6 +291,8 @@ pub struct DiffView {
     picking: Option<(usize, usize)>,
     /// 给了就在工具栏放禅模式按钮，铺满窗口的是这个视图
     pub zen: Option<Rc<AnyWeakView>>,
+    /// 审阅后又改过的文件：工具栏左边切换「审阅后的改动 / 全部改动」。值是现在是否只看审阅后的改动和切换回调，在 `set` 之前给
+    pub since: Option<(bool, Rc<dyn Fn(bool, &mut App)>)>,
     _colors: Option<Task<()>>,
     /// 上一次布局时的宽度，算并排分隔条的位置
     width: Rc<std::cell::Cell<f32>>,
@@ -326,6 +330,7 @@ impl DiffView {
             on_comment: None,
             picking: None,
             zen: None,
+            since: None,
             _colors: None,
             width: Rc::new(std::cell::Cell::new(800.)),
             text_sel: None,
@@ -361,6 +366,7 @@ impl DiffView {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        self.since = None;
         self.set(None, "", Mode::Readonly, None, None, None, cx);
     }
 
@@ -849,8 +855,10 @@ impl Render for DiffView {
         let step = CONTEXT_STEPS.iter().position(|&c| c == dp.context).unwrap_or(2);
         let has_hunks = self.diff().is_some_and(|d| !d.hunks.is_empty());
         let tool = |id: &'static str, icn: Icon, tip: String, on: bool| btn(id).small().quiet().icon_size(icn, px(14.)).on(on).tip(tip);
+        // 窄窗口放不下时换行，不往左压到别的栏上
         let bar = div()
             .flex()
+            .flex_wrap()
             .flex_none()
             .items_center()
             .justify_end()
@@ -860,6 +868,17 @@ impl Render for DiffView {
             .bg(p.surface)
             .border_b_1()
             .border_color(p.border)
+            .when_some(self.since.clone(), |bar, (on, toggle)| {
+                let all = toggle.clone();
+                bar.child(
+                    div()
+                        .flex()
+                        .flex_1()
+                        .gap(px(2.))
+                        .child(btn("since-review").small().text(t.review.since).on(on).tip(t.review.since_tip).on_click(move |_, _, cx| toggle(true, cx)))
+                        .child(btn("all-changes").small().text(t.review.all).on(!on).tip(t.review.all_tip).on_click(move |_, _, cx| all(false, cx))),
+                )
+            })
             .child(tool("prev", Icon::Up, t.diff_tools.previous.into(), false).disabled(!has_hunks).on_click(cx.listener(|this, _, _, cx| this.jump(false, cx))))
             .child(tool("next", Icon::Down, t.diff_tools.next.into(), false).disabled(!has_hunks).on_click(cx.listener(|this, _, _, cx| this.jump(true, cx))))
             .child(sep(cx))

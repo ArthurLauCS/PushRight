@@ -218,6 +218,15 @@ pub fn between_with(repo: &Repo, left: &str, right: &str, path: &str, old_path: 
     Ok(diff)
 }
 
+/// 两个内容对象之间的改动（已审阅的快照 → 文件现在的内容）
+pub(crate) fn blobs(repo: &Repo, old: &str, new: &str, opts: Options) -> Result<Diff> {
+    let flags = opts.flags();
+    let mut args = vec!["diff", "--no-color", "--no-ext-diff"];
+    args.extend(flags.iter().map(String::as_str));
+    args.extend([old, new]);
+    Ok(parse(&repo.git_limited(&args, MAX_PATCH)?))
+}
+
 fn images(repo: &Repo, left: Option<&str>, right: Option<&str>, old: &str, path: &str) -> Result<Option<[Option<String>; 2]>> {
     if !["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].contains(&path.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str()) { return Ok(None); }
     let read = |rev: Option<&str>, path: &str| -> Result<Option<String>> {
