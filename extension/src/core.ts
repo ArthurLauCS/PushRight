@@ -182,10 +182,10 @@ export async function attempt<T>(promise: Promise<T>): Promise<T | undefined> {
   }
 }
 
-/** 调一个会改动仓库的引擎命令，然后刷新。失败时返回 undefined。 */
-export async function write<T>(repo: Repo, cmd: string, args: object): Promise<T | undefined> {
+/** 调一个会改动仓库的引擎命令，然后刷新；`git` 为 false 表示只动了暂存区和文件（暂存、忽略），只重读状态。失败时返回 undefined。 */
+export async function write<T>(repo: Repo, cmd: string, args: object, git = true): Promise<T | undefined> {
   const result = await attempt(engine.call<T>(cmd, { tab: repo.tab, ...args }))
-  await refresh(repo)
+  await refresh(repo, git, true)
   return result
 }
 

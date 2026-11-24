@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import * as vscode from 'vscode'
 import type { Diff, Entry, Identity, Log, WorkflowSettings } from '../../src/lib/api'
 import {
-  activeRepo, attempt, closedRepos, closeRepo, discoverRepositories, engine, errorText, fileUri, help, log, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, under, v, write, type Repo,
+  activeRepo, attempt, closedRepos, closeRepo, discoverForFile, discoverRepositories, engine, errorText, fileUri, help, log, onRepoChange, refresh, rel, reopenRepo, repoOf, repos, REV, revOf, revUri, run, t, under, v, write, type Repo,
 } from './core'
 import { conflictFiles, statusCommands } from './sync'
 
@@ -61,7 +61,7 @@ async function commit(repo: Repo, amend: boolean) {
   if (!amend && !repo.status.some((e) => e.staged)) {
     if (!repo.status.length) return void vscode.window.showInformationMessage(t.clean)
     if (!(await vscode.window.showInformationMessage(v.nothingStaged, { modal: true, detail: help.stage.what }, v.stageAllAndCommit))) return
-    if ((await write(repo, 'stage', { paths: repo.status.map((e) => e.path) })) === undefined) return
+    if ((await write(repo, 'stage', { paths: repo.status.map((e) => e.path) }, false)) === undefined) return
   }
   // 仓库设置了「提交前自动检查」时先跑一遍；没通过由用户决定要不要照样提交
   const settings = await attempt(engine.call<WorkflowSettings>('workflow_settings', { tab: repo.tab }))
@@ -95,7 +95,7 @@ async function editIdentity(repo: Repo) {
 }
 
 async function discard(repo: Repo, paths: string[]) {
-  const detail = `${repo.root}\n\n${help.discard.what}\n\n${help.discard.undo}`
+  const detail = `${repo.root}\n\n${help.discard.what}\n\n${v.discardUndo}`
   if (await vscode.window.showWarningMessage(t.discardTitle(paths.length), { modal: true, detail }, t.discardConfirm)) await run(repo, { op: 'discard', paths })
 }
 
@@ -106,7 +106,7 @@ async function applySelection(mode: 'stage' | 'unstage' | 'discard') {
   if (!editor || !repo) return
   const staged = mode === 'unstage'
   if (staged ? revOf(editor.document.uri) !== '' : editor.document.uri.scheme !== 'file') return void vscode.window.showWarningMessage(v.selectionSide)
-  if (mode === 'discard' && !(await vscode.window.showWarningMessage(t.discardLinesTitle, { modal: true, detail: help.discard.undo }, t.discardLinesConfirm))) return
+  if (mode === 'discard' && !(await vscode.window.showWarningMessage(t.discardLinesTitle, { modal: true, detail: v.discardUndo }, t.discardLinesConfirm))) return
   // 保存可能失败，也可能经格式化改变选区；以保存成功后的行号为准。
   if (editor.document.isDirty && !(await editor.document.save())) return
   // 选区在行首结束时，最后那一行其实没被选中
@@ -134,7 +134,7 @@ async function applySelection(mode: 'stage' | 'unstage' | 'discard') {
     if (!picked.length) continue
     applied = true
     const args = mode === 'discard' ? { path, hunk, header, lines: picked } : { path, staged, hunk, header, lines: picked }
-    if ((await write(repo, mode === 'discard' ? 'discard_lines' : 'apply_lines', args)) === undefined) return
+    if ((await write(repo, mode === 'discard' ? 'discard_lines' : 'apply_lines', args, false)) === undefined) return
   }
   if (!applied) vscode.window.showInformationMessage(v.noChangedLines)
 }
@@ -161,9 +161,12 @@ export function registerScm(context: vscode.ExtensionContext) {
   // Quick Diff 的存在性检查、stat 和 readFile 共用一次读取；仓库刷新后失效。
   const contents = new WeakMap<Repo, Map<string, Promise<Buffer | null>>>()
   let revisionTime = Date.now()
-  const readRevision = (uri: vscode.Uri): Promise<Buffer | null> => {
+  const readRevision = async (uri: vscode.Uri): Promise<Buffer | null> => {
+    if (JSON.parse(uri.query).empty) return Buffer.alloc(0)
+    // 窗口恢复上次开着的对比视图时，仓库可能还没读完或者不在工作区里
+    if (!repoOf(uri)) await discoverForFile(uri.with({ scheme: 'file', query: '' }))
     const repo = repoOf(uri)
-    if (!repo || JSON.parse(uri.query).empty) return Promise.resolve(Buffer.alloc(0))
+    if (!repo) return Buffer.alloc(0)
     let cache = contents.get(repo)
     if (!cache) contents.set(repo, cache = new Map())
     const key = uri.toString()
@@ -309,18 +312,18 @@ export function registerScm(context: vscode.ExtensionContext) {
     }),
     command('openChange', openChange),
     command('openFile', (state: Resource) => vscode.window.showTextDocument(state.resourceUri)),
-    command('stage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'stage', { paths }))),
-    command('unstage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'unstage', { paths }))),
+    command('stage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'stage', { paths }, false))),
+    command('unstage', (...states: Resource[]) => eachRepo(states, (repo, paths) => write(repo, 'unstage', { paths }, false))),
     command('discard', (...states: Resource[]) => eachRepo(states, discard)),
     command('takeOurs', (state: Resource) => write(state.repo, 'conflict_take', { path: state.entry.path, theirs: false })),
     command('takeTheirs', (state: Resource) => write(state.repo, 'conflict_take', { path: state.entry.path, theirs: true })),
     command('stageAll', (arg) => {
       const repo = target(arg)
-      return repo && write(repo, 'stage', { paths: repo.status.filter((e) => e.unstaged).map((e) => e.path) })
+      return repo && write(repo, 'stage', { paths: repo.status.filter((e) => e.unstaged).map((e) => e.path) }, false)
     }),
     command('unstageAll', (arg) => {
       const repo = target(arg)
-      return repo && write(repo, 'unstage', { paths: repo.status.filter((e) => e.staged).map((e) => e.path) })
+      return repo && write(repo, 'unstage', { paths: repo.status.filter((e) => e.staged).map((e) => e.path) }, false)
     }),
     command('discardAll', (arg) => ((repo) => repo && discard(repo, []))(target(arg))),
     command('commit', (arg) => ((repo) => repo && commit(repo, false))(target(arg))),

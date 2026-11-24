@@ -67,8 +67,8 @@ export function registerLocalFiles(context: vscode.ExtensionContext) {
     const detail = `${targets.map(({ repo, path }) => `${repo.root}\n${path}`).join('\n\n')}\n\n${hint}`
     if (!(await vscode.window.showInformationMessage(title, { modal: true, detail }, title))) return
     for (const { repo, path } of targets) {
-      if (action === 'local' || action === 'shared') await write(repo, 'ignore_file', { path, shared: action === 'shared' })
-      else await write(repo, 'track_file', { path, track: action === 'track' })
+      if (action === 'local' || action === 'shared') await write(repo, 'ignore_file', { path, shared: action === 'shared' }, false)
+      else await write(repo, 'track_file', { path, track: action === 'track' }, false)
     }
     changed.fire()
   })

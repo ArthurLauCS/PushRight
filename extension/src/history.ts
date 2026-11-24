@@ -132,8 +132,10 @@ export function registerHistory(context: vscode.ExtensionContext) {
     // 对比视图里按右侧的版本定位；右侧是工作区文件、左侧是最近一版时为 -1；普通编辑器算还没开始（-2）
     const found = rev === undefined ? -1 : files.items.findIndex((c) => c.id === rev)
     const at = found >= 0 ? found : input instanceof vscode.TabInputTextDiff && revOf(input.original) === files.items[0].id && rev === undefined ? -1 : -2
-    if (delta > 0 && at + delta >= files.items.length) await files.loadMore()
-    const to = Math.max(-1, Math.min(files.items.length - 1, at + delta))
+    // 普通编辑器里的文件没有未提交的改动时，与最近一版相同，第一步直接看最近一次提交改了什么
+    const from = at === -2 && !vscode.window.activeTextEditor?.document.isDirty && !repo.status.some((e) => e.path === files.path) ? -1 : at
+    if (delta > 0 && from + delta >= files.items.length) await files.loadMore()
+    const to = Math.max(-1, Math.min(files.items.length - 1, from + delta))
     if (to === -1) {
       const head = files.items[0]
       return vscode.commands.executeCommand('vscode.diff', revUri(repo, head.path, head.id), fileUri(repo, files.path), `${basename(files.path)} (${head.id.slice(0, 8)} ↔ ${v.workingTree})`)
@@ -206,11 +208,21 @@ export function registerHistory(context: vscode.ExtensionContext) {
   async function search() {
     const repo = activeRepo()
     if (!repo) return
-    const kind = await vscode.window.showQuickPick(
-      (['message', 'author', 'file', 'content', 'id'] as const).map((by) => ({ label: v.searchKinds[by], by })),
-      { title: v.searchTitle },
-    )
-    const query = kind && (await vscode.window.showInputBox({ title: `${v.searchTitle} · ${kind.label}` }))
+    // 直接输入要找的内容，回车按提交说明搜，或选别的范围；没输入内容就选了范围时再问
+    const pick = vscode.window.createQuickPick<{ label: string; by: 'message' | 'author' | 'file' | 'content' | 'id'; alwaysShow: true }>()
+    pick.title = v.searchTitle
+    pick.placeholder = v.searchPlaceholder
+    pick.items = (['message', 'author', 'file', 'content', 'id'] as const).map((by) => ({ label: v.searchKinds[by], by, alwaysShow: true }))
+    // 输入的文字碰巧和某个范围名相同时，回车仍按提交说明搜
+    pick.onDidChangeValue(() => { pick.activeItems = [pick.items[0]] })
+    const kind = await new Promise<(typeof pick.items)[number] | undefined>((done) => {
+      pick.onDidAccept(() => done(pick.activeItems[0]))
+      pick.onDidHide(() => done(undefined))
+      pick.show()
+    })
+    const typed = pick.value.trim()
+    pick.dispose()
+    const query = kind && (typed || (await vscode.window.showInputBox({ title: `${v.searchTitle} · ${kind.label}` })))
     if (!query || !repos.includes(repo)) return
     await vscode.commands.executeCommand('pushright.search.focus')
     const loader = (skip: number) => engine.call<Commit[]>('search', { tab: repo.tab, kind: kind.by, query, limit: LIMIT + 1, skip })

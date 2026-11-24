@@ -27,7 +27,7 @@ const uri = (fsPath) => ({ fsPath, scheme: 'file', toString() { return `${this.s
 test('diff editors show current-line blame on both sides and reload inactive index snapshots', () => {
   const active = new Event(), visible = new Event(), selection = new Event(), changed = new Event(), closed = new Event()
   const repoChanged = new Event(), prefs = new Event(), theme = new Event(), config = new Event()
-  const repo = { root: '/repo', refs: { head_id: 'head' } }, requests = [], types = []
+  const repo = { root: '/repo', refs: { head_id: 'head' }, status: [] }, requests = [], types = []
   const status = { show() {}, hide() {} }
   const document = (rev, text = 'unchanged\nchanged\n', empty = false) => ({
     uri: rev === undefined ? uri('/repo/a.txt') : uri('/repo/a.txt').with({ scheme: 'pushright-rev', query: JSON.stringify({ rev, empty }) }),
@@ -705,11 +705,11 @@ test('local files expand lazily and tracking commands distinguish local rules, s
   assert.match(prompts.at(-1)[1].detail, /stages deletion for the team/)
   accept = true
   await commands.get('pushright.untrackFile')(file)
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }])
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }, false])
   await commands.get('pushright.trackFile')(file)
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: true }])
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: true }, false])
   await commands.get('pushright.untrackFile')({ repo, entry: { path: 'skills/a.md' }, resourceUri: file })
-  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }], 'SCM resource arguments use their URI, not the local-tree node shape')
+  assert.deepEqual(writes.at(-1), [repo, 'track_file', { path: 'skills/a.md', track: false }, false], 'SCM resource arguments use their URI, not the local-tree node shape')
   tracked = false
   const second = uri('/parent/child/skills/deep/b.md')
   await commands.get('pushright.ignoreLocal')(file, [file, second])
