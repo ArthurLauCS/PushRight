@@ -59,7 +59,7 @@ Source code for this release is available as [ZIP](https://github.com/ArthurLauC
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.2.0/pushright-win32-x64-1.2.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/PushRight-Setup-1.6.1.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/ext-v1.2.1/pushright-win32-x64-1.2.1.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.1/SHA256SUMS.txt)
 
 Download `PushRight-Setup-1.6.1.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.1) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
@@ -151,14 +151,14 @@ App text, tooltips, explanations and app-generated errors are translated. Reposi
 
 ## VS Code / Cursor extension
 
-Extension **1.2.0** opens the commit graph in the desktop app and adds **PushRight: Time Zone…**. The sidebar graph keeps inline commit file lists and native diffs, Auto / All / branch filters, same-name push, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
+Extension **1.2.1** activates as soon as a workspace with a Git repository opens, so Source Control shows its changes within seconds of opening a window and diff tabs from the last session reopen. Open Commit Graph shows the repository in the desktop app. The sidebar graph keeps inline commit file lists and native diffs, Auto / All / branch filters, same-name push, submodule discovery, a fixed-order branch list with the checked-out branch ticked, and batch local ignore / tracking controls.
 
-The same engine runs inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.2.0). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
+The same engine runs inside VS Code. Install the Windows x64 extension from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=AthurLau.pushright) or download the VSIX from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/ext-v1.2.1). See the [extension guide](extension/README.md) for requirements and limits. To build from source:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm ext:package
-code --install-extension extension/pushright-win32-x64-1.2.0.vsix
+code --install-extension extension/pushright-win32-x64-1.2.1.vsix
 ```
 
 - **Source Control panel**: staged, unstaged and conflicted files; stage, unstage or discard files or selected lines; commit and amend; gutter change markers and Explorer badges. On first use PushRight explains what turning off VS Code's built-in Git means and lets you decide.

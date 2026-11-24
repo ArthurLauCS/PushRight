@@ -2,7 +2,7 @@
   "name": "pushright",
   "displayName": "PushRight",
   "description": "%description%",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "AthurLau",
   "private": true,
   "icon": "icon.png",
@@ -26,6 +26,8 @@
   "type": "module",
   "main": "./out/extension.cjs",
   "activationEvents": [
+    "workspaceContains:.git",
+    "onFileSystem:pushright-rev",
     "onStartupFinished"
   ],
   "contributes": {
