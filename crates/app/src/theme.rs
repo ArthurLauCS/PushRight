@@ -3,7 +3,7 @@
 //!
 //! 中性色取 primer 的灰阶，功能色语义固定（绿 成功，橙 警告，红 危险，蓝 交互）；
 //! 全应用唯一的强调色取应用图标的黄色（浅色 #8a5d00，深色 #f0c23a），只用于焦点、选中标记、主按钮和链接。
-//! 字体按角色分四个字族（见下），Noto Serif SC 和霞鹜文楷随应用打包，找不到时退回系统字体。
+//! 字体按角色分四个字族（见下），Noto Serif SC、霞鹜文楷和 Maple Mono CN 随应用打包，找不到时退回系统字体。
 
 use gpui::{px, rgb, App, BoxShadow, Global, Hsla, Pixels, Window, WindowAppearance};
 use gpui_component::theme::{Theme, ThemeMode};
@@ -11,12 +11,12 @@ use gpui_component::theme::{Theme, ThemeMode};
 /// 四个字族各管一个区域：
 /// UI 界面控件：Segoe UI Variable Text，中文由 DirectWrite 回退到微软雅黑 UI（只有 400 / 700 两档字重）；
 /// DISPLAY 标题和名字（仓库名、分支名、页面和对话框标题、标签页名）：思源宋体，可变字重，600 / 700 都是真字重；
-/// PROSE 人写的话（提交说明、操作说明、空状态）：霞鹜文楷；MONO 哈希、路径、diff、数字：Cascadia Code。
+/// PROSE 人写的话（提交说明、操作说明、空状态）：霞鹜文楷；MONO 哈希、路径、diff、数字：Maple Mono CN，中文正好占两个英文字符宽，diff 按列算的选区和横向滚动才对得齐。
 /// 视图代码只写这四个常量，不写字族名。
 pub const UI: &str = "Segoe UI Variable Text";
 pub const DISPLAY: &str = "Noto Serif SC";
 pub const PROSE: &str = "LXGW WenKai";
-pub const MONO: &str = "Cascadia Code";
+pub const MONO: &str = "Maple Mono CN";
 
 pub const FS_SM: Pixels = px(12.);
 pub const FS_MD: Pixels = px(14.);

@@ -653,7 +653,7 @@ impl Requests {
             .size_full();
             div().relative().flex_1().min_h_0().child(list).vertical_scrollbar(&self.scroll).into_any_element()
         };
-        div().flex().flex_col().flex_none().w(px(layout(cx).requests)).min_h_0().child(bar).child(body).into_any_element()
+        div().flex().flex_col().flex_none().w(px(layout(cx).requests)).max_w(gpui::relative(0.5)).min_h_0().child(bar).child(body).into_any_element()
     }
 
     fn render_detail(&mut self, cx: &mut Context<Self>) -> AnyElement {

@@ -58,6 +58,7 @@ def main():
     assets = ROOT / "crates" / "app" / "assets"
     entries.append(("Noto Serif SC (font) 2.003", "", "https://github.com/notofonts/noto-cjk", "OFL-1.1", [assets / "OFL-NotoSerifSC.txt"]))
     entries.append(("LXGW WenKai (font) 1.530", "", "https://github.com/lxgw/LxgwWenKai", "OFL-1.1", [assets / "OFL-LXGWWenKai.txt"]))
+    entries.append(("Maple Mono CN (font) 7.9", "", "https://github.com/subframe7536/maple-font", "OFL-1.1", [assets / "OFL-MapleMono.txt"]))
 
     texts: dict[str, int] = {}
     blocks = []

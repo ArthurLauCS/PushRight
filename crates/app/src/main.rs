@@ -38,12 +38,12 @@ use gpui::{px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, Windo
 use std::borrow::Cow;
 use std::path::PathBuf;
 
-/// 两套中文字体：安装版在 exe 旁的 fonts 目录，开发时在 crates/app/assets/fonts（scripts/fonts.ps1 下载）。
+/// 打包的三套字体：安装版在 exe 旁的 fonts 目录，开发时在 crates/app/assets/fonts（scripts/fonts.ps1 下载）。
 /// 找不到时不报错，界面退回系统字体。
 fn load_fonts(cx: &mut App) {
     let exe = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("fonts")));
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts");
-    let fonts: Vec<Cow<'static, [u8]>> = ["NotoSerifSC-VF.ttf", "LXGWWenKai-Regular.ttf"]
+    let fonts: Vec<Cow<'static, [u8]>> = ["NotoSerifSC-VF.ttf", "LXGWWenKai-Regular.ttf", "MapleMono-CN-Regular.ttf"]
         .iter()
         .filter_map(|name| exe.iter().chain([&dev]).find_map(|dir| std::fs::read(dir.join(name)).ok()))
         .map(Cow::Owned)
@@ -78,6 +78,10 @@ fn main() {
             KeyBinding::new("ctrl-shift-tab", app::PrevTab, None),
             KeyBinding::new("ctrl-w", app::CloseTab, None),
             KeyBinding::new("ctrl-t", app::NewTab, None),
+            KeyBinding::new("ctrl-=", diff_view::CodeBigger, None),
+            KeyBinding::new("ctrl-+", diff_view::CodeBigger, None),
+            KeyBinding::new("ctrl--", diff_view::CodeSmaller, None),
+            KeyBinding::new("ctrl-0", diff_view::CodeReset, None),
         ]);
         let bounds = Bounds::centered(None, size(px(1440.), px(860.)), cx);
         let options = WindowOptions {

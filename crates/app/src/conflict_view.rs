@@ -1,5 +1,6 @@
 //! 逐处解决冲突：每个冲突块选我方、对方、两边都要，或者手动写结果；全部选好后保存并标记已解决。
 
+use crate::diff_view::{code_line_h, code_size};
 use crate::i18n::{error_text, t};
 use crate::icons::Icon;
 use crate::theme::{alpha, palette, FS_MD, FS_SM, MONO, PROSE};
@@ -171,7 +172,8 @@ impl Render for ConflictView {
         }
 
         // 长行折行显示：这里没有横向滚动，不折行就看不到行尾的改动
-        let pre = |text: &str| div().px(px(16.)).py(px(4.)).font_family(MONO).text_size(FS_SM).line_height(px(20.)).child(text.to_owned());
+        let (size, line_h) = (code_size(cx), code_line_h(cx));
+        let pre = |text: &str| div().px(px(16.)).py(px(4.)).font_family(MONO).text_size(size).line_height(line_h).child(text.to_owned());
         let mut body = div().id("conflict-body").track_scroll(&self.scroll).flex_1().min_h_0().overflow_y_scroll();
         let mut index = 0;
         for block in &conflict.blocks {
@@ -213,7 +215,7 @@ impl Render for ConflictView {
                                 .child(pre(&shown(theirs)).when(dropped_theirs, |s| s.line_through())),
                         );
                     if let Some(Choice::Custom(state)) = choice {
-                        section = section.child(side(p.orange, false).child(bar(t.edit_result_label, "")).child(div().mx(px(16.)).mb(px(8.)).child(Textarea::new(state).font_family(MONO).text_size(FS_SM))));
+                        section = section.child(side(p.orange, false).child(bar(t.edit_result_label, "")).child(div().mx(px(16.)).mb(px(8.)).child(Textarea::new(state).font_family(MONO).text_size(size))));
                     }
                     body.child(section)
                 }

@@ -359,7 +359,7 @@ impl Render for DetailView {
                         .flex_wrap()
                         .gap(px(4.))
                         .child(div().font_weight(FontWeight::BOLD).text_color(author_color(&detail.author, cx)).child(detail.author.clone()))
-                        .child(div().text_color(p.muted).child(format!("<{}> · {}", detail.author_email, fmt_time(cx, detail.author_time))))
+                        .child(div().min_w_0().truncate().text_color(p.muted).child(format!("<{}> · {}", detail.author_email, fmt_time(cx, detail.author_time))))
                         .into_any_element(),
                 ));
                 if detail.committer != detail.author || detail.committer_time != detail.author_time {
@@ -391,6 +391,7 @@ impl Render for DetailView {
         div()
             .flex()
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .bg(p.surface)
             .child(list)

@@ -9,11 +9,11 @@ use crate::layout;
 use crate::store;
 use crate::theme::{alpha, palette, Palette, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use crate::time::fmt_time;
-use crate::ui::{btn, label, sep};
+use crate::ui::{btn, label, sep, Btn};
 use engine::diff::{Diff, Line, Options};
 use engine::forge::{spot, Note, Spot};
 use gpui::prelude::*;
-use gpui::{div, img, list, px, AnyElement, AnyView, AnyWeakView, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
+use gpui::{actions, div, img, list, px, AnyElement, AnyView, AnyWeakView, App, ClipboardItem, Context, Entity, FocusHandle, FontStyle, Global, HighlightStyle, KeyDownEvent, ListAlignment, ListOffset, ListState, MouseButton, Pixels, ScrollWheelEvent, StyledText, Task, Window};
 use gpui_component::scroll::ScrollableElement;
 use gpui_component::ActiveTheme;
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,35 @@ pub fn init(cx: &mut App) {
     }
     p.split_ratio = if p.split_ratio.is_finite() { p.split_ratio.clamp(0.2, 0.8) } else { 0.5 };
     cx.set_global(p);
+    let size = store::get::<f32>(cx, "codeSize").filter(|s| s.is_finite()).unwrap_or(12.);
+    cx.set_global(CodeSize(size.clamp(10., 24.)));
+    cx.on_action(|_: &CodeBigger, cx| zoom(cx, |s| s + 1.));
+    cx.on_action(|_: &CodeSmaller, cx| zoom(cx, |s| s - 1.));
+    cx.on_action(|_: &CodeReset, cx| zoom(cx, |_| 12.));
+}
+
+actions!(pushright, [CodeBigger, CodeSmaller, CodeReset]);
+
+/// 代码字号（diff 和冲突视图里的代码、行号）：Ctrl+= / Ctrl+- 每次 1px，限 10–24px，Ctrl+0 恢复 12px；
+/// 存设置的 codeSize，所有页签共用。不放进 DiffPrefs：DiffPrefs 一变就会重新取 diff
+struct CodeSize(f32);
+
+impl Global for CodeSize {}
+
+pub fn code_size(cx: &App) -> Pixels {
+    px(cx.global::<CodeSize>().0)
+}
+
+/// 代码行高：12px 时 20px，随字号等比
+pub fn code_line_h(cx: &App) -> Pixels {
+    px((cx.global::<CodeSize>().0 * LINE_H / 12.).round())
+}
+
+fn zoom(cx: &mut App, to: impl FnOnce(f32) -> f32) {
+    let size = to(cx.global::<CodeSize>().0).clamp(10., 24.);
+    cx.set_global(CodeSize(size));
+    store::set(cx, "codeSize", size);
+    cx.refresh_windows();
 }
 
 pub fn prefs(cx: &App) -> &DiffPrefs {
@@ -302,6 +331,8 @@ pub struct DiffView {
     code_left: Rc<std::cell::Cell<[f32; 2]>>,
     /// 等宽字体一个字符的宽度
     char_w: f32,
+    /// 上次画的代码字号，变了要重新量每行的高度
+    size: Pixels,
     focus: FocusHandle,
 }
 
@@ -337,6 +368,7 @@ impl DiffView {
             dragging: false,
             code_left: Rc::new(std::cell::Cell::new([0.; 2])),
             char_w: 7.2,
+            size: FS_SM,
             focus: cx.focus_handle(),
         }
     }
@@ -412,7 +444,7 @@ impl DiffView {
         self.items = Rc::new(items);
         // 没画过的行按一行高估算，滚动条从一开始就按整份 diff 的长度算
         let top = self.list.logical_scroll_top();
-        self.list.reset_with_uniform_height(self.items.len(), px(LINE_H));
+        self.list.reset_with_uniform_height(self.items.len(), code_line_h(cx));
         if !reset_scroll {
             self.list.scroll_to(top);
         }
@@ -574,7 +606,7 @@ impl DiffView {
     fn max_scroll(&self, cx: &App) -> f32 {
         let p = prefs(cx);
         let view = self.width.get() * if p.side_by_side { p.split_ratio.min(1. - p.split_ratio) } else { 1. };
-        (self.widest as f32 * self.char_w + 80. - view).max(0.)
+        (self.widest as f32 * self.char_w + 80. * (self.size / FS_SM) - view).max(0.)
     }
 
     fn line_at(&self, ix: usize, side: Option<bool>) -> Option<&Line> {
@@ -670,7 +702,9 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
     };
     let spans = v.colors.get(h).and_then(|c| c.as_ref()).and_then(|c| c.get(i));
     let (text, styles) = display(&line.text, spans, prefs.hidden, p);
-    let no = |n: Option<u32>| div().flex_none().w(px(48.)).pr(px(8.)).flex().justify_end().text_color(p.muted).opacity(0.6).child(n.map(|n| n.to_string()).unwrap_or_default());
+    // 行号栏和增删记号栏随代码字号等比放宽
+    let k = v.size / FS_SM;
+    let no = |n: Option<u32>| div().flex_none().w(px(48. * k)).pr(px(8.)).flex().justify_end().text_color(p.muted).opacity(0.6).child(n.map(|n| n.to_string()).unwrap_or_default());
     let sign_color = if matches!(line.kind, '+' | '-') { p.text } else { p.muted };
     let wrap = prefs.wrap;
     let shift = if wrap { 0. } else { v.scroll_x };
@@ -711,7 +745,9 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
         .relative()
         .flex()
         .w_full()
-        .min_h(px(LINE_H))
+        .min_h(code_line_h(cx))
+        .text_size(v.size)
+        .line_height(code_line_h(cx))
         .pl(px(3.))
         .bg(if selected { p.selection } else { bg });
     let numbers = match half {
@@ -732,7 +768,7 @@ fn code_line(this: &Entity<DiffView>, v: &DiffView, ix: usize, h: usize, i: usiz
     }
     row = row
         .child(gutter)
-        .child(div().flex_none().w(px(24.)).flex().justify_center().text_color(sign_color).when(matches!(line.kind, '+' | '-'), |s| s.font_weight(gpui::FontWeight::SEMIBOLD)).child(line.kind.to_string()))
+        .child(div().flex_none().w(px(24. * k)).flex().justify_center().text_color(sign_color).when(matches!(line.kind, '+' | '-'), |s| s.font_weight(gpui::FontWeight::SEMIBOLD)).child(line.kind.to_string()))
         .child(code)
         // 左边 3px 的竖条：增删色；可选的行悬停时加深，选中时是强调色
         .child(
@@ -781,6 +817,9 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             let editable = v.editable(cx);
             let t = t(cx);
             let picked = v.picked(h).len();
+            // 栏窄时按钮只留名字，命令在悬停提示里
+            let wide = v.width.get() > 640.;
+            let named = |b: Btn| if wide { b } else { b.no_cmd() };
             let mut bar = div()
                 .flex()
                 .items_center()
@@ -798,12 +837,12 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             if editable && v.mode == Mode::Unstaged && v.on_discard.is_some() {
                 let text = if picked > 0 { (t.discard_lines)(picked) } else { t.discard_hunk.to_owned() };
                 let this = this.clone();
-                bar = bar.child(btn(("discard-hunk", h)).small().danger().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, true, window, cx))));
+                bar = bar.child(named(btn(("discard-hunk", h)).small().danger()).text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, true, window, cx))));
             }
             if editable && v.on_apply.is_some() {
                 let text = v.label(h, cx);
                 let this = this.clone();
-                bar = bar.child(btn(("apply-hunk", h)).small().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
+                bar = bar.child(named(btn(("apply-hunk", h)).small()).text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
             }
             bar.font_family(crate::theme::UI).into_any_element()
         }
@@ -832,7 +871,7 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             let ratio = prefs(cx).split_ratio;
             let half = |side: Option<usize>, old: bool| match side {
                 Some(i) => code_line(this, v, ix, h, i, Some(old), &p, cx),
-                None => div().size_full().min_h(px(LINE_H)).bg(p.hover).into_any_element(),
+                None => div().size_full().min_h(code_line_h(cx)).bg(p.hover).into_any_element(),
             };
             // 两栏按比例占满视窗，不随内容变宽；右栏左边一条分隔线
             div()
@@ -850,8 +889,13 @@ impl Render for DiffView {
         let p = palette(cx).clone();
         let t = t(cx);
         let dp = prefs(cx).clone();
+        let size = code_size(cx);
+        if size != self.size {
+            self.size = size;
+            self.list.remeasure();
+        }
         let font = window.text_system().resolve_font(&gpui::font(MONO));
-        self.char_w = window.text_system().advance(font, FS_SM, '0').map_or(7.2, |s| f32::from(s.width));
+        self.char_w = window.text_system().advance(font, size, '0').map_or(7.2, |s| f32::from(s.width));
         let step = CONTEXT_STEPS.iter().position(|&c| c == dp.context).unwrap_or(2);
         let has_hunks = self.diff().is_some_and(|d| !d.hunks.is_empty());
         let tool = |id: &'static str, icn: Icon, tip: String, on: bool| btn(id).small().quiet().icon_size(icn, px(14.)).on(on).tip(tip);
