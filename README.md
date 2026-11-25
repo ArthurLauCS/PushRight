@@ -25,6 +25,8 @@ The extension updates automatically when installed from VS Code Marketplace. The
 
 ## This release
 
+Version **1.7.0** helps review and land changes that pile up across several worktrees. **Change groups** sort the files on Local Changes into named groups, and each group is committed on its own with its name as the message. **Review marks** remember a file as you reviewed it: when it changes again, its diff shows only what changed since, and reviewed files can be hidden. The worktree page can list the worktrees of all open and recent repositories with merged, unpushed and last-activity columns, and **Clean up merged** removes those that are merged, clean and pushed. `Ctrl+=` / `Ctrl+-` / `Ctrl+0` zoom the code in diffs and the conflict view, and code uses the bundled Maple Mono CN font, so Chinese lines align. See the [release notes](docs/RELEASE_1.7.0.md).
+
 Version **1.6.2** strips Git's comment lines, such as the `# Conflicts:` list, from the prepared message when you commit during a merge, cherry-pick or revert. Extension **1.3.0** ships with it: Source Control refreshes after terminal commits in linked worktrees and submodules, the branch picker opens the worktree that already has a branch checked out, and Search Commits takes the text right away. See the [release notes](docs/RELEASE_1.6.2.md).
 
 Version **1.6.1** fixes the conflict view. Files with long lines no longer push the conflict pane and its buttons past the window. Modify/delete, rename and submodule conflicts show both sides and can be resolved by taking one side, where choosing the deleted side deletes the file. Text files with a late NUL byte and lines that merely start with `<<<<<<<` are read correctly, and the “working tree is clean” hint no longer covers the file filter. See the [release notes](docs/RELEASE_1.6.1.md).
@@ -51,24 +53,24 @@ Chinese action labels append native Git commands across menus, dialogs, buttons 
 
 The desktop app refreshes open repositories every minute and fetches when they open and every ten minutes, including background tabs. Both defaults can be disabled independently in **Automatic refresh and fetch** beside the language selector. Busy repositories defer work; failures appear in the command log and retry on schedule. Background fetch preserves `FETCH_HEAD`, the index and working files. Force push also uses `--force-if-includes` to protect remote commits fetched in the background. These timers run while the desktop app is open, not after it exits; the extension does not enable them.
 
-**v1.6.2 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
+**v1.7.0 (MIT licensed)** is available for Windows x64. It starts in English and includes complete English and Simplified Chinese UI packs. Switch languages in the top-right corner; your choice is remembered.
 
 ![PushRight 1.6.0: commit graph, branches and file differences](docs/images/desktop-1.6.0.png)
 
 The first screenshot shows the 1.6.0 desktop app on PushRight's own repository; the other screenshot, from 1.2.0, uses a local demo repository and fictional identities.
 
-Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.6.2.tar.gz).
+Source code for this release is available as [ZIP](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.7.0.zip) or [tar.gz](https://github.com/ArthurLauCS/PushRight/archive/refs/tags/v1.7.0.tar.gz).
 
 ## Download and install
 
-**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/PushRight-Setup-1.6.2.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/pushright-win32-x64-1.3.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/SHA256SUMS.txt)
+**[Download desktop installer](https://github.com/ArthurLauCS/PushRight/releases/download/v1.7.0/PushRight-Setup-1.7.0.exe)** · **[Download VSIX (VS Code / Cursor)](https://github.com/ArthurLauCS/PushRight/releases/download/v1.6.2/pushright-win32-x64-1.3.0.vsix)** · [SHA256 checksums](https://github.com/ArthurLauCS/PushRight/releases/download/v1.7.0/SHA256SUMS.txt)
 
-Download `PushRight-Setup-1.6.2.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.6.2) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
+Download `PushRight-Setup-1.7.0.exe` from [GitHub Releases](https://github.com/ArthurLauCS/PushRight/releases/tag/v1.7.0) and run it. It installs for the current user under `%LOCALAPPDATA%\Programs\PushRight` and needs no administrator rights.
 
 - Windows 10 / 11 x64; built and checked on Windows x64.
 - Install [Git for Windows](https://git-scm.com/downloads/win) and make `git` available on PATH.
 - The installer offers English and Simplified Chinese. App language is selected independently.
-- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.6.2.exe -Algorithm SHA256`.
+- The installer is unsigned; Windows may show an unknown-publisher prompt. Verify against the release's `SHA256SUMS.txt` using `Get-FileHash .\PushRight-Setup-1.7.0.exe -Algorithm SHA256`.
 
 Upgrading from 1.1.x removes the previous version automatically. Preferences are now stored in `%APPDATA%\PushRight\settings.json`; language, theme, time zone, diff colors, author styles and recent repositories from 1.1.x are not carried over and need to be set once again.
 
@@ -139,12 +141,13 @@ Measurements on a local Linux repository with 1.48 million commits and a 128 MiB
 ### Included features
 
 - Repository tabs on their own row, sharing its width; drag to reorder, double-click or right-click to rename (handy for several worktrees of one repository). Each tab shows the checked-out branch. Recent repositories and session restoration.
-- Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`; zen mode fills the window with the file list and the diff.
+- Virtualized graph, branches, tags, commit details and file diffs; drag to select diff text and copy it with `Ctrl+C`; zoom code with `Ctrl+=` / `Ctrl+-` / `Ctrl+0`; zen mode fills the window with the file list and the diff.
 - Pull / merge requests for GitHub and GitLab (including self-hosted servers): list, details with checks, reviews, commits and changed files; check out, merge, approve, close and create; on GitLab pick the assignee and reviewer when creating and change the reviewer later; comment on selected diff lines and read existing line comments. Tokens come from environment variables, `gh` or Git credentials, or are pasted once and kept in Windows Credential Manager.
-- Stage, unstage, commit and amend; file, hunk and selected-line operations.
+- Stage, unstage, commit and amend; file, hunk and selected-line operations; change groups that commit named sets of files one at a time.
+- Review marks on Local Changes: a file changed after you reviewed it shows only the new changes, and reviewed files can be hidden.
 - Create, switch, rename and delete branches; merge, rebase, cherry-pick, revert, reset and tags.
 - Fetch, explicit Pull mode, destination-aware Push and stashes.
-- Worktrees, conflict resolution, Continue and Abort.
+- Worktrees, with an overview across repositories and cleanup of merged ones; conflict resolution, Continue and Abort.
 - Repository tools: arbitrary revision/branch and merge-base comparisons, reviewed files, remote URLs, interactive rebase and reflog recovery.
 - Before/after PNG/JPEG/GIF/WebP/BMP/ICO previews; clone and initialize from the welcome page.
 - English / Simplified Chinese, light / dark themes, resizable panels, individual author styles, operation explanations and command logs.
@@ -177,6 +180,7 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, issue integration.
 - Visible rows are virtualized, but complete history is still read in the background.
 - Large patches offer read-only pages that rescan the Git stream; Git may still consume time and memory before producing output. Partial staging/discard remains limited to 4 MiB patches.
 - The graph has at most 24 lanes, reduced by available width. Highly parallel histories can omit connections.
+- Change groups and review marks are in the desktop app only and work on whole files; the extension does not have them yet.
 - No automatic updates or macOS / Linux installers yet.
 - Undo covers some local operations, not every Git action. Check prompts before destructive operations.
 
