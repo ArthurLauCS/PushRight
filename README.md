@@ -185,7 +185,7 @@ Not included yet: macOS, Linux and remote (WSL / SSH) builds, issue integration.
 Requires Rust stable, MSVC C++ tools and Windows SDK for the desktop app; Node.js 24 and pnpm for the extension; [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer.
 
 ```powershell
-.\scripts\fonts.ps1                       # downloads the two bundled CJK fonts (about 50 MB, not in git)
+.\scripts\fonts.ps1                       # downloads the three bundled fonts (about 70 MB, not in git)
 cargo run -p pushright -- C:\path\to\repo
 cargo test --workspace
 pnpm install --frozen-lockfile

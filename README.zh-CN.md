@@ -180,7 +180,7 @@ code --install-extension extension/pushright-win32-x64-1.3.0.vsix
 桌面版需要 Rust stable、MSVC C++ 工具链和 Windows SDK；扩展需要 Node.js 24 和 pnpm；打安装包需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)。
 
 ```powershell
-.\scripts\fonts.ps1                       # 下载打包进安装包的两套中文字体（约 50 MB，不进 git）
+.\scripts\fonts.ps1                       # 下载打包进安装包的三套字体（约 70 MB，不进 git）
 cargo run -p pushright -- C:\path\to\repo
 cargo test --workspace
 pnpm install --frozen-lockfile
