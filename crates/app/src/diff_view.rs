@@ -9,7 +9,7 @@ use crate::layout;
 use crate::store;
 use crate::theme::{alpha, palette, Palette, FS_MD, FS_SM, LH_BODY, MONO, PROSE, R_MD};
 use crate::time::fmt_time;
-use crate::ui::{btn, label, sep};
+use crate::ui::{btn, label, sep, Btn};
 use engine::diff::{Diff, Line, Options};
 use engine::forge::{spot, Note, Spot};
 use gpui::prelude::*;
@@ -817,6 +817,9 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             let editable = v.editable(cx);
             let t = t(cx);
             let picked = v.picked(h).len();
+            // 栏窄时按钮只留名字，命令在悬停提示里
+            let wide = v.width.get() > 640.;
+            let named = |b: Btn| if wide { b } else { b.no_cmd() };
             let mut bar = div()
                 .flex()
                 .items_center()
@@ -834,12 +837,12 @@ fn render_item(this: &Entity<DiffView>, ix: usize, cx: &App) -> AnyElement {
             if editable && v.mode == Mode::Unstaged && v.on_discard.is_some() {
                 let text = if picked > 0 { (t.discard_lines)(picked) } else { t.discard_hunk.to_owned() };
                 let this = this.clone();
-                bar = bar.child(btn(("discard-hunk", h)).small().danger().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, true, window, cx))));
+                bar = bar.child(named(btn(("discard-hunk", h)).small().danger()).text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, true, window, cx))));
             }
             if editable && v.on_apply.is_some() {
                 let text = v.label(h, cx);
                 let this = this.clone();
-                bar = bar.child(btn(("apply-hunk", h)).small().text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
+                bar = bar.child(named(btn(("apply-hunk", h)).small()).text(text.clone()).tip(text).on_click(move |_, window, cx| this.update(cx, |v, cx| v.apply(h, false, window, cx))));
             }
             bar.font_family(crate::theme::UI).into_any_element()
         }
